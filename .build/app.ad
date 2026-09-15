@@ -1,0 +1,244 @@
+  if (action === 'settings') {
+    state.dialog = { type: 'settings' };
+    state.menuOpen = false;
+    return render();
+  }
+  if (action === 'logout') {
+    try { await flushSave(); } catch {}
+    await api.logout().catch(() => {});
+    state.authenticated = false;
+    state.plan = null;
+    state.revision = null;
+    state.dialog = null;
+    render();
+  }
+}
+
+function resolveConflict(event) {
+  const choice = event.currentTarget.dataset.conflict;
+  if (choice === 'cloud') {
+    state.plan = state.conflict.latest.plan;
+    state.revision = state.conflict.latest.revision;
+    state.updatedAt = state.conflict.latest.updatedAt;
+    state.conflict = null;
+    state.savedSeq = state.changeSeq;
+    state.saveState = 'saved';
+    toast('Cloud copy loaded.');
+    render();
+    return;
+  }
+  state.plan = state.conflict.local;
+  state.revision = state.conflict.latest.revision;
+  state.conflict = null;
+  state.saveState = 'saving';
+  render();
+  scheduleSave();
+}
+
+function handleKeyboardReorder(event) {
+  if (!event.altKey || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+  event.preventDefault();
+  const row = event.currentTarget.closest('.activity-row');
+  const index = Number(row.dataset.index);
+  const direction = event.key === 'ArrowUp' ? -1 : 1;
+  const target = index + direction;
+  if (target < 0 || target >= state.plan.activities.length) return;
+  updatePlan(plan => {
+    const [moved] = plan.activities.splice(index, 1);
+    plan.activities.splice(target, 0, moved);
+  });
+  requestAnimationFrame(() => app.querySelector(`.activity-row[data-index="${target}"] .drag-handle`)?.focus());
+}
+
+function handleKeyboardResize(event) {
+  if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+  event.preventDefault();
+  const row = event.currentTarget.closest('.activity-row');
+  const id = row.dataset.activityId;
+  const delta = ['ArrowUp', 'ArrowRight'].includes(event.key) ? 5 : -5;
+  updatePlan(plan => {
+    const item = plan.activities.find(activity => activity.id === id);
+    item.duration = clampDuration(item.duration + delta);
+  });
+  requestAnimationFrame(() => app.querySelector(`.activity-row[data-activity-id="${CSS.escape(id)}"] .resize-handle`)?.focus());
+}
+
+function startDrag(event) {
+  if (event.button !== 0 || event.currentTarget.disabled) return;
+  event.preventDefault();
+  const row = event.currentTarget.closest('.activity-row');
+  const card = row.querySelector('.activity-card');
+  const fromIndex = Number(row.dataset.index);
+  const rect = card.getBoundingClientRect();
+  const clone = card.cloneNode(true);
+  clone.classList.add('drag-floating');
+  clone.style.width = `${rect.width}px`;
+  clone.style.height = `${rect.height}px`;
+  clone.style.left = `${rect.left}px`;
+  clone.style.top = `${rect.top}px`;
+  clone.setAttribute('aria-hidden', 'true');
+  clone.querySelectorAll('button').forEach(button => button.tabIndex = -1);
+  document.body.append(clone);
+
+  row.classList.add('is-drag-source');
+  const placeholder = document.createElement('div');
+  placeholder.className = 'drop-placeholder';
+  placeholder.innerHTML = '<span>Drop here</span>';
+
+  state.drag = { pointerId: event.pointerId, row, card, clone, placeholder, fromIndex, offsetY: event.clientY - rect.top, slot: fromIndex, started: false };
+  event.currentTarget.setPointerCapture(event.pointerId);
+  event.currentTarget.addEventListener('pointermove', moveDrag);
+  event.currentTarget.addEventListener('pointerup', endDrag, { once: true });
+  event.currentTarget.addEventListener('pointercancel', cancelDrag, { once: true });
+  document.body.classList.add('is-reordering');
+}
+
+function moveDrag(event) {
+  const drag = state.drag;
+  if (!drag || drag.pointerId !== event.pointerId) return;
+  drag.started = true;
+  drag.clone.style.top = `${event.clientY - drag.offsetY}px`;
+  drag.clone.style.left = `${drag.card.getBoundingClientRect().left}px`;
+  const list = app.querySelector('#activity-list');
+  const rows = [...list.querySelectorAll('.activity-row')].filter(row => row !== drag.row);
+  let slot = rows.length;
+  for (let i = 0; i < rows.length; i += 1) {
+    if (event.clientY < rows[i].getBoundingClientRect().top + rows[i].getBoundingClientRect().height / 2) {
+      slot = i;
+      break;
+    }
+  }
+  drag.slot = slot;
+  const anchor = rows[slot];
+  if (anchor) list.insertBefore(drag.placeholder, anchor);
+  else {
+    const endMarker = list.querySelector('.end-marker');
+    list.insertBefore(drag.placeholder, endMarker);
+  }
+}
+
+function cleanupDrag() {
+  const drag = state.drag;
+  if (!drag) return;
+  drag.clone.remove();
+  drag.placeholder.remove();
+  drag.row.classList.remove('is-drag-source');
+  document.body.classList.remove('is-reordering');
+  state.drag = null;
+}
+
+function endDrag(event) {
+  const drag = state.drag;
+  event.currentTarget.removeEventListener('pointermove', moveDrag);
+  if (!drag) return;
+  const { fromIndex, slot, started } = drag;
+  cleanupDrag();
+  if (!started) return;
+  updatePlan(plan => {
+    const [moved] = plan.activities.splice(fromIndex, 1);
+    plan.activities.splice(Math.max(0, Math.min(slot, plan.activities.length)), 0, moved);
+  });
+}
+
+function cancelDrag(event) {
+  event.currentTarget.removeEventListener('pointermove', moveDrag);
+  cleanupDrag();
+}
+
+function startResize(event) {
+  if (event.button !== 0) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const row = event.currentTarget.closest('.activity-row');
+  const card = row.querySelector('.activity-card');
+  const id = row.dataset.activityId;
+  const activity = getActivity(id);
+  const tooltip = document.createElement('div');
+  tooltip.className = 'resize-tooltip';
+  tooltip.textContent = formatDuration(activity.duration);
+  document.body.append(tooltip);
+  const rect = card.getBoundingClientRect();
+  tooltip.style.left = `${rect.right - 70}px`;
+  tooltip.style.top = `${rect.bottom - 8}px`;
+  card.classList.add('is-resizing');
+  state.resize = { pointerId: event.pointerId, id, card, handle: event.currentTarget, startY: event.clientY, startDuration: activity.duration, nextDuration: activity.duration, tooltip };
+  event.currentTarget.setPointerCapture(event.pointerId);
+  event.currentTarget.addEventListener('pointermove', moveResize);
+  event.currentTarget.addEventListener('pointerup', endResize, { once: true });
+  event.currentTarget.addEventListener('pointercancel', cancelResize, { once: true });
+}
+
+function moveResize(event) {
+  const resize = state.resize;
+  if (!resize || resize.pointerId !== event.pointerId) return;
+  const deltaMinutes = Math.round((event.clientY - resize.startY) / 8) * 5;
+  resize.nextDuration = clampDuration(resize.startDuration + deltaMinutes);
+  const height = Math.min(160, Math.max(68, 62 + resize.nextDuration * 0.45));
+  resize.card.style.setProperty('--card-height', `${height}px`);
+  resize.tooltip.textContent = formatDuration(resize.nextDuration);
+  const rect = resize.card.getBoundingClientRect();
+  resize.tooltip.style.left = `${rect.right - 70}px`;
+  resize.tooltip.style.top = `${rect.bottom - 8}px`;
+  const durationNode = resize.card.querySelector('.card-time strong');
+  if (durationNode) durationNode.textContent = formatDuration(resize.nextDuration);
+}
+
+function cleanupResize() {
+  if (!state.resize) return;
+  state.resize.card.classList.remove('is-resizing');
+  state.resize.tooltip.remove();
+  state.resize = null;
+}
+
+function endResize(event) {
+  const resize = state.resize;
+  event.currentTarget.removeEventListener('pointermove', moveResize);
+  if (!resize) return;
+  const { id, nextDuration, startDuration } = resize;
+  cleanupResize();
+  if (nextDuration !== startDuration) updatePlan(plan => {
+    plan.activities.find(activity => activity.id === id).duration = nextDuration;
+  });
+}
+
+function cancelResize(event) {
+  event.currentTarget.removeEventListener('pointermove', moveResize);
+  cleanupResize();
+  render();
+}
+
+async function loadPlan() {
+  try {
+    const result = await api.load();
+    state.plan = result.plan;
+    state.revision = result.revision;
+    state.updatedAt = result.updatedAt;
+    state.changeSeq = 0;
+    state.savedSeq = 0;
+    state.saveState = 'saved';
+    render();
+  } catch (error) {
+    if (error.status === 401) {
+      state.authenticated = false;
+      render();
+      return;
+    }
+    app.innerHTML = `<main class="fatal-view"><div>${icon('warning')}</div><h1>Couldn’t open the plan</h1><p>${escapeHtml(error.message || 'Please try again.')}</p><button id="retry-load" class="button button--primary" type="button">Try again</button></main>`;
+    app.querySelector('#retry-load')?.addEventListener('click', loadPlan);
+  }
+}
+
+async function init() {
+  render();
+  try {
+    const session = await api.session();
+    state.authenticated = Boolean(session.authenticated);
+    render();
+    if (state.authenticated) await loadPlan();
+  } catch {
+    state.authenticated = false;
+    render();
+  }
+}
+
+void init();

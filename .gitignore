@@ -1,0 +1,6 @@
+.env
+.env.*
+!.env.example
+.data/
+.vercel/
+.DS_Store
