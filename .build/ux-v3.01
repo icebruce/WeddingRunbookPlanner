@@ -1,0 +1,51 @@
+="Drag to reorder. Alt + arrow keys also work." ${item.isLocked ? 'disabled' : ''}>
+           <span class="drag-dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+@@ -226,7 +224,7 @@
+           </div>
+           <div class="card-meta">
+             <span>${icon('pin')}${escapeHtml(item.location || 'Location not set')}</span>
+-            <span>${icon('people')}${peopleSummary(item.people)}</span>
++            <span class="card-people">${peopleSummary(item.people)}</span>
+           </div>
+         </div>
+         ${conflict ? `<div class="card-conflict-note">${icon('warning')}<span>${formatDuration(item.conflictMinutes)} overlap with previous activity</span></div>` : ''}
+@@ -292,11 +290,16 @@
+       </section>
+       <section class="timeline" aria-label="Wedding day timeline">
+         <div class="timeline-labels" aria-hidden="true"><span>Time</span><span>Plan</span></div>
+-        ${(() => { const scale = getTimeScale(schedule); return `<div id="activity-list" class="timeline-canvas" style="height:${scale.height.toFixed(1)}px">
+-          <div class="timeline-ruler" aria-hidden="true">${timeScaleTemplate(scale)}</div>
+-          <div class="timeline-plan">${schedule.items.map((item, index) => timelineActivity(item, index, scale)).join('')}</div>
+-          <div class="end-marker" style="top:${((schedule.end - scale.start) * scale.minutePx).toFixed(1)}px"><span>${escapeHtml(schedule.endLabel)}</span><i></i><strong>Day plan ends</strong></div>
+-        </div>`; })()}
++        ${(() => {
++          const scale = getTimeScale(schedule);
++          const layout = buildTimelineLayout(schedule, { scaleStart: scale.start, minutePx: scale.minutePx });
++          const canvasHeight = Math.max(scale.height, layout.height);
++          return `<div id="activity-list" class="timeline-canvas" style="height:${canvasHeight.toFixed(1)}px">
++            <div class="timeline-ruler" aria-hidden="true">${timeScaleTemplate({ ...scale, height: canvasHeight })}</div>
++            <div class="timeline-plan">${layout.rows.map(visual => timelineActivity(visual.item, visual.index, scale, visual)).join('')}</div>
++            <div class="end-marker" style="top:${layout.endTop.toFixed(1)}px"><span>${escapeHtml(schedule.endLabel)}</span><i></i><strong>Day plan ends</strong></div>
++          </div>`;
++        })()}
+       </section>
+     </main>
+     <button id="mobile-add" class="mobile-add" type="button" aria-label="Add activity">${icon('plus')}</button>
+@@ -597,15 +600,14 @@
+   app.querySelectorAll('[data-conflict]').forEach(button => button.addEventListener('click', resolveConflict));
+   app.querySelectorAll('[data-menu-action]').forEach(button => button.addEventListener('click', handleMenuAction));
+ 
+-  const timeline = app.querySelector('.timeline-canvas');
+-  timeline?.addEventListener('click', event => {
+-    if (event.target === timeline || event.target.closest('.timeline-ruler')) {
+-      if (state.selectedActivityId || state.stageMenuActivityId || state.cardMenuActivityId) {
+-        state.selectedActivityId = null;
+-        state.stageMenuActivityId = null;
+-        state.cardMenuActivityId = null;
+-        render();
+-      }
++  const planner = app.querySelector('.planner');
++  planner?.addEventListener('click', event => {
++    if (event.target.closest('.activity-card, button, a, input, select, textarea, summary, dialog')) return;
++    if (state.selectedActivityId || state.stageMenuActivityId || state.cardMenuActivityId) {
++      s
