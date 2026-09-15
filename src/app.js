@@ -1,6 +1,6 @@
 import { api } from './api.js';
 import { PLAN_STATUSES, STAGES } from './config.js';
-import { buildSchedule, clampDuration, formatDuration, formatTime, minutesToTime, parseTime } from './schedule.js';
+import { buildSchedule, buildTimelineLayout, clampDuration, formatDuration, formatTime, minutesToTime, parseTime } from './schedule.js';
 import { icon } from './icons.js';
 
 const app = document.querySelector('#app');
@@ -134,10 +134,9 @@ function personTone(value) {
 function peopleSummary(people) {
   const values = (people || []).filter(Boolean);
   if (!values.length) return `<span class="people-empty">No people assigned</span>`;
-  const avatars = values.slice(0, 3).map(person => `<span class="person-avatar person-avatar--${personTone(person)}" title="${escapeHtml(person)}">${escapeHtml(personInitials(person))}</span>`).join('');
-  const more = values.length > 3 ? `<span class="people-more">+${values.length - 3}</span>` : '';
-  const names = `<span class="people-names">${values.slice(0, 3).map(escapeHtml).join(', ')}${values.length > 3 ? ` +${values.length - 3}` : ''}</span>`;
-  return `<span class="people-summary"><span class="people-avatars">${avatars}${more}</span>${names}</span>`;
+  const primary = values.slice(0, 5).map(person => `<span class="person-display-tag" title="${escapeHtml(person)}">${escapeHtml(person)}</span>`).join('');
+  const compact = values.slice(5).map(person => `<span class="person-display-tag person-display-tag--compact" title="${escapeHtml(person)}">${escapeHtml(personInitials(person))}</span>`).join('');
+  return `<span class="people-summary" title="${escapeHtml(values.join(', '))}">${primary}${compact}</span>`;
 }
 
 function peopleEditorTemplate(people) {
@@ -190,16 +189,15 @@ function cardMenuTemplate(item) {
   </div>`;
 }
 
-function timelineActivity(item, index, scale) {
+function timelineActivity(item, index, scale, visual) {
   const stage = stageMap.get(item.stage) || STAGES[0];
-  const top = (item.start - scale.start) * scale.minutePx;
-  const height = Math.max(42, item.duration * scale.minutePx);
   const conflict = item.conflictMinutes > 0;
   const selected = state.selectedActivityId === item.id;
   const stageOpen = state.stageMenuActivityId === item.id;
   const menuOpen = state.cardMenuActivityId === item.id;
+  const shifted = visual.offset > 1;
   return `
-    <div class="activity-row ${conflict ? 'activity-row--conflict' : ''} ${(stageOpen || menuOpen) ? 'activity-row--menu-open' : ''}" data-activity-id="${escapeHtml(item.id)}" data-index="${index}" style="--row-top:${top.toFixed(1)}px;--row-height:${height.toFixed(1)}px">
+    <div class="activity-row ${shifted ? 'activity-row--shifted' : ''} ${conflict ? 'activity-row--conflict' : ''} ${(stageOpen || menuOpen) ? 'activity-row--menu-open' : ''}" data-activity-id="${escapeHtml(item.id)}" data-index="${index}" data-anchor-top="${visual.anchorTop.toFixed(1)}" style="--row-top:${visual.top.toFixed(1)}px;--row-height:${visual.height.toFixed(1)}px;--stage-color:${stage.color};--stage-tint:${stage.tint}">
       <article class="activity-card ${item.duration < 30 ? 'activity-card--compact' : ''} ${selected ? 'is-selected' : ''} ${conflict ? 'activity-card--conflict' : ''}" tabindex="0" aria-selected="${selected}" aria-label="${escapeHtml(item.title)}, ${escapeHtml(item.startLabel)} to ${escapeHtml(item.endLabel)}, ${escapeHtml(stage.label)}">
         <button class="drag-handle" type="button" aria-label="Reorder ${escapeHtml(item.title)}" title="Drag to reorder. Alt + arrow keys also work." ${item.isLocked ? 'disabled' : ''}>
           <span class="drag-dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
@@ -226,7 +224,7 @@ function timelineActivity(item, index, scale) {
           </div>
           <div class="card-meta">
             <span>${icon('pin')}${escapeHtml(item.location || 'Location not set')}</span>
-            <span>${icon('people')}${peopleSummary(item.people)}</span>
+            <span class="card-people">${peopleSummary(item.people)}</span>
           </div>
         </div>
         ${conflict ? `<div class="card-conflict-note">${icon('warning')}<span>${formatDuration(item.conflictMinutes)} overlap with previous activity</span></div>` : ''}
@@ -292,11 +290,16 @@ function appTemplate() {
       </section>
       <section class="timeline" aria-label="Wedding day timeline">
         <div class="timeline-labels" aria-hidden="true"><span>Time</span><span>Plan</span></div>
-        ${(() => { const scale = getTimeScale(schedule); return `<div id="activity-list" class="timeline-canvas" style="height:${scale.height.toFixed(1)}px">
-          <div class="timeline-ruler" aria-hidden="true">${timeScaleTemplate(scale)}</div>
-          <div class="timeline-plan">${schedule.items.map((item, index) => timelineActivity(item, index, scale)).join('')}</div>
-          <div class="end-marker" style="top:${((schedule.end - scale.start) * scale.minutePx).toFixed(1)}px"><span>${escapeHtml(schedule.endLabel)}</span><i></i><strong>Day plan ends</strong></div>
-        </div>`; })()}
+        ${(() => {
+          const scale = getTimeScale(schedule);
+          const layout = buildTimelineLayout(schedule, { scaleStart: scale.start, minutePx: scale.minutePx });
+          const canvasHeight = Math.max(scale.height, layout.height);
+          return `<div id="activity-list" class="timeline-canvas" style="height:${canvasHeight.toFixed(1)}px">
+            <div class="timeline-ruler" aria-hidden="true">${timeScaleTemplate({ ...scale, height: canvasHeight })}</div>
+            <div class="timeline-plan">${layout.rows.map(visual => timelineActivity(visual.item, visual.index, scale, visual)).join('')}</div>
+            <div class="end-marker" style="top:${layout.endTop.toFixed(1)}px"><span>${escapeHtml(schedule.endLabel)}</span><i></i><strong>Day plan ends</strong></div>
+          </div>`;
+        })()}
       </section>
     </main>
     <button id="mobile-add" class="mobile-add" type="button" aria-label="Add activity">${icon('plus')}</button>
@@ -597,15 +600,14 @@ function bindEvents() {
   app.querySelectorAll('[data-conflict]').forEach(button => button.addEventListener('click', resolveConflict));
   app.querySelectorAll('[data-menu-action]').forEach(button => button.addEventListener('click', handleMenuAction));
 
-  const timeline = app.querySelector('.timeline-canvas');
-  timeline?.addEventListener('click', event => {
-    if (event.target === timeline || event.target.closest('.timeline-ruler')) {
-      if (state.selectedActivityId || state.stageMenuActivityId || state.cardMenuActivityId) {
-        state.selectedActivityId = null;
-        state.stageMenuActivityId = null;
-        state.cardMenuActivityId = null;
-        render();
-      }
+  const planner = app.querySelector('.planner');
+  planner?.addEventListener('click', event => {
+    if (event.target.closest('.activity-card, button, a, input, select, textarea, summary, dialog')) return;
+    if (state.selectedActivityId || state.stageMenuActivityId || state.cardMenuActivityId) {
+      state.selectedActivityId = null;
+      state.stageMenuActivityId = null;
+      state.cardMenuActivityId = null;
+      render();
     }
   });
 
@@ -937,6 +939,7 @@ function moveDrag(event) {
   drag.clone.style.left = `${drag.card.getBoundingClientRect().left}px`;
   const list = app.querySelector('#activity-list');
   const rows = [...list.querySelectorAll('.activity-row')].filter(row => row !== drag.row);
+  rows.forEach(row => row.classList.remove('is-drop-before', 'is-drop-after'));
   let slot = rows.length;
   for (let i = 0; i < rows.length; i += 1) {
     const rect = rows[i].getBoundingClientRect();
@@ -948,14 +951,26 @@ function moveDrag(event) {
   drag.slot = slot;
   if (!drag.placeholder.isConnected) list.append(drag.placeholder);
   const listRect = list.getBoundingClientRect();
-  if (rows.length === 0) drag.placeholder.style.top = '0px';
-  else if (slot < rows.length) drag.placeholder.style.top = `${Math.max(0, rows[slot].getBoundingClientRect().top - listRect.top - 7)}px`;
-  else drag.placeholder.style.top = `${Math.max(0, rows[rows.length - 1].getBoundingClientRect().bottom - listRect.top + 7)}px`;
+  if (rows.length === 0) {
+    drag.placeholder.style.top = '0px';
+    drag.dropTargetRow = null;
+  } else if (slot < rows.length) {
+    const target = rows[slot];
+    target.classList.add('is-drop-before');
+    drag.dropTargetRow = target;
+    drag.placeholder.style.top = `${Math.max(0, target.getBoundingClientRect().top - listRect.top - 8)}px`;
+  } else {
+    const target = rows[rows.length - 1];
+    target.classList.add('is-drop-after');
+    drag.dropTargetRow = target;
+    drag.placeholder.style.top = `${Math.max(0, target.getBoundingClientRect().bottom - listRect.top + 2)}px`;
+  }
 }
 
 function cleanupDrag() {
   const drag = state.drag;
   if (!drag) return;
+  app.querySelectorAll('.activity-row.is-drop-before, .activity-row.is-drop-after').forEach(row => row.classList.remove('is-drop-before', 'is-drop-after'));
   drag.clone.remove();
   drag.placeholder.remove();
   drag.row.classList.remove('is-drag-source');
@@ -1009,15 +1024,37 @@ function moveResize(event) {
   if (!resize || resize.pointerId !== event.pointerId) return;
   const deltaMinutes = Math.round((event.clientY - resize.startY) / 8) * 5;
   resize.nextDuration = clampDuration(resize.startDuration + deltaMinutes);
-  const height = Math.max(42, resize.nextDuration * 2.6);
-  resize.card.style.height = `${height}px`;
-  resize.card.closest('.activity-row').style.height = `${height}px`;
+
+  const previewPlan = structuredClone(state.plan);
+  const previewActivity = previewPlan.activities.find(activity => activity.id === resize.id);
+  previewActivity.duration = resize.nextDuration;
+  const previewSchedule = buildSchedule(previewPlan);
+  const scale = getTimeScale(previewSchedule);
+  const layout = buildTimelineLayout(previewSchedule, { scaleStart: scale.start, minutePx: scale.minutePx });
+  const canvas = app.querySelector('#activity-list');
+  if (canvas) canvas.style.height = `${Math.max(scale.height, layout.height).toFixed(1)}px`;
+
+  layout.rows.forEach(visual => {
+    const row = app.querySelector(`.activity-row[data-activity-id="${CSS.escape(visual.item.id)}"]`);
+    if (!row) return;
+    row.style.setProperty('--row-top', `${visual.top.toFixed(1)}px`);
+    row.style.setProperty('--row-height', `${visual.height.toFixed(1)}px`);
+    row.dataset.anchorTop = visual.anchorTop.toFixed(1);
+    row.classList.toggle('activity-row--shifted', visual.offset > 1);
+    const card = row.querySelector('.activity-card');
+    card?.classList.toggle('activity-card--compact', visual.item.duration < 30);
+    const rangeNode = row.querySelector('.card-time-range');
+    const durationNode = row.querySelector('.card-time strong');
+    if (rangeNode) rangeNode.textContent = `${visual.item.startLabel} – ${visual.item.endLabel}`;
+    if (durationNode) durationNode.textContent = formatDuration(visual.item.duration);
+  });
+
+  const endMarker = app.querySelector('.end-marker');
+  if (endMarker) endMarker.style.top = `${layout.endTop.toFixed(1)}px`;
   resize.tooltip.textContent = formatDuration(resize.nextDuration);
   const rect = resize.card.getBoundingClientRect();
   resize.tooltip.style.left = `${rect.right - 70}px`;
-  resize.tooltip.style.top = `${rect.bottom - 8}px`;
-  const durationNode = resize.card.querySelector('.card-time strong');
-  if (durationNode) durationNode.textContent = formatDuration(resize.nextDuration);
+  resize.tooltip.style.top = `${rect.bottom - 10}px`;
 }
 
 function cleanupResize() {

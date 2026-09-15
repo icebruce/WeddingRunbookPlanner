@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSchedule, clampDuration, formatDuration, formatTime, parseTime } from '../src/schedule.js';
+import { buildSchedule, buildTimelineLayout, clampDuration, formatDuration, formatTime, parseTime } from '../src/schedule.js';
 
 const plan = activities => ({ dayStart: '10:00', activities });
 const item = (id, duration, lockedStart = null) => ({ id, title: id, duration, stage: 'preparation', location: '', people: [], notes: '', lockedStart });
@@ -45,3 +45,17 @@ test('treats post-midnight fixed times as next day', () => {
   assert.equal(result.items[1].startLabel, '1:15 AM');
   assert.equal(result.items[1].conflictMinutes, 0);
 });
+
+test('timeline layout prevents cards from overlapping while preserving their time anchors', () => {
+  const schedule = buildSchedule(plan([item('a', 15), item('b', 15), item('c', 30)]));
+  const layout = buildTimelineLayout(schedule, { scaleStart: 600, minutePx: 2.6, minCardHeight: 68, cardGap: 0 });
+  for (let index = 1; index < layout.rows.length; index += 1) {
+    const previous = layout.rows[index - 1];
+    const current = layout.rows[index];
+    assert.ok(current.top >= previous.top + previous.height);
+  }
+  assert.equal(layout.rows[0].anchorTop, 0);
+  assert.equal(layout.rows[1].anchorTop, 39);
+  assert.ok(layout.rows[1].offset > 0);
+});
+

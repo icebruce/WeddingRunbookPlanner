@@ -37,3 +37,21 @@ test('duration entry does not use browser 5-minute step validation', () => {
   assert.doesNotMatch(durationInput, /step="5"/);
   assert.match(app, /Rounded up to the next 5 minutes/);
 });
+
+test('visual timeline cards use stage-colored inset rules and collision-safe layout', () => {
+  assert.match(app, /buildTimelineLayout/);
+  assert.match(app, /--stage-color:\$\{stage\.color\}/);
+  assert.match(css, /\.accent-rule[^}]+background:\s*var\(--stage-color\)/s);
+});
+
+test('locked card treatment colors the icon without a persistent filled badge', () => {
+  assert.match(css, /\.lock-button\.is-locked\s*\{[^}]*color:\s*var\(--danger\);[^}]*background:\s*transparent;/s);
+});
+
+test('drag and resize interactions expose larger visual targets and drop cues', () => {
+  assert.match(app, /is-drop-before/);
+  assert.match(app, /is-drop-after/);
+  assert.match(css, /\.drop-placeholder[^}]+height:\s*16px/s);
+  assert.match(css, /\.resize-handle[^}]+height:\s*22px/s);
+});
+

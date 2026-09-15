@@ -78,3 +78,21 @@ export function clampDuration(minutes) {
   const rounded = Math.ceil(Number(minutes || 0) / 5) * 5;
   return Math.min(12 * 60, Math.max(5, rounded));
 }
+export function buildTimelineLayout(schedule, { scaleStart, minutePx = 2.6, minCardHeight = 68, cardGap = 0 } = {}) {
+  const start = Number.isFinite(scaleStart) ? scaleStart : (schedule.items[0]?.start ?? 0);
+  let previousBottom = -Infinity;
+  const rows = schedule.items.map((item, index) => {
+    const anchorTop = (item.start - start) * minutePx;
+    const height = Math.max(minCardHeight, item.duration * minutePx);
+    const top = Number.isFinite(previousBottom) ? Math.max(anchorTop, previousBottom + cardGap) : anchorTop;
+    previousBottom = top + height;
+    return { item, index, anchorTop, top, height, offset: top - anchorTop };
+  });
+
+  const actualEndTop = (schedule.end - start) * minutePx;
+  const contentBottom = Number.isFinite(previousBottom) ? previousBottom : actualEndTop;
+  const endTop = Math.max(actualEndTop, contentBottom + 18);
+
+  return { rows, endTop, height: endTop + 42 };
+}
+
