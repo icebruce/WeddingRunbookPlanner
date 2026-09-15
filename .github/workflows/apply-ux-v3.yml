@@ -1,0 +1,43 @@
+name: Apply UX v3 fixes
+
+on:
+  push:
+    branches:
+      - ux-v3-polish
+    paths:
+      - '.build/ux-v3.*'
+      - '.github/workflows/apply-ux-v3.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Assemble validated patch
+        run: cat .build/ux-v3.* > /tmp/ux-v3.patch
+
+      - name: Apply to production source
+        run: |
+          git fetch origin main
+          git checkout -B ux-v3-production origin/main
+          git apply --check /tmp/ux-v3.patch
+          git apply /tmp/ux-v3.patch
+
+      - name: Validate
+        run: |
+          npm run check
+          npm test
+
+      - name: Publish validated fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/app.js src/schedule.js styles.css tests/schedule.test.mjs tests/ux-contract.test.mjs
+          git commit -m 'Fix timeline card layout and interactions'
+          git push origin HEAD:main
