@@ -35,7 +35,8 @@ export function buildSchedule(plan) {
 
   for (const activity of plan.activities) {
     const duration = Math.max(5, Number(activity.duration) || 5);
-    const fixedStart = parseTime(activity.lockedStart);
+    let fixedStart = parseTime(activity.lockedStart);
+    if (fixedStart !== null && cursor >= 12 * 60 && fixedStart < cursor - 12 * 60) fixedStart += MINUTES_PER_DAY;
     let start = cursor;
     let gapBefore = 0;
     let conflictMinutes = 0;
@@ -74,6 +75,6 @@ export function buildSchedule(plan) {
 }
 
 export function clampDuration(minutes) {
-  const rounded = Math.round(Number(minutes || 0) / 5) * 5;
+  const rounded = Math.ceil(Number(minutes || 0) / 5) * 5;
   return Math.min(12 * 60, Math.max(5, rounded));
 }

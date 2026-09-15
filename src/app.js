@@ -1,6 +1,6 @@
 import { api } from './api.js';
 import { PLAN_STATUSES, STAGES } from './config.js';
-import { buildSchedule, clampDuration, formatDuration, formatTime, minutesToTime } from './schedule.js';
+import { buildSchedule, clampDuration, formatDuration, formatTime, minutesToTime, parseTime } from './schedule.js';
 import { icon } from './icons.js';
 
 const app = document.querySelector('#app');
@@ -20,6 +20,9 @@ const state = {
   conflict: null,
   dialog: null,
   menuOpen: false,
+  selectedActivityId: null,
+  stageMenuActivityId: null,
+  cardMenuActivityId: null,
   drag: null,
   resize: null
 };
@@ -107,35 +110,97 @@ function loadingTemplate() {
   return `<main class="loading-view"><div class="loading-mark">${icon('heart')}</div><p>Opening your plan…</p></main>`;
 }
 
-function stagePill(stage) {
-  return `<span class="stage-pill" style="--stage-color:${stage.color};--stage-tint:${stage.tint}">${icon(stage.icon)}<span>${escapeHtml(stage.label)}</span></span>`;
+function stagePill(stage, { interactive = false, expanded = false } = {}) {
+  const content = `${icon(stage.icon)}<span>${escapeHtml(stage.label)}</span>${interactive ? icon('chevron') : ''}`;
+  if (!interactive) {
+    return `<span class="stage-pill" style="--stage-color:${stage.color};--stage-tint:${stage.tint}">${content}</span>`;
+  }
+  return `<button class="stage-pill stage-pill--button stage-menu-toggle" type="button" style="--stage-color:${stage.color};--stage-tint:${stage.tint}" aria-haspopup="menu" aria-expanded="${expanded}">${content}</button>`;
+}
+
+function personInitials(value) {
+  const parts = String(value || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
+
+function personTone(value) {
+  let total = 0;
+  for (const char of String(value || '')) total = (total + char.codePointAt(0)) % 4;
+  return total + 1;
 }
 
 function peopleSummary(people) {
-  if (!people?.length) return 'No people assigned';
-  if (people.length <= 3) return people.map(escapeHtml).join(' · ');
-  return `${people.slice(0, 3).map(escapeHtml).join(' · ')} <span class="meta-count">+${people.length - 3}</span>`;
+  const values = (people || []).filter(Boolean);
+  if (!values.length) return `<span class="people-empty">No people assigned</span>`;
+  const avatars = values.slice(0, 3).map(person => `<span class="person-avatar person-avatar--${personTone(person)}" title="${escapeHtml(person)}">${escapeHtml(personInitials(person))}</span>`).join('');
+  const more = values.length > 3 ? `<span class="people-more">+${values.length - 3}</span>` : '';
+  const names = `<span class="people-names">${values.slice(0, 3).map(escapeHtml).join(', ')}${values.length > 3 ? ` +${values.length - 3}` : ''}</span>`;
+  return `<span class="people-summary"><span class="people-avatars">${avatars}${more}</span>${names}</span>`;
 }
 
-function timelineActivity(item, index) {
-  const stage = stageMap.get(item.stage) || STAGES[0];
-  const height = Math.min(132, Math.max(78, 62 + item.duration * 0.28));
-  const conflict = item.conflictMinutes > 0;
-  const gap = item.gapBefore > 0
-    ? `<div class="schedule-gap" role="note"><span></span><strong>${formatDuration(item.gapBefore)} open</strong><span></span></div>`
-    : '';
-  const conflictNote = conflict
-    ? `<div class="schedule-conflict" role="alert">${icon('warning')}<span><strong>${formatDuration(item.conflictMinutes)} conflict</strong> before fixed ${escapeHtml(item.title)}</span></div>`
-    : '';
+function peopleEditorTemplate(people) {
+  const values = (people || []).filter(Boolean);
+  return `<div class="people-editor" data-people='${escapeHtml(JSON.stringify(values))}'>
+    <div class="people-chip-list">
+      ${values.map(person => `<span class="person-chip"><span class="person-avatar person-avatar--${personTone(person)}">${escapeHtml(personInitials(person))}</span><span>${escapeHtml(person)}</span><button type="button" class="person-remove" data-person="${escapeHtml(person)}" aria-label="Remove ${escapeHtml(person)}">${icon('x')}</button></span>`).join('')}
+      <button class="people-add-trigger" type="button" aria-expanded="false">${icon('plus')}<span>Add</span></button>
+    </div>
+    <div class="people-add-row" hidden>
+      <input class="people-add-input" maxlength="80" placeholder="Name or group" autocomplete="off">
+      <button class="button button--quiet people-add-confirm" type="button">Add</button>
+    </div>
+  </div>`;
+}
 
-  return `${gap}${conflictNote}
-    <div class="activity-row" data-activity-id="${escapeHtml(item.id)}" data-index="${index}">
-      <div class="timeline-time" aria-hidden="true">
-        <span>${escapeHtml(item.startLabel.replace(' ', '\u00a0'))}</span>
-        <span class="timeline-dot"></span>
-        <span>${escapeHtml(item.endLabel.replace(' ', '\u00a0'))}</span>
-      </div>
-      <article class="activity-card ${conflict ? 'activity-card--conflict' : ''}" style="--accent:${stage.color};--tint:${stage.tint};--card-height:${height}px" tabindex="0" aria-label="${escapeHtml(item.title)}, ${escapeHtml(item.startLabel)} to ${escapeHtml(item.endLabel)}, ${escapeHtml(stage.label)}">
+function getTimeScale(schedule) {
+  const configuredStart = parseTime(state.plan.dayStart) ?? schedule.items[0]?.start ?? 8 * 60;
+  const firstStart = schedule.items.length ? Math.min(...schedule.items.map(item => item.start)) : configuredStart;
+  const start = Math.floor(Math.min(configuredStart, firstStart) / 15) * 15;
+  const end = Math.ceil(Math.max(schedule.end, start + 60) / 15) * 15;
+  return { start, end, minutePx: 2.6, height: (end - start) * 2.6 + 24 };
+}
+
+function timeScaleTemplate(scale) {
+  const ticks = [];
+  for (let minute = scale.start; minute <= scale.end; minute += 15) {
+    const withinHour = ((minute % 60) + 60) % 60;
+    const kind = withinHour === 0 ? 'hour' : withinHour === 30 ? 'half' : 'quarter';
+    const label = kind === 'hour'
+      ? formatTime(minute)
+      : formatTime(minute).replace(/\s[AP]M$/, '');
+    ticks.push(`<div class="timeline-tick timeline-tick--${kind}" style="top:${((minute - scale.start) * scale.minutePx).toFixed(1)}px"><span>${escapeHtml(label)}</span><i></i></div>`);
+  }
+  return ticks.join('');
+}
+
+function stageMenuTemplate(item) {
+  if (state.stageMenuActivityId !== item.id) return '';
+  return `<div class="stage-menu" role="menu" aria-label="Change stage">
+    ${STAGES.map(stage => `<button type="button" role="menuitemradio" aria-checked="${stage.id === item.stage}" class="stage-menu-option ${stage.id === item.stage ? 'is-current' : ''}" data-stage-value="${stage.id}" style="--stage-color:${stage.color};--stage-tint:${stage.tint}">${icon(stage.icon)}<span>${escapeHtml(stage.label)}</span></button>`).join('')}
+  </div>`;
+}
+
+function cardMenuTemplate(item) {
+  if (state.cardMenuActivityId !== item.id) return '';
+  return `<div class="card-menu" role="menu">
+    <button type="button" role="menuitem" class="edit-activity">${icon('settings')}<span>Edit activity</span></button>
+    <button type="button" role="menuitem" class="delete-card-activity">${icon('trash')}<span>Delete</span></button>
+  </div>`;
+}
+
+function timelineActivity(item, index, scale) {
+  const stage = stageMap.get(item.stage) || STAGES[0];
+  const top = (item.start - scale.start) * scale.minutePx;
+  const height = Math.max(42, item.duration * scale.minutePx);
+  const conflict = item.conflictMinutes > 0;
+  const selected = state.selectedActivityId === item.id;
+  const stageOpen = state.stageMenuActivityId === item.id;
+  const menuOpen = state.cardMenuActivityId === item.id;
+  return `
+    <div class="activity-row ${conflict ? 'activity-row--conflict' : ''} ${(stageOpen || menuOpen) ? 'activity-row--menu-open' : ''}" data-activity-id="${escapeHtml(item.id)}" data-index="${index}" style="--row-top:${top.toFixed(1)}px;--row-height:${height.toFixed(1)}px">
+      <article class="activity-card ${item.duration < 30 ? 'activity-card--compact' : ''} ${selected ? 'is-selected' : ''} ${conflict ? 'activity-card--conflict' : ''}" tabindex="0" aria-selected="${selected}" aria-label="${escapeHtml(item.title)}, ${escapeHtml(item.startLabel)} to ${escapeHtml(item.endLabel)}, ${escapeHtml(stage.label)}">
         <button class="drag-handle" type="button" aria-label="Reorder ${escapeHtml(item.title)}" title="Drag to reorder. Alt + arrow keys also work." ${item.isLocked ? 'disabled' : ''}>
           <span class="drag-dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
         </button>
@@ -144,13 +209,19 @@ function timelineActivity(item, index) {
           <span class="card-time-range">${escapeHtml(item.startLabel)} – ${escapeHtml(item.endLabel)}</span>
           <strong>${escapeHtml(formatDuration(item.duration))}</strong>
         </div>
-        <div class="card-stage">${stagePill(stage)}</div>
+        <div class="card-stage stage-control">
+          ${stagePill(stage, { interactive: true, expanded: stageOpen })}
+          ${stageMenuTemplate(item)}
+        </div>
         <div class="card-main">
           <div class="card-heading">
             <h2>${escapeHtml(item.title)}</h2>
             <div class="card-actions">
-              ${item.isLocked ? `<span class="lock-badge" title="Fixed at ${escapeHtml(item.startLabel)}" aria-label="Locked at ${escapeHtml(item.startLabel)}">${icon('lock')}</span>` : ''}
-              <button class="icon-button edit-activity" type="button" aria-label="Edit ${escapeHtml(item.title)}">${icon('more')}</button>
+              <button class="lock-button ${item.isLocked ? 'is-locked' : ''}" type="button" aria-pressed="${item.isLocked}" aria-label="${item.isLocked ? `Unlock ${escapeHtml(item.title)} from ${escapeHtml(item.startLabel)}` : `Lock ${escapeHtml(item.title)} at ${escapeHtml(item.startLabel)}`}" title="${item.isLocked ? `Fixed at ${escapeHtml(item.startLabel)} — click to unlock` : `Lock at ${escapeHtml(item.startLabel)}`}">${icon('lock')}</button>
+              <div class="card-menu-wrap">
+                <button class="icon-button card-menu-toggle ${menuOpen ? 'is-active' : ''}" type="button" aria-label="More options for ${escapeHtml(item.title)}" aria-haspopup="menu" aria-expanded="${menuOpen}">${icon('more')}</button>
+                ${cardMenuTemplate(item)}
+              </div>
             </div>
           </div>
           <div class="card-meta">
@@ -158,6 +229,7 @@ function timelineActivity(item, index) {
             <span>${icon('people')}${peopleSummary(item.people)}</span>
           </div>
         </div>
+        ${conflict ? `<div class="card-conflict-note">${icon('warning')}<span>${formatDuration(item.conflictMinutes)} overlap with previous activity</span></div>` : ''}
         <button class="resize-handle" type="button" aria-label="Resize ${escapeHtml(item.title)} duration" title="Drag to change duration"><span></span></button>
       </article>
     </div>`;
@@ -220,10 +292,11 @@ function appTemplate() {
       </section>
       <section class="timeline" aria-label="Wedding day timeline">
         <div class="timeline-labels" aria-hidden="true"><span>Time</span><span>Plan</span></div>
-        <div id="activity-list" class="activity-list">
-          ${schedule.items.map(timelineActivity).join('')}
-          <div class="end-marker"><span>${escapeHtml(schedule.endLabel)}</span><i></i><strong>Day plan ends</strong></div>
-        </div>
+        ${(() => { const scale = getTimeScale(schedule); return `<div id="activity-list" class="timeline-canvas" style="height:${scale.height.toFixed(1)}px">
+          <div class="timeline-ruler" aria-hidden="true">${timeScaleTemplate(scale)}</div>
+          <div class="timeline-plan">${schedule.items.map((item, index) => timelineActivity(item, index, scale)).join('')}</div>
+          <div class="end-marker" style="top:${((schedule.end - scale.start) * scale.minutePx).toFixed(1)}px"><span>${escapeHtml(schedule.endLabel)}</span><i></i><strong>Day plan ends</strong></div>
+        </div>`; })()}
       </section>
     </main>
     <button id="mobile-add" class="mobile-add" type="button" aria-label="Add activity">${icon('plus')}</button>
@@ -248,10 +321,10 @@ function activityDialogTemplate(payload) {
         <label class="field"><span>Stage</span><select name="stage">${STAGES.map(stage => `<option value="${stage.id}" ${stage.id === item.stage ? 'selected' : ''}>${escapeHtml(stage.label)}</option>`).join('')}</select></label>
         <div class="field-grid">
           <label class="field"><span>Start time</span><input value="${escapeHtml(scheduled?.startLabel || 'Calculated')}" readonly></label>
-          <label class="field"><span>Duration</span><div class="stepper"><button type="button" data-duration-step="-5" aria-label="Reduce duration by five minutes">−</button><input name="duration" type="number" inputmode="numeric" min="5" max="720" step="5" value="${Number(item.duration) || 30}"><button type="button" data-duration-step="5" aria-label="Increase duration by five minutes">+</button></div></label>
+          <label class="field"><span>Duration</span><div class="stepper"><button type="button" data-duration-step="-5" aria-label="Reduce duration by five minutes">−</button><input name="duration" type="number" inputmode="numeric" min="1" max="720" value="${Number(item.duration) || 30}" aria-describedby="duration-help"><button type="button" data-duration-step="5" aria-label="Increase duration by five minutes">+</button></div><small id="duration-help">Rounded up to the next 5 minutes when needed.</small></label>
         </div>
         <label class="field"><span>Location</span><input name="location" maxlength="140" value="${escapeHtml(item.location || '')}" placeholder="Add a location"></label>
-        <label class="field"><span>People</span><input name="people" maxlength="300" value="${escapeHtml((item.people || []).join(', '))}" placeholder="Bride, Groom, Photographer"><small>Separate names or groups with commas.</small></label>
+        <div class="field"><span>People</span>${peopleEditorTemplate(item.people)}<small>Add people or groups as individual tags.</small></div>
         <label class="field"><span>Notes</span><textarea name="notes" maxlength="1000" rows="4" placeholder="Optional planning notes">${escapeHtml(item.notes || '')}</textarea></label>
         <div class="lock-setting">
           <div>${icon('lock')}<span><strong>Lock / fixed time</strong><small>Keeps this activity anchored while flexible activities ripple around it.</small></span></div>
@@ -438,22 +511,81 @@ function bindEvents() {
   app.querySelector('#plan-status')?.addEventListener('change', event => updatePlan(plan => { plan.status = event.target.value; }));
   app.querySelector('#add-activity')?.addEventListener('click', handleAdd);
   app.querySelector('#mobile-add')?.addEventListener('click', handleAdd);
-  app.querySelectorAll('.edit-activity').forEach(button => button.addEventListener('click', event => {
-    event.stopPropagation();
-    const row = button.closest('.activity-row');
-    openActivityDialog(getActivity(row.dataset.activityId));
-  }));
+
   app.querySelectorAll('.activity-card').forEach(card => {
     card.addEventListener('click', event => {
-      if (event.target.closest('button')) return;
+      if (event.target.closest('button, .stage-menu, .card-menu')) return;
+      selectActivity(card.closest('.activity-row').dataset.activityId);
+    });
+    card.addEventListener('dblclick', event => {
+      if (event.target.closest('button, .stage-menu, .card-menu')) return;
       openActivityDialog(getActivity(card.closest('.activity-row').dataset.activityId));
     });
     card.addEventListener('keydown', event => {
       if (!['Enter', ' '].includes(event.key) || event.target !== card) return;
       event.preventDefault();
-      openActivityDialog(getActivity(card.closest('.activity-row').dataset.activityId));
+      selectActivity(card.closest('.activity-row').dataset.activityId);
     });
   });
+
+  app.querySelectorAll('.card-menu-toggle').forEach(button => button.addEventListener('click', event => {
+    event.stopPropagation();
+    const id = button.closest('.activity-row').dataset.activityId;
+    state.cardMenuActivityId = state.cardMenuActivityId === id ? null : id;
+    state.stageMenuActivityId = null;
+    state.selectedActivityId = id;
+    render();
+  }));
+  app.querySelectorAll('.edit-activity').forEach(button => button.addEventListener('click', event => {
+    event.stopPropagation();
+    const row = button.closest('.activity-row');
+    openActivityDialog(getActivity(row.dataset.activityId));
+  }));
+  app.querySelectorAll('.delete-card-activity').forEach(button => button.addEventListener('click', event => {
+    event.stopPropagation();
+    const row = button.closest('.activity-row');
+    const activity = getActivity(row.dataset.activityId);
+    if (!activity || !window.confirm(`Delete ${activity.title || 'this activity'}?`)) return;
+    updatePlan(plan => { plan.activities = plan.activities.filter(item => item.id !== activity.id); });
+    state.cardMenuActivityId = null;
+    if (state.selectedActivityId === activity.id) state.selectedActivityId = null;
+    toast('Activity deleted.');
+  }));
+
+  app.querySelectorAll('.stage-menu-toggle').forEach(button => button.addEventListener('click', event => {
+    event.stopPropagation();
+    const id = button.closest('.activity-row').dataset.activityId;
+    state.stageMenuActivityId = state.stageMenuActivityId === id ? null : id;
+    state.cardMenuActivityId = null;
+    state.selectedActivityId = id;
+    render();
+  }));
+  app.querySelectorAll('[data-stage-value]').forEach(button => button.addEventListener('click', event => {
+    event.stopPropagation();
+    const row = button.closest('.activity-row');
+    const id = row.dataset.activityId;
+    const stage = button.dataset.stageValue;
+    updatePlan(plan => { plan.activities.find(activity => activity.id === id).stage = stage; });
+    state.stageMenuActivityId = null;
+    state.selectedActivityId = id;
+    toast('Stage updated.', 'success');
+  }));
+
+  app.querySelectorAll('.lock-button').forEach(button => button.addEventListener('click', event => {
+    event.stopPropagation();
+    const row = button.closest('.activity-row');
+    const id = row.dataset.activityId;
+    const scheduled = getScheduledActivity(id);
+    updatePlan(plan => {
+      const activity = plan.activities.find(item => item.id === id);
+      activity.lockedStart = activity.lockedStart ? null : minutesToTime(scheduled.start);
+    });
+    state.selectedActivityId = id;
+    state.stageMenuActivityId = null;
+    state.cardMenuActivityId = null;
+    toast(button.classList.contains('is-locked') ? 'Fixed time removed.' : `Locked at ${scheduled.startLabel}.`, 'success');
+  }));
+
   app.querySelectorAll('.drag-handle').forEach(handle => {
     handle.addEventListener('pointerdown', startDrag);
     handle.addEventListener('keydown', handleKeyboardReorder);
@@ -465,10 +597,30 @@ function bindEvents() {
   app.querySelectorAll('[data-conflict]').forEach(button => button.addEventListener('click', resolveConflict));
   app.querySelectorAll('[data-menu-action]').forEach(button => button.addEventListener('click', handleMenuAction));
 
+  const timeline = app.querySelector('.timeline-canvas');
+  timeline?.addEventListener('click', event => {
+    if (event.target === timeline || event.target.closest('.timeline-ruler')) {
+      if (state.selectedActivityId || state.stageMenuActivityId || state.cardMenuActivityId) {
+        state.selectedActivityId = null;
+        state.stageMenuActivityId = null;
+        state.cardMenuActivityId = null;
+        render();
+      }
+    }
+  });
+
   const details = app.querySelector('.app-menu');
   details?.addEventListener('toggle', () => { state.menuOpen = details.open; });
 
   bindDialogEvents();
+}
+
+function selectActivity(id) {
+  const changed = state.selectedActivityId !== id || state.stageMenuActivityId || state.cardMenuActivityId;
+  state.selectedActivityId = id;
+  state.stageMenuActivityId = null;
+  state.cardMenuActivityId = null;
+  if (changed) render();
 }
 
 function bindDialogEvents() {
@@ -490,6 +642,9 @@ function bindDialogEvents() {
       const input = dialog.querySelector('input[name="duration"]');
       input.value = clampDuration(Number(input.value) + Number(button.dataset.durationStep));
     }));
+    const durationInput = dialog.querySelector('input[name="duration"]');
+    durationInput?.addEventListener('blur', () => { durationInput.value = clampDuration(Number(durationInput.value)); });
+    bindPeopleEditor(dialog);
   }
 
   if (dialog.id === 'versions-dialog') {
@@ -498,6 +653,66 @@ function bindDialogEvents() {
   }
 
   if (dialog.id === 'settings-dialog') dialog.querySelector('#settings-form')?.addEventListener('submit', handleSettingsSubmit);
+}
+
+function getPeopleEditorValues(root) {
+  const editor = root.matches?.('.people-editor') ? root : root.querySelector('.people-editor');
+  if (!editor) return [];
+  try {
+    const values = JSON.parse(editor.dataset.people || '[]');
+    return Array.isArray(values) ? values.map(value => String(value).trim()).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function setPeopleEditorValues(editor, values) {
+  const unique = [...new Set(values.map(value => String(value).trim()).filter(Boolean))].slice(0, 30);
+  editor.dataset.people = JSON.stringify(unique);
+  const list = editor.querySelector('.people-chip-list');
+  const addButton = `<button class="people-add-trigger" type="button" aria-expanded="false">${icon('plus')}<span>Add</span></button>`;
+  list.innerHTML = `${unique.map(person => `<span class="person-chip"><span class="person-avatar person-avatar--${personTone(person)}">${escapeHtml(personInitials(person))}</span><span>${escapeHtml(person)}</span><button type="button" class="person-remove" data-person="${escapeHtml(person)}" aria-label="Remove ${escapeHtml(person)}">${icon('x')}</button></span>`).join('')}${addButton}`;
+}
+
+function addPeopleEditorValue(editor) {
+  const input = editor.querySelector('.people-add-input');
+  const value = input?.value.trim();
+  if (!value) return;
+  const values = getPeopleEditorValues(editor);
+  if (!values.some(person => person.toLowerCase() === value.toLowerCase())) values.push(value);
+  if (input) input.value = '';
+  setPeopleEditorValues(editor, values);
+  editor.querySelector('.people-add-row').hidden = false;
+  editor.querySelector('.people-add-input')?.focus();
+}
+
+function bindPeopleEditor(dialog) {
+  const editor = dialog.querySelector('.people-editor');
+  if (!editor) return;
+  editor.addEventListener('click', event => {
+    const addTrigger = event.target.closest('.people-add-trigger');
+    if (addTrigger) {
+      const addRow = editor.querySelector('.people-add-row');
+      addRow.hidden = false;
+      addTrigger.setAttribute('aria-expanded', 'true');
+      editor.querySelector('.people-add-input')?.focus();
+      return;
+    }
+    const remove = event.target.closest('.person-remove');
+    if (remove) {
+      const person = remove.dataset.person;
+      setPeopleEditorValues(editor, getPeopleEditorValues(editor).filter(value => value !== person));
+      return;
+    }
+    if (event.target.closest('.people-add-confirm')) addPeopleEditorValue(editor);
+  });
+  editor.querySelector('.people-add-input')?.addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); addPeopleEditorValue(editor); }
+    if (event.key === 'Escape') {
+      editor.querySelector('.people-add-row').hidden = true;
+      editor.querySelector('.people-add-trigger')?.focus();
+    }
+  });
 }
 
 async function handleLogin(event) {
@@ -532,7 +747,7 @@ function handleActivitySubmit(event) {
     duration: clampDuration(Number(data.get('duration'))),
     stage: String(data.get('stage')),
     location: String(data.get('location')).trim(),
-    people: String(data.get('people')).split(',').map(value => value.trim()).filter(Boolean).slice(0, 30),
+    people: getPeopleEditorValues(form).slice(0, 30),
     notes: String(data.get('notes')).trim(),
     lockedStart: data.get('locked') === 'on' ? String(data.get('lockedStart') || state.plan.dayStart) : null
   };
@@ -687,6 +902,9 @@ function startDrag(event) {
   const row = event.currentTarget.closest('.activity-row');
   const card = row.querySelector('.activity-card');
   const fromIndex = Number(row.dataset.index);
+  state.selectedActivityId = row.dataset.activityId;
+  state.stageMenuActivityId = null;
+  state.cardMenuActivityId = null;
   const rect = card.getBoundingClientRect();
   const clone = card.cloneNode(true);
   clone.classList.add('drag-floating');
@@ -721,18 +939,18 @@ function moveDrag(event) {
   const rows = [...list.querySelectorAll('.activity-row')].filter(row => row !== drag.row);
   let slot = rows.length;
   for (let i = 0; i < rows.length; i += 1) {
-    if (event.clientY < rows[i].getBoundingClientRect().top + rows[i].getBoundingClientRect().height / 2) {
+    const rect = rows[i].getBoundingClientRect();
+    if (event.clientY < rect.top + rect.height / 2) {
       slot = i;
       break;
     }
   }
   drag.slot = slot;
-  const anchor = rows[slot];
-  if (anchor) list.insertBefore(drag.placeholder, anchor);
-  else {
-    const endMarker = list.querySelector('.end-marker');
-    list.insertBefore(drag.placeholder, endMarker);
-  }
+  if (!drag.placeholder.isConnected) list.append(drag.placeholder);
+  const listRect = list.getBoundingClientRect();
+  if (rows.length === 0) drag.placeholder.style.top = '0px';
+  else if (slot < rows.length) drag.placeholder.style.top = `${Math.max(0, rows[slot].getBoundingClientRect().top - listRect.top - 7)}px`;
+  else drag.placeholder.style.top = `${Math.max(0, rows[rows.length - 1].getBoundingClientRect().bottom - listRect.top + 7)}px`;
 }
 
 function cleanupDrag() {
@@ -791,8 +1009,9 @@ function moveResize(event) {
   if (!resize || resize.pointerId !== event.pointerId) return;
   const deltaMinutes = Math.round((event.clientY - resize.startY) / 8) * 5;
   resize.nextDuration = clampDuration(resize.startDuration + deltaMinutes);
-  const height = Math.min(160, Math.max(68, 62 + resize.nextDuration * 0.45));
-  resize.card.style.setProperty('--card-height', `${height}px`);
+  const height = Math.max(42, resize.nextDuration * 2.6);
+  resize.card.style.height = `${height}px`;
+  resize.card.closest('.activity-row').style.height = `${height}px`;
   resize.tooltip.textContent = formatDuration(resize.nextDuration);
   const rect = resize.card.getBoundingClientRect();
   resize.tooltip.style.left = `${rect.right - 70}px`;

@@ -34,6 +34,14 @@ test('detects an overrun into a fixed anchor and keeps anchor fixed', () => {
 
 test('clamps durations to five-minute steps', () => {
   assert.equal(clampDuration(3), 5);
-  assert.equal(clampDuration(42), 40);
+  assert.equal(clampDuration(42), 45);
+  assert.equal(clampDuration(46), 50);
   assert.equal(clampDuration(999), 720);
+});
+
+test('treats post-midnight fixed times as next day', () => {
+  const result = buildSchedule(plan([item('a', 900), item('b', 30, '01:15')]));
+  assert.equal(result.items[1].start, 1515);
+  assert.equal(result.items[1].startLabel, '1:15 AM');
+  assert.equal(result.items[1].conflictMinutes, 0);
 });
