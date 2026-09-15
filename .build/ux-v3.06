@@ -1,0 +1,43 @@
+ position: absolute; left: -4px; top: 50%; width: 9px; height: 9px; transform: translateY(-50%); border-radius: 50%; background: #1680ff; }
+-.drop-placeholder span { position: absolute; right: 0; top: -20px; padding: 2px 6px; border-radius: 6px; background: #edf6ff; font-size: 9px; font-weight: 700; }
++.activity-row.is-drop-before .activity-card { transform: translateY(4px); box-shadow: 0 -3px 0 #1680ff, 0 5px 20px rgba(24,24,27,.07); }
++.activity-row.is-drop-after .activity-card { transform: translateY(-4px); box-shadow: 0 3px 0 #1680ff, 0 5px 20px rgba(24,24,27,.07); }
++.drop-placeholder { position: absolute; z-index: 20; left: 84px; right: 0; height: 16px; border: 1.5px dashed rgba(22,128,255,.72); border-radius: 8px; background: rgba(22,128,255,.08); box-shadow: 0 0 0 3px rgba(22,128,255,.05); color: #1478f2; pointer-events: none; }
++.drop-placeholder::before { content: ''; position: absolute; left: 8px; right: 8px; top: 50%; height: 2px; transform: translateY(-50%); border-radius: 999px; background: #1680ff; }
++.drop-placeholder span { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); padding: 2px 6px; border-radius: 6px; background: #edf6ff; box-shadow: 0 0 0 2px #edf6ff; font-size: 9px; font-weight: 720; }
+ body.is-reordering { user-select: none; cursor: grabbing; }
+ .resize-tooltip { position: fixed; z-index: 1001; min-width: 62px; padding: 7px 9px; border-radius: 8px; background: #202124; color: #fff; box-shadow: var(--shadow-lg); font-size: 11px; font-weight: 700; text-align: center; pointer-events: none; }
+ 
+@@ -278,8 +275,8 @@
+   .timeline-ruler::before { left: 58px; }
+   .timeline-tick span { right: calc(100% - 50px); }
+   .timeline-tick--hour span { font-size: 11.5px; }
+-  .timeline-tick--half span { font-size: 10px; }
+-  .timeline-tick--quarter span { font-size: 9px; }
++  .timeline-tick--half span { font-size: 10.5px; }
++  .timeline-tick--quarter span { font-size: 9.5px; }
+   .timeline-tick i { left: 53px; }
+   .timeline-tick--hour i { left: 51px; }
+   .timeline-plan { left: 68px; }
+@@ -288,7 +285,7 @@
+   .drag-handle { position: absolute; left: 3px; top: 8px; bottom: auto; width: 26px; height: 38px; }
+   .accent-rule { position: absolute; left: 35px; top: 9px; width: 3px; height: min(58px, calc(100% - 18px)); margin: 0; }
+   .card-main { position: absolute; left: 45px; right: 80px; top: 9px; margin: 0; gap: 3px; }
+-  .card-heading { display: block; }
++  .card-heading { display: block; min-height: 0; padding-right: 0; }
+   .card-heading h2 { padding: 0; font-size: 12.5px; line-height: 1.2; }
+   .card-actions { position: absolute; right: 4px; top: 4px; gap: 0; }
+   .card-time { position: absolute; right: 10px; top: 49px; margin: 0; text-align: right; gap: 1px; }
+@@ -302,7 +299,9 @@
+   .card-meta { margin-top: 5px; display: flex; align-items: center; gap: 7px; font-size: 9.5px; }
+   .card-meta > span:first-child { max-width: 100%; }
+   .card-meta > span:nth-child(2) { position: absolute; left: 0; top: 39px; flex: 0 0 auto; }
+-  .people-names, .card-meta > span:nth-child(2) > .icon { display: none; }
++  .card-people { overflow: hidden; }
++  .people-summary { max-width: 100%; gap: 3px; }
++  .person-display-tag { max-width: 72px; height: 20px; padding: 0 6px; font-size: 8px; }
+   .activity-card--compact .card-meta { display: none; }
+   .activity-card--compact .card-stage { top: 9px; right: 72px; }
+   .activity-card--compact .card-time { top: 13px; right: 9px; }
+@@ -315,8 +314,8 @@
+   .card-actions .icon-bu
