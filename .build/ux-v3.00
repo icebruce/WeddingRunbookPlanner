@@ -1,0 +1,43 @@
+--- a/src/app.js
++++ b/src/app.js
+@@ -1,6 +1,6 @@
+ import { api } from './api.js';
+ import { PLAN_STATUSES, STAGES } from './config.js';
+-import { buildSchedule, clampDuration, formatDuration, formatTime, minutesToTime, parseTime } from './schedule.js';
++import { buildSchedule, buildTimelineLayout, clampDuration, formatDuration, formatTime, minutesToTime, parseTime } from './schedule.js';
+ import { icon } from './icons.js';
+ 
+ const app = document.querySelector('#app');
+@@ -134,10 +134,9 @@
+ function peopleSummary(people) {
+   const values = (people || []).filter(Boolean);
+   if (!values.length) return `<span class="people-empty">No people assigned</span>`;
+-  const avatars = values.slice(0, 3).map(person => `<span class="person-avatar person-avatar--${personTone(person)}" title="${escapeHtml(person)}">${escapeHtml(personInitials(person))}</span>`).join('');
+-  const more = values.length > 3 ? `<span class="people-more">+${values.length - 3}</span>` : '';
+-  const names = `<span class="people-names">${values.slice(0, 3).map(escapeHtml).join(', ')}${values.length > 3 ? ` +${values.length - 3}` : ''}</span>`;
+-  return `<span class="people-summary"><span class="people-avatars">${avatars}${more}</span>${names}</span>`;
++  const primary = values.slice(0, 5).map(person => `<span class="person-display-tag" title="${escapeHtml(person)}">${escapeHtml(person)}</span>`).join('');
++  const compact = values.slice(5).map(person => `<span class="person-display-tag person-display-tag--compact" title="${escapeHtml(person)}">${escapeHtml(personInitials(person))}</span>`).join('');
++  return `<span class="people-summary" title="${escapeHtml(values.join(', '))}">${primary}${compact}</span>`;
+ }
+ 
+ function peopleEditorTemplate(people) {
+@@ -190,16 +189,15 @@
+   </div>`;
+ }
+ 
+-function timelineActivity(item, index, scale) {
++function timelineActivity(item, index, scale, visual) {
+   const stage = stageMap.get(item.stage) || STAGES[0];
+-  const top = (item.start - scale.start) * scale.minutePx;
+-  const height = Math.max(42, item.duration * scale.minutePx);
+   const conflict = item.conflictMinutes > 0;
+   const selected = state.selectedActivityId === item.id;
+   const stageOpen = state.stageMenuActivityId === item.id;
+   const menuOpen = state.cardMenuActivityId === item.id;
++  const shifted = visual.offset > 1;
+   return `
+-    <div class="activity-row ${conflict ? 'activity-row--conflict' : ''} ${(stageOpen || menuOpen) ? 'activity-row--menu-open' : ''}" data-activity-id="${escapeHtml(item.id)}" data-index="${index}" style="--row-top:${top.toFixed(1)}px;--row-height:${height.toFixed(1)}px">
++    <div class="activity-row ${shifted ? 'activity-row--shifted' : ''} ${conflict ? 'activity-row--conflict' : ''} ${(stageOpen || menuOpen) ? 'activity-row--menu-open' : ''}" data-activity-id="${escapeHtml(item.id)}" data-index="${index}" data-anchor-top="${visual.anchorTop.toFixed(1)}" style="--row-top:${visual.top.toFixed(1)}px;--row-height:${visual.height.toFixed(1)}px;--stage-color:${stage.color};--stage-tint:${stage.tint}">
+       <article class="activity-card ${item.duration < 30 ? 'activity-card--compact' : ''} ${selected ? 'is-selected' : ''} ${conflict ? 'activity-card--conflict' : ''}" tabindex="0" aria-selected="${selected}" aria-label="${escapeHtml(item.title)}, ${escapeHtml(item.startLabel)} to ${escapeHtml(item.endLabel)}, ${escapeHtml(stage.label)}">
+         <button class="drag-handle" type="button" aria-label="Reorder ${escapeHtml(item.title)}" title=
