@@ -1,0 +1,25 @@
+; place-items: center; border: 1.5px solid #fff; background: #f1f1ef; color: #656870; font-size: 8px; font-weight: 750; }
+-.people-names { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++.people-summary { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; min-width: 0; max-width: min(440px, 48vw); overflow: hidden; white-space: nowrap; }
++.person-display-tag { min-width: 0; max-width: 112px; height: 22px; padding: 0 7px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: #f0f1ef; border: 1px solid #e4e5e1; color: #555960; font-size: 9px; font-weight: 650; line-height: 1; }
++.person-display-tag--compact { width: 24px; min-width: 24px; max-width: 24px; padding: 0; background: #eceef1; color: #62666e; font-size: 8px; font-weight: 760; }
+ .people-empty { color: #8d9097; }
+ .card-conflict-note { position: absolute; left: 48px; right: 12px; bottom: 6px; display: flex; align-items: center; gap: 5px; color: #b92336; font-size: 9px; font-weight: 650; pointer-events: none; }
+ .card-conflict-note .icon { width: 12px; height: 12px; }
+-.resize-handle { position: absolute; left: 43px; right: 8px; bottom: -1px; height: 13px; border: 0; background: transparent; display: grid; place-items: end center; opacity: 0; touch-action: none; cursor: ns-resize; }
+-.resize-handle span { width: 34px; height: 3px; margin-bottom: 3px; border-radius: 999px; background: #b0b3ba; }
+-.activity-card:hover .resize-handle, .resize-handle:focus-visible, .activity-card.is-resizing .resize-handle { opacity: 1; }
+-.activity-card.is-resizing { box-shadow: 0 0 0 2px rgba(20,120,242,.68), var(--shadow-lg); z-index: 12; }
++.resize-handle { position: absolute; left: 43px; right: 8px; bottom: 0; height: 22px; border: 0; background: transparent; display: grid; place-items: end center; opacity: 0; touch-action: none; cursor: ns-resize; border-radius: 0 0 var(--radius) var(--radius); }
++.resize-handle span { width: 38px; height: 3px; margin-bottom: 4px; border-radius: 999px; background: #aeb1b8; transition: width .12s ease, background .12s ease; }
++.activity-card:hover .resize-handle { opacity: .62; }
++.resize-handle:hover, .resize-handle:focus-visible, .activity-card.is-resizing .resize-handle { opacity: 1; }
++.resize-handle:hover span, .activity-card.is-resizing .resize-handle span { width: 44px; background: #747881; }
++.activity-card.is-resizing { border-radius: var(--radius); box-shadow: 0 0 0 2px rgba(20,120,242,.68), var(--shadow-lg); z-index: 12; }
+ .end-marker { position: absolute; z-index: 1; left: 84px; right: 0; transform: translateY(-50%); display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; color: #858890; font-size: 10px; pointer-events: none; }
+ .end-marker i { height: 1px; background: #d9dad6; }
+ .end-marker strong { font-weight: 620; white-space: nowrap; }
+ .is-drag-source .activity-card { opacity: .16; box-shadow: none; }
+ .drag-floating { position: fixed !important; z-index: 1000; pointer-events: none; transform: rotate(.4deg) scale(1.012); box-shadow: var(--shadow-lg), 0 0 0 2px rgba(20,120,242,.52) !important; opacity: .97; cursor: grabbing; }
+-.drop-placeholder { position: absolute; z-index: 20; left: 84px; right: 0; height: 3px; border-radius: 999px; background: #1680ff; box-shadow: 0 0 0 4px rgba(22,128,255,.10); color: #1478f2; }
+-.drop-placeholder::before { content: '';
