@@ -1,0 +1,73 @@
+tton { width: 34px; height: 34px; display: grid; }
+   .card-menu-toggle .icon { width: 18px; height: 18px; }
+   .card-menu { right: 0; top: calc(100% + 3px); }
+-  .resize-handle { left: 34px; opacity: .48; }
+-  .resize-handle span { width: 24px; height: 2px; }
++  .resize-handle { left: 34px; height: 20px; opacity: .38; }
++  .resize-handle span { width: 28px; height: 2px; }
+   .card-conflict-note { left: 38px; right: 8px; bottom: 3px; font-size: 8px; }
+   .activity-row--conflict { transform: translateX(3px); right: 3px; }
+ }
+--- a/src/schedule.js
++++ b/src/schedule.js
+@@ -78,3 +78,21 @@
+   const rounded = Math.ceil(Number(minutes || 0) / 5) * 5;
+   return Math.min(12 * 60, Math.max(5, rounded));
+ }
++export function buildTimelineLayout(schedule, { scaleStart, minutePx = 2.6, minCardHeight = 68, cardGap = 0 } = {}) {
++  const start = Number.isFinite(scaleStart) ? scaleStart : (schedule.items[0]?.start ?? 0);
++  let previousBottom = -Infinity;
++  const rows = schedule.items.map((item, index) => {
++    const anchorTop = (item.start - start) * minutePx;
++    const height = Math.max(minCardHeight, item.duration * minutePx);
++    const top = Number.isFinite(previousBottom) ? Math.max(anchorTop, previousBottom + cardGap) : anchorTop;
++    previousBottom = top + height;
++    return { item, index, anchorTop, top, height, offset: top - anchorTop };
++  });
++
++  const actualEndTop = (schedule.end - start) * minutePx;
++  const contentBottom = Number.isFinite(previousBottom) ? previousBottom : actualEndTop;
++  const endTop = Math.max(actualEndTop, contentBottom + 18);
++
++  return { rows, endTop, height: endTop + 42 };
++}
++
+--- a/tests/schedule.test.mjs
++++ b/tests/schedule.test.mjs
+@@ -1,6 +1,6 @@
+ import test from 'node:test';
+ import assert from 'node:assert/strict';
+-import { buildSchedule, clampDuration, formatDuration, formatTime, parseTime } from '../src/schedule.js';
++import { buildSchedule, buildTimelineLayout, clampDuration, formatDuration, formatTime, parseTime } from '../src/schedule.js';
+ 
+ const plan = activities => ({ dayStart: '10:00', activities });
+ const item = (id, duration, lockedStart = null) => ({ id, title: id, duration, stage: 'preparation', location: '', people: [], notes: '', lockedStart });
+@@ -45,3 +45,17 @@
+   assert.equal(result.items[1].startLabel, '1:15 AM');
+   assert.equal(result.items[1].conflictMinutes, 0);
+ });
++
++test('timeline layout prevents cards from overlapping while preserving their time anchors', () => {
++  const schedule = buildSchedule(plan([item('a', 15), item('b', 15), item('c', 30)]));
++  const layout = buildTimelineLayout(schedule, { scaleStart: 600, minutePx: 2.6, minCardHeight: 68, cardGap: 0 });
++  for (let index = 1; index < layout.rows.length; index += 1) {
++    const previous = layout.rows[index - 1];
++    const current = layout.rows[index];
++    assert.ok(current.top >= previous.top + previous.height);
++  }
++  assert.equal(layout.rows[0].anchorTop, 0);
++  assert.equal(layout.rows[1].anchorTop, 39);
++  assert.ok(layout.rows[1].offset > 0);
++});
++
+--- a/tests/ux-contract.test.mjs
++++ b/tests/ux-contract.test.mjs
+@@ -37,3 +37,21 @@
+   assert.doesNotMatch(durationInput, /step="5"/);
+   assert.match(app, /Rounded up to the next 5 minutes/);
+ });
++
++test('visual timeline cards use stage-colored inset rules and collision-safe layout', () => {
++  assert.match(app, /buildTimelineLayout/);
++  assert.match(app, /--stage-color:\$\{stage\.color\}/);
++  assert.match(css, /\.accent-rule[^}]+background:\s*var\(
