@@ -1,0 +1,45 @@
+ld { width: 12px; height: 12px; }
++  .stage-pill--button > .icon:last-child { display: none; }
++  .stage-menu { left: auto; right: 0; top: calc(100% + 6px); bottom: auto; width: 176px; max-height: 280px; overflow-y: auto; }
++  .card-meta { margin-top: 5px; display: flex; align-items: center; gap: 7px; font-size: 9.5px; }
+   .card-meta > span:first-child { max-width: 100%; }
+-  .card-meta > span:nth-child(2) { display: none; }
+-  .card-heading h2 { font-size: 12.5px; }
+-  .card-actions .icon-button { display: none; }
+-  .stage-pill { min-height: 23px; padding: 3px 7px; font-size: 9px; }
+-  .stage-pill .icon { width: 12px; height: 12px; }
+-  .lock-badge { width: 22px; height: 22px; color: var(--accent); }
+-  .lock-badge .icon { width: 14px; height: 14px; }
+-  .resize-handle { left: 35px; opacity: .6; }
++  .card-meta > span:nth-child(2) { position: absolute; left: 0; top: 39px; flex: 0 0 auto; }
++  .people-names, .card-meta > span:nth-child(2) > .icon { display: none; }
++  .activity-card--compact .card-meta { display: none; }
++  .activity-card--compact .card-stage { top: 9px; right: 72px; }
++  .activity-card--compact .card-time { top: 13px; right: 9px; }
++  .activity-card--compact .card-actions { display: none; }
++  .activity-card--compact .card-main { right: 145px; }
++  .person-avatar { width: 20px; height: 20px; font-size: 7px; }
++  .people-more { min-width: 20px; height: 20px; }
++  .lock-button { width: 34px; height: 34px; }
++  .lock-button .icon { width: 15px; height: 15px; }
++  .card-actions .icon-button { width: 34px; height: 34px; display: grid; }
++  .card-menu-toggle .icon { width: 18px; height: 18px; }
++  .card-menu { right: 0; top: calc(100% + 3px); }
++  .resize-handle { left: 34px; opacity: .48; }
+   .resize-handle span { width: 24px; height: 2px; }
++  .card-conflict-note { left: 38px; right: 8px; bottom: 3px; font-size: 8px; }
++  .activity-row--conflict { transform: translateX(3px); right: 3px; }
+ }
+ 
+ @media (min-width: 760px) {
+@@ -245,10 +329,6 @@
+   .planner-heading h1 { font-size: 48px; }
+   #add-activity { display: inline-flex; }
+   .mobile-add { display: none; }
+-  .timeline-labels { grid-template-columns: 72px 1fr; gap: 12px; }
+-  .activity-row { grid-template-columns: 72px minmax(0,1fr); gap: 12px; }
+-  .schedule-gap, .schedule-conflict, .drop-placeholder, .end-marker { margin-left: 84px; }
+-  .timeline-time { font-size: 10px; padding-right: 12px; }
+   .conflict-banner { top: 70px; padding: 10px 24px; flex-direction: row; align-items: center; justify-content: space-between; }
+   .sheet-dialog { padding: 24px; display: none; }
+   .sheet-dialog[open] { display: block; }

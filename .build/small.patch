@@ -1,0 +1,38 @@
+--- a/src/schedule.js
++++ b/src/schedule.js
+@@ -35,7 +35,8 @@
+ 
+   for (const activity of plan.activities) {
+     const duration = Math.max(5, Number(activity.duration) || 5);
+-    const fixedStart = parseTime(activity.lockedStart);
++    let fixedStart = parseTime(activity.lockedStart);
++    if (fixedStart !== null && cursor >= 12 * 60 && fixedStart < cursor - 12 * 60) fixedStart += MINUTES_PER_DAY;
+     let start = cursor;
+     let gapBefore = 0;
+     let conflictMinutes = 0;
+@@ -74,6 +75,6 @@
+ }
+ 
+ export function clampDuration(minutes) {
+-  const rounded = Math.round(Number(minutes || 0) / 5) * 5;
++  const rounded = Math.ceil(Number(minutes || 0) / 5) * 5;
+   return Math.min(12 * 60, Math.max(5, rounded));
+ }
+--- a/tests/schedule.test.mjs
++++ b/tests/schedule.test.mjs
+@@ -34,6 +34,14 @@
+ 
+ test('clamps durations to five-minute steps', () => {
+   assert.equal(clampDuration(3), 5);
+-  assert.equal(clampDuration(42), 40);
++  assert.equal(clampDuration(42), 45);
++  assert.equal(clampDuration(46), 50);
+   assert.equal(clampDuration(999), 720);
+ });
++
++test('treats post-midnight fixed times as next day', () => {
++  const result = buildSchedule(plan([item('a', 900), item('b', 30, '01:15')]));
++  assert.equal(result.items[1].start, 1515);
++  assert.equal(result.items[1].startLabel, '1:15 AM');
++  assert.equal(result.items[1].conflictMinutes, 0);
++});

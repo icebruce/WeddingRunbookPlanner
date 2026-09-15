@@ -1,0 +1,117 @@
+{
++    const values = JSON.parse(editor.dataset.people || '[]');
++    return Array.isArray(values) ? values.map(value => String(value).trim()).filter(Boolean) : [];
++  } catch {
++    return [];
++  }
++}
++
++function setPeopleEditorValues(editor, values) {
++  const unique = [...new Set(values.map(value => String(value).trim()).filter(Boolean))].slice(0, 30);
++  editor.dataset.people = JSON.stringify(unique);
++  const list = editor.querySelector('.people-chip-list');
++  const addButton = `<button class="people-add-trigger" type="button" aria-expanded="false">${icon('plus')}<span>Add</span></button>`;
++  list.innerHTML = `${unique.map(person => `<span class="person-chip"><span class="person-avatar person-avatar--${personTone(person)}">${escapeHtml(personInitials(person))}</span><span>${escapeHtml(person)}</span><button type="button" class="person-remove" data-person="${escapeHtml(person)}" aria-label="Remove ${escapeHtml(person)}">${icon('x')}</button></span>`).join('')}${addButton}`;
++}
++
++function addPeopleEditorValue(editor) {
++  const input = editor.querySelector('.people-add-input');
++  const value = input?.value.trim();
++  if (!value) return;
++  const values = getPeopleEditorValues(editor);
++  if (!values.some(person => person.toLowerCase() === value.toLowerCase())) values.push(value);
++  if (input) input.value = '';
++  setPeopleEditorValues(editor, values);
++  editor.querySelector('.people-add-row').hidden = false;
++  editor.querySelector('.people-add-input')?.focus();
++}
++
++function bindPeopleEditor(dialog) {
++  const editor = dialog.querySelector('.people-editor');
++  if (!editor) return;
++  editor.addEventListener('click', event => {
++    const addTrigger = event.target.closest('.people-add-trigger');
++    if (addTrigger) {
++      const addRow = editor.querySelector('.people-add-row');
++      addRow.hidden = false;
++      addTrigger.setAttribute('aria-expanded', 'true');
++      editor.querySelector('.people-add-input')?.focus();
++      return;
++    }
++    const remove = event.target.closest('.person-remove');
++    if (remove) {
++      const person = remove.dataset.person;
++      setPeopleEditorValues(editor, getPeopleEditorValues(editor).filter(value => value !== person));
++      return;
++    }
++    if (event.target.closest('.people-add-confirm')) addPeopleEditorValue(editor);
++  });
++  editor.querySelector('.people-add-input')?.addEventListener('keydown', event => {
++    if (event.key === 'Enter') { event.preventDefault(); addPeopleEditorValue(editor); }
++    if (event.key === 'Escape') {
++      editor.querySelector('.people-add-row').hidden = true;
++      editor.querySelector('.people-add-trigger')?.focus();
++    }
++  });
++}
++
+ async function handleLogin(event) {
+   event.preventDefault();
+   const form = event.currentTarget;
+@@ -532,7 +747,7 @@
+     duration: clampDuration(Number(data.get('duration'))),
+     stage: String(data.get('stage')),
+     location: String(data.get('location')).trim(),
+-    people: String(data.get('people')).split(',').map(value => value.trim()).filter(Boolean).slice(0, 30),
++    people: getPeopleEditorValues(form).slice(0, 30),
+     notes: String(data.get('notes')).trim(),
+     lockedStart: data.get('locked') === 'on' ? String(data.get('lockedStart') || state.plan.dayStart) : null
+   };
+@@ -687,6 +902,9 @@
+   const row = event.currentTarget.closest('.activity-row');
+   const card = row.querySelector('.activity-card');
+   const fromIndex = Number(row.dataset.index);
++  state.selectedActivityId = row.dataset.activityId;
++  state.stageMenuActivityId = null;
++  state.cardMenuActivityId = null;
+   const rect = card.getBoundingClientRect();
+   const clone = card.cloneNode(true);
+   clone.classList.add('drag-floating');
+@@ -721,18 +939,18 @@
+   const rows = [...list.querySelectorAll('.activity-row')].filter(row => row !== drag.row);
+   let slot = rows.length;
+   for (let i = 0; i < rows.length; i += 1) {
+-    if (event.clientY < rows[i].getBoundingClientRect().top + rows[i].getBoundingClientRect().height / 2) {
++    const rect = rows[i].getBoundingClientRect();
++    if (event.clientY < rect.top + rect.height / 2) {
+       slot = i;
+       break;
+     }
+   }
+   drag.slot = slot;
+-  const anchor = rows[slot];
+-  if (anchor) list.insertBefore(drag.placeholder, anchor);
+-  else {
+-    const endMarker = list.querySelector('.end-marker');
+-    list.insertBefore(drag.placeholder, endMarker);
+-  }
++  if (!drag.placeholder.isConnected) list.append(drag.placeholder);
++  const listRect = list.getBoundingClientRect();
++  if (rows.length === 0) drag.placeholder.style.top = '0px';
++  else if (slot < rows.length) drag.placeholder.style.top = `${Math.max(0, rows[slot].getBoundingClientRect().top - listRect.top - 7)}px`;
++  else drag.placeholder.style.top = `${Math.max(0, rows[rows.length - 1].getBoundingClientRect().bottom - listRect.top + 7)}px`;
+ }
+ 
+ function cleanupDrag() {
+@@ -791,8 +1009,9 @@
+   if (!resize || resize.pointerId !== event.pointerId) return;
+   const deltaMinutes = Math.round((event.clientY - resize.startY) / 8) * 5;
+   resize.nextDuration = clampDuration(resize.startDuration + deltaMinutes);
+-  const height = Math.min(160, Math.max(68, 62 + resize.nextDuration * 0.45));
+-  resize.card.style.setProperty('--card-height', `${height}px`);
++  const height = Math.max(42, resize.nextDuration * 2.6);
++  resize.card.style.height = `${height}px`;
++  resize.card.closest('.activity-row').style.height = `${height}px`;
+   resize.tooltip.textContent = formatDuration(resize.nextDuration);
+   const rect = resize.card.getBoundingClientRect();
+   resize.tooltip.style.left = `${rect.right - 70}px`;
