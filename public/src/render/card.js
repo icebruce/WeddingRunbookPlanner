@@ -1,7 +1,8 @@
 import { escapeHtml } from '../dom.js';
 import { icon } from '../icons.js';
 import { STAGES } from '../config.js';
-import { formatDuration } from '../schedule.js';
+import { formatDuration, formatTime } from '../schedule.js';
+import { laneStyle } from '../layout.js';
 
 const stageMap = new Map(STAGES.map(stage => [stage.id, stage]));
 
@@ -10,101 +11,143 @@ export function stageOf(id) {
 }
 
 export function stagePill(stage, { interactive = false, expanded = false, id = '' } = {}) {
-  const content = `${icon(stage.icon)}<span>${escapeHtml(stage.label)}</span>${interactive ? icon('chevron') : ''}`;
+  const content = `${icon(stage.icon)}<span>${escapeHtml(stage.label)}</span>`;
   if (!interactive) {
-    return `<span class="stage-pill" style="--stage-color:${stage.color};--stage-tint:${stage.tint}">${content}</span>`;
+    return `<span class="stage-tag" style="--phase:${stage.color};--phase-tint:${stage.tint}">${content}</span>`;
   }
-  return `<button class="stage-pill stage-pill--button" type="button" style="--stage-color:${stage.color};--stage-tint:${stage.tint}"
+  return `<button class="stage-tag stage-tag--button" type="button" style="--phase:${stage.color};--phase-tint:${stage.tint}"
     data-action="menu" data-menu="stage:${escapeHtml(id)}" data-focus-key="stage:${escapeHtml(id)}"
-    aria-haspopup="menu" aria-expanded="${expanded}" aria-label="Change stage of this activity">${content}</button>`;
+    aria-haspopup="menu" aria-expanded="${expanded}" aria-label="Change stage">${content}${icon('chevron')}</button>`;
 }
 
 /**
- * People are shown by name. Initials were unreadable and told the reader
- * nothing they could act on, so a name either fits in full or is counted in
- * the "+N" tag (D25).
+ * People are shown by name. Names that do not fit are counted in a "+N" tag
+ * rather than shrunk to initials, which told the reader nothing they could act
+ * on (D25). Which names fit is decided by measuring — see fit.js.
  */
-export function peopleSummary(people, { max = 5 } = {}) {
+export function peopleTags(people) {
   const values = (people || []).filter(Boolean);
-  if (!values.length) return '<span class="people-empty">No people assigned</span>';
-  const shown = values.slice(0, max);
-  const hidden = values.length - shown.length;
-  const tags = shown.map(person => `<span class="person-display-tag">${escapeHtml(person)}</span>`).join('');
-  const more = hidden > 0 ? `<span class="person-display-tag person-display-tag--count">+${hidden}</span>` : '';
-  return `<span class="people-summary" title="${escapeHtml(values.join(', '))}">${tags}${more}</span>`;
+  if (!values.length) return '';
+  return values.map(person => `<span class="tag">${escapeHtml(person)}</span>`).join('');
 }
 
-function stageMenu(item, openMenu) {
-  if (openMenu !== `stage:${item.id}`) return '';
+/**
+ * Card menus are drawn in a layer above the timeline, not inside the card.
+ * A card is clipped to its own height — which is its duration — so a menu
+ * rendered inside a fifteen-minute card would be invisible.
+ */
+export function renderCardMenu(item, kind) {
+  if (kind === 'stage') return stageMenu(item);
+  if (kind === 'card-menu') return cardMenu(item);
+  return '';
+}
+
+function stageMenu(item) {
   return `<div class="stage-menu" role="menu" aria-label="Change stage">
     ${STAGES.map(stage => `<button type="button" role="menuitemradio" aria-checked="${stage.id === item.stage}"
       class="stage-menu-option ${stage.id === item.stage ? 'is-current' : ''}"
       data-action="set-stage" data-id="${escapeHtml(item.id)}" data-stage="${stage.id}"
-      style="--stage-color:${stage.color};--stage-tint:${stage.tint}">${icon(stage.icon)}<span>${escapeHtml(stage.label)}</span></button>`).join('')}
+      style="--phase:${stage.color};--phase-tint:${stage.tint}">${icon(stage.icon)}<span>${escapeHtml(stage.label)}</span></button>`).join('')}
   </div>`;
 }
 
-function cardMenu(item, openMenu) {
-  if (openMenu !== `card-menu:${item.id}`) return '';
+function cardMenu(item) {
   return `<div class="card-menu" role="menu">
     <button type="button" role="menuitem" data-action="edit" data-id="${escapeHtml(item.id)}">${icon('settings')}<span>Edit activity</span></button>
-    <button type="button" role="menuitem" data-action="delete" data-id="${escapeHtml(item.id)}">${icon('trash')}<span>Delete</span></button>
+    <button type="button" role="menuitem" data-action="duplicate" data-id="${escapeHtml(item.id)}">${icon('save')}<span>Duplicate</span></button>
+    <button type="button" role="menuitem" class="is-danger" data-action="delete" data-id="${escapeHtml(item.id)}">${icon('trash')}<span>Delete</span></button>
   </div>`;
 }
 
-export function renderCard(item, { index, visual, ui }) {
+/** The warning line. It is never dropped: it is the reason to look at the card. */
+function warning(item) {
+  if (item.overrun) {
+    const text = item.duration < 20
+      ? `${item.overrun.minutes} min over`
+      : `Runs ${item.overrun.minutes} min into ${item.overrun.intoTitle}`;
+    return `<div class="card-row card-warn">${icon('warning')}<span>${escapeHtml(text)}</span></div>`;
+  }
+  if (item.conflictMinutes) {
+    return `<div class="card-row card-warn">${icon('warning')}<span>Fixed · ${item.conflictMinutes} min overlap</span></div>`;
+  }
+  return '';
+}
+
+function glyphs(item) {
+  const out = [];
+  if (item.isFixed) out.push(`<span class="glyph glyph--fixed" role="img" aria-label="Fixed time">${icon('lock')}</span>`);
+  if (item.notes) out.push(`<span class="glyph glyph--note" role="img" aria-label="Has notes">${icon('note')}</span>`);
+  return out.join('');
+}
+
+/** What a screen reader hears instead of the visual arrangement. */
+function accessibleName(item, stage) {
+  const parts = [
+    item.title,
+    `${formatTime(item.start)} to ${formatTime(item.end)}`,
+    formatDuration(item.duration),
+    stage.label
+  ];
+  if (item.isFixed) parts.push('fixed');
+  if (item.overrun) parts.push(`runs ${item.overrun.minutes} minutes into ${item.overrun.intoTitle}`);
+  if (item.conflictMinutes) parts.push(`${item.conflictMinutes} minute overlap`);
+  if (item.location) parts.push(item.location);
+  if (item.people?.length) parts.push(item.people.join(', '));
+  return parts.join(', ');
+}
+
+export function renderCard(card, { ui, filter = null }) {
+  const { item } = card;
   const stage = stageOf(item.stage);
-  const conflict = item.conflictMinutes > 0;
   const selected = ui.selectedId === item.id;
   const stageOpen = ui.openMenu === `stage:${item.id}`;
   const menuOpen = ui.openMenu === `card-menu:${item.id}`;
   const id = escapeHtml(item.id);
   const title = escapeHtml(item.title);
+  const narrow = card.lane !== null;
+  const faded = filter && !(item.people || []).includes(filter);
 
-  return `
-    <div class="activity-row ${visual.offset > 1 ? 'activity-row--shifted' : ''} ${conflict ? 'activity-row--conflict' : ''} ${(stageOpen || menuOpen) ? 'activity-row--menu-open' : ''}"
-      data-activity-id="${id}" data-index="${index}" data-anchor-top="${visual.anchorTop.toFixed(1)}"
-      style="--row-top:${visual.top.toFixed(1)}px;--row-height:${visual.height.toFixed(1)}px;--stage-color:${stage.color};--stage-tint:${stage.tint}">
-      <article class="activity-card ${item.duration < 30 ? 'activity-card--compact' : ''} ${selected ? 'is-selected' : ''} ${conflict ? 'activity-card--conflict' : ''}"
-        tabindex="0" data-action="select" data-id="${id}" data-focus-key="card:${id}"
-        aria-label="${title}, ${escapeHtml(item.startLabel)} to ${escapeHtml(item.endLabel)}, ${escapeHtml(formatDuration(item.duration))}, ${escapeHtml(stage.label)}${item.isLocked ? ', fixed' : ''}">
-        <button class="drag-handle" type="button" data-role="reorder" data-id="${id}" data-focus-key="reorder:${id}"
-          aria-label="Reorder ${title}" title="Drag to reorder. Alt + arrow keys also work." ${item.isLocked ? 'disabled' : ''}>
-          <span class="drag-dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
-        </button>
-        <span class="accent-rule" aria-hidden="true"></span>
-        <div class="card-time">
-          <span class="card-time-range">${escapeHtml(item.startLabel)} – ${escapeHtml(item.endLabel)}</span>
-          <strong>${escapeHtml(formatDuration(item.duration))}</strong>
-        </div>
-        <div class="card-stage stage-control">
-          ${stagePill(stage, { interactive: true, expanded: stageOpen, id: item.id })}
-          ${stageMenu(item, ui.openMenu)}
-        </div>
-        <div class="card-main">
-          <div class="card-heading">
-            <h2>${title}</h2>
-            <div class="card-actions">
-              <button class="lock-button ${item.isLocked ? 'is-locked' : ''}" type="button"
-                data-action="lock" data-id="${id}" data-focus-key="lock:${id}"
-                aria-pressed="${item.isLocked}"
-                aria-label="${item.isLocked ? `Unfix ${title} from ${escapeHtml(item.startLabel)}` : `Fix ${title} at ${escapeHtml(item.startLabel)}`}">${icon('lock')}</button>
-              <div class="card-menu-wrap">
-                <button class="icon-button card-menu-toggle ${menuOpen ? 'is-active' : ''}" type="button"
-                  data-action="menu" data-menu="card-menu:${id}" data-focus-key="card-menu:${id}"
-                  aria-label="More options for ${title}" aria-haspopup="menu" aria-expanded="${menuOpen}">${icon('more')}</button>
-                ${cardMenu(item, ui.openMenu)}
-              </div>
-            </div>
-          </div>
-          <div class="card-meta">
-            <span>${icon('pin')}${escapeHtml(item.location || 'Location not set')}</span>
-            <span class="card-people">${peopleSummary(item.people)}</span>
-          </div>
-        </div>
-        ${conflict ? `<div class="card-conflict-note">${icon('warning')}<span>${escapeHtml(formatDuration(item.conflictMinutes))} overlap with previous activity</span></div>` : ''}
-        <button class="resize-handle" type="button" data-role="resize" data-id="${id}" data-focus-key="resize:${id}"
-          aria-label="Resize ${title}" title="Drag to change duration"><span></span></button>
-      </article>
-    </div>`;
+  const classes = [
+    'card',
+    `card--${card.density}`,
+    narrow && 'card--narrow',
+    selected && 'is-selected',
+    item.overrun && 'is-overrun',
+    item.conflictMinutes && 'is-conflicted',
+    faded && 'is-faded',
+    (stageOpen || menuOpen) && 'is-menu-open'
+  ].filter(Boolean).join(' ');
+
+  // A five- or ten-minute card is 20–40 px tall. Anything but one line would
+  // not fit, so it is built as one line rather than measured down to one.
+  const body = card.density === 'line'
+    ? `<span class="card-title">${title}</span>${glyphs(item)}<span class="card-line-time">${escapeHtml(formatTime(item.start))}</span>`
+    : `<div class="card-row card-title-row"><span class="card-title">${title}</span>${glyphs(item)}</div>
+       <div class="card-row card-time" data-drop="4"><span>${escapeHtml(narrow ? formatTime(item.start) : item.rangeLabel)}</span><strong>${escapeHtml(formatDuration(item.duration))}</strong></div>
+       ${warning(item)}
+       <div class="card-row card-location" data-drop="2">${icon('pin')}<span>${escapeHtml(item.location || '')}</span></div>
+       ${narrow ? '' : `<div class="card-row card-stage" data-drop="1">${stagePill(stage, { interactive: true, expanded: stageOpen, id: item.id })}</div>`}
+       ${narrow ? '' : `<div class="card-row card-people" data-drop="0">${peopleTags(item.people)}</div>`}`;
+
+  return `<article class="${classes}" data-activity-id="${id}" data-index="${item.index}"
+    data-start="${item.start}" data-end="${item.end}" data-duration="${item.duration}"
+    style="top:${card.top}px;height:${card.height}px;--phase:${stage.color};--phase-tint:${stage.tint};${laneStyle(card.lane)}${card.overrunHeight ? `--overrun-height:${card.overrunHeight}px;` : ''}"
+    tabindex="0" data-action="select" data-id="${id}" data-focus-key="card:${id}"
+    aria-label="${escapeHtml(accessibleName(item, stage))}">
+    <span class="card-rule" aria-hidden="true"></span>
+    <span class="card-grip" data-role="reorder" data-id="${id}" aria-hidden="true">${icon('grip')}</span>
+    <div class="card-body">${body}</div>
+    <span class="card-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+    <div class="card-controls">
+      <button class="lock-button ${item.isFixed ? 'is-fixed' : ''}" type="button"
+        data-action="lock" data-id="${id}" data-focus-key="lock:${id}" aria-pressed="${item.isFixed}"
+        aria-label="${item.isFixed ? `Unfix ${title} from ${escapeHtml(item.startLabel)}` : `Fix ${title} at ${escapeHtml(item.startLabel)}`}">${icon(item.isFixed ? 'lock' : 'lock-open')}</button>
+      <button class="icon-button card-menu-toggle" type="button"
+        data-action="menu" data-menu="card-menu:${id}" data-focus-key="card-menu:${id}"
+        aria-label="More options for ${title}" aria-haspopup="menu" aria-expanded="${menuOpen}">${icon('more')}</button>
+    </div>
+    ${selected && !item.isFixed ? `<span class="handle handle--top" data-role="resize-top" data-id="${id}" aria-hidden="true"></span>` : ''}
+    ${selected ? `<span class="handle handle--bottom" data-role="resize" data-id="${id}" aria-hidden="true"></span>
+      <span class="card-reorder" data-role="reorder" data-id="${id}" aria-hidden="true">${icon('reorder')}</span>` : ''}
+  </article>`;
 }

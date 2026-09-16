@@ -3,7 +3,7 @@ import { countRequests, failRequests, openActivityEditor, openPlanner, signInAnd
 
 /** Rename the first activity — a small, always-valid change that triggers a save. */
 async function renameFirstActivity(page, title) {
-  await openActivityEditor(page, page.locator('.activity-row').first());
+  await openActivityEditor(page, page.locator('.card').first());
   const dialog = page.locator('#activity-dialog');
   await dialog.locator('input[name="title"]').fill(title);
   await dialog.locator('button[type="submit"]').click();
@@ -36,7 +36,7 @@ test('F1: editing offline makes a bounded number of requests and one message', a
   expect(seen.count, `saw ${seen.count} save requests in 10 s`).toBeLessThanOrEqual(3);
   expect(await toasts.count(), 'one message per failure episode, not one per attempt').toBe(1);
   // The edit is still on screen; nothing was rolled back.
-  await expect(page.locator('.activity-row').first()).toContainText('Edited while offline');
+  await expect(page.locator('.card').first()).toContainText('Edited while offline');
 });
 
 test('offline edits save when the connection comes back', async ({ page, context, server }) => {
@@ -81,7 +81,7 @@ test('F2: an invalid change is blocked in the sheet and never reaches the server
   await signInAndWaitForPlan(page);
   const seen = await countRequests(page, { url: '**/api/plan', method: 'PUT' });
 
-  await openActivityEditor(page, page.locator('.activity-row').first());
+  await openActivityEditor(page, page.locator('.card').first());
   const dialog = page.locator('#activity-dialog');
   await dialog.locator('input[name="title"]').fill('   ');
   await dialog.locator('button[type="submit"]').click();
@@ -135,7 +135,7 @@ test('F10: a session that expires mid-edit keeps the change and saves it after s
   await page.locator('#login-form input[name="password"]').fill('e2e-password-987');
   await page.locator('#login-form button[type="submit"]').click();
 
-  await expect(page.locator('#activity-list')).toBeVisible();
+  await expect(page.locator('.timeline-grid')).toBeVisible();
   await expect(saveState(page)).toHaveText('Saved', { timeout: 10_000 });
   expect((await server.read()).plan.activities[0].title).toBe('Typed before the session expired');
 });
@@ -196,5 +196,5 @@ test('a plan that cannot be loaded never shows as an empty timeline', async ({ p
 
   await page.reload();
   await expect(page.locator('.fatal-view')).toBeVisible();
-  await expect(page.locator('.activity-row')).toHaveCount(0);
+  await expect(page.locator('.card')).toHaveCount(0);
 });

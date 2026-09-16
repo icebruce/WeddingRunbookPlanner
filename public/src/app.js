@@ -21,7 +21,8 @@ import { createStore } from './state.js';
 import { renderConflict, renderHeader } from './render/header.js';
 import { peopleChips, renderSheet } from './render/sheets.js';
 import { renderStrip } from './render/strip.js';
-import { renderHeading, renderTimeline } from './render/timeline.js';
+import { renderHeading, renderSummary, renderTimeline } from './render/timeline.js';
+import { fitCards, watchFit } from './render/fit.js';
 import { createToaster } from './render/toast.js';
 import { renderToolbar } from './render/toolbar.js';
 import { checkPlan, normalizeDuration, roundTimeUp, validateActivity } from './validate.js';
@@ -54,6 +55,7 @@ const SHELL = `
   <div data-region="strip"></div>
   <main id="main-plan" class="planner">
     <section class="planner-heading" data-region="heading"></section>
+    <section data-region="summary"></section>
     <section class="timeline" aria-label="Wedding day timeline" data-region="timeline"></section>
   </main>
   <div data-region="toolbar"></div>`;
@@ -63,6 +65,7 @@ const REGIONS = {
   conflict: ({ ui }) => renderConflict({ ui }),
   strip: () => renderStrip(),
   heading: ({ plan }) => renderHeading({ plan }),
+  summary: ({ plan, ui }) => renderSummary({ plan, ui }),
   timeline: ({ plan, ui }) => renderTimeline({ plan, ui }),
   toolbar: () => renderToolbar()
 };
@@ -145,7 +148,12 @@ function paintRegions(names) {
   for (const name of names) {
     paint(app.querySelector(`[data-region="${name}"]`), REGIONS[name](context));
   }
-  if (names.includes('timeline')) gestures.bind();
+  if (names.includes('timeline')) {
+    gestures.bind();
+    // What a card can show depends on its rendered size, so it is measured
+    // after the paint rather than guessed from the duration.
+    fitCards(app);
+  }
 }
 
 // ------------------------------------------------------------------ sheets
@@ -543,6 +551,15 @@ const ACTION_HANDLERS = {
   conflict(_, element) {
     resolveConflict(element.dataset.choice);
   },
+  jump(_, element) {
+    const target = element.dataset.target === 'conflict'
+      ? app.querySelector('.card.is-conflicted, .card.is-overrun')
+      : app.querySelector('.open-time');
+    if (!target) return;
+    target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    target.classList.add('is-highlighted');
+    setTimeout(() => target.classList.remove('is-highlighted'), 1600);
+  },
   'save-retry'() {
     void saver.retry();
   },
@@ -624,13 +641,13 @@ document.addEventListener('click', event => {
     store.setUi({ openMenu: null });
     return;
   }
-  if (store.ui.selectedId && !event.target.closest('.activity-card, dialog, .topbar')) {
+  if (store.ui.selectedId && !event.target.closest('.card, dialog, .topbar')) {
     store.setUi({ selectedId: null }, { regions: ['timeline'] });
   }
 });
 
 document.addEventListener('dblclick', event => {
-  const card = event.target.closest('.activity-card');
+  const card = event.target.closest('.card');
   if (!card || event.target.closest('button')) return;
   openEditor(card.dataset.id);
 });
@@ -653,7 +670,7 @@ document.addEventListener('keydown', event => {
     return;
   }
 
-  const card = event.target.closest?.('.activity-card');
+  const card = event.target.closest?.('.card');
   if (card && (event.key === 'Enter' || event.key === ' ') && event.target === card) {
     event.preventDefault();
     store.setUi({ selectedId: card.dataset.id, openMenu: null }, { regions: ['timeline'] });
@@ -661,7 +678,7 @@ document.addEventListener('keydown', event => {
 
   if (card && event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
     event.preventDefault();
-    const index = Number(card.closest('.activity-row').dataset.index);
+    const index = Number(card.dataset.index);
     commit('activity.move', { id: card.dataset.id, toIndex: index + (event.key === 'ArrowUp' ? -1 : 1) }, { regions: ['timeline'] });
     focusByKey(app, `card:${card.dataset.id}`);
   }
@@ -679,6 +696,7 @@ document.addEventListener('change', event => {
   }
 });
 
+watchFit(app);
 window.addEventListener('online', () => void saver.handleOnline());
 window.addEventListener('offline', () => repaint(['header']));
 

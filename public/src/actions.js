@@ -8,78 +8,116 @@
 import { defineAction } from './state.js';
 import { normalizeDuration } from './validate.js';
 import { buildSchedule, minutesToTime } from './schedule.js';
+import {
+  addInOpenTime,
+  duplicate,
+  extendPrevious,
+  fix,
+  insertAfter,
+  keepAsBuffer,
+  move,
+  remove,
+  resizeBottom,
+  resizeTop,
+  setStage,
+  unfix,
+  update
+} from './operations.js';
 
 function findActivity(plan, id) {
   return plan.activities.find(activity => activity.id === id) || null;
 }
 
+/**
+ * Most actions are an operation plus a label. The operation decides whether
+ * anything changed and how far the rest of the day moved; the label is what
+ * the undo toast says.
+ */
+function fromOperation(run, label) {
+  return (plan, payload) => {
+    const result = run(plan, payload);
+    if (!result) return null;
+    const activity = findActivity(plan, payload.id) || result.plan.activities.find(a => a.id === result.activityId);
+    return { plan: result.plan, shifted: result.shifted, label: label(activity, payload, result) };
+  };
+}
+
 defineAction('activity.add', (plan, { activity, afterId = null }) => {
-  const index = afterId ? plan.activities.findIndex(item => item.id === afterId) : -1;
-  if (index >= 0) plan.activities.splice(index + 1, 0, activity);
-  else plan.activities.push(activity);
-  return { plan, label: `Added ${activity.title}` };
+  const result = insertAfter(plan, afterId, activity);
+  return { plan: result.plan, shifted: result.shifted, label: `Added ${activity.title}` };
 });
 
-defineAction('activity.update', (plan, { activity }) => {
-  const index = plan.activities.findIndex(item => item.id === activity.id);
-  if (index < 0) return null;
-  plan.activities[index] = activity;
-  return { plan, label: `Edited ${activity.title}` };
-});
+defineAction('activity.update', fromOperation(
+  (plan, { activity }) => update(plan, activity),
+  (_, payload) => `Edited ${payload.activity.title}`
+));
 
-defineAction('activity.remove', (plan, { id }) => {
-  const activity = findActivity(plan, id);
-  if (!activity) return null;
-  plan.activities = plan.activities.filter(item => item.id !== id);
-  return { plan, label: `Deleted ${activity.title}` };
-});
+defineAction('activity.remove', fromOperation(
+  (plan, { id }) => remove(plan, id),
+  activity => `Deleted ${activity.title}`
+));
 
-defineAction('activity.stage', (plan, { id, stage }) => {
-  const activity = findActivity(plan, id);
-  if (!activity || activity.stage === stage) return null;
-  activity.stage = stage;
-  return { plan, label: `Changed stage of ${activity.title}` };
-});
+defineAction('activity.stage', fromOperation(
+  (plan, { id, stage }) => setStage(plan, id, stage),
+  activity => `Changed stage of ${activity.title}`
+));
 
 defineAction('activity.duration', (plan, { id, duration }) => {
   const activity = findActivity(plan, id);
   if (!activity) return null;
   const next = normalizeDuration(duration);
   if (next === activity.duration) return null;
-  activity.duration = next;
-  return { plan, label: `Resized ${activity.title}` };
+  const scheduled = buildSchedule(plan).items.find(item => item.id === id);
+  return fromOperation(
+    (p, payload) => resizeBottom(p, payload.id, scheduled.start + next),
+    a => `Resized ${a.title}`
+  )(plan, { id });
 });
 
-defineAction('activity.move', (plan, { id, toIndex }) => {
-  const from = plan.activities.findIndex(item => item.id === id);
-  if (from < 0) return null;
-  const target = Math.max(0, Math.min(toIndex, plan.activities.length - 1));
-  if (target === from) return null;
-  const [moved] = plan.activities.splice(from, 1);
-  plan.activities.splice(target, 0, moved);
-  return { plan, label: `Moved ${moved.title}` };
-});
+defineAction('activity.resizeBottom', fromOperation(
+  (plan, { id, newEnd }) => resizeBottom(plan, id, newEnd),
+  activity => `Resized ${activity.title}`
+));
 
-/**
- * Fixing uses the activity's current start, which depends on everything before
- * it — so the schedule is computed from the plan as it was, before the change.
- */
-defineAction('activity.fix', (plan, { id, scheduleBefore }) => {
-  const activity = findActivity(plan, id);
-  if (!activity || activity.lockedStart) return null;
-  const scheduled = (scheduleBefore || buildSchedule(plan)).items.find(item => item.id === id);
-  if (!scheduled) return null;
-  activity.lockedStart = minutesToTime(scheduled.start);
-  delete activity.gapBefore;
-  return { plan, label: `Fixed ${activity.title}` };
-});
+defineAction('activity.resizeTop', fromOperation(
+  (plan, { id, newStart }) => resizeTop(plan, id, newStart),
+  activity => `Resized ${activity.title}`
+));
 
-defineAction('activity.unfix', (plan, { id }) => {
-  const activity = findActivity(plan, id);
-  if (!activity || !activity.lockedStart) return null;
-  activity.lockedStart = null;
-  return { plan, label: `Unfixed ${activity.title}` };
-});
+defineAction('activity.move', fromOperation(
+  (plan, { id, toIndex }) => move(plan, id, toIndex),
+  activity => `Moved ${activity.title}`
+));
+
+defineAction('activity.fix', fromOperation(
+  (plan, { id }) => fix(plan, id),
+  activity => `Fixed ${activity.title}`
+));
+
+defineAction('activity.unfix', fromOperation(
+  (plan, { id }) => unfix(plan, id),
+  activity => `Unfixed ${activity.title}`
+));
+
+defineAction('activity.duplicate', fromOperation(
+  (plan, { id, newId }) => duplicate(plan, id, newId),
+  activity => `Duplicated ${activity.title}`
+));
+
+defineAction('openTime.buffer', fromOperation(
+  (plan, { openTime, newId }) => keepAsBuffer(plan, openTime, newId),
+  () => 'Added Buffer'
+));
+
+defineAction('openTime.extend', fromOperation(
+  (plan, { openTime }) => extendPrevious(plan, openTime),
+  () => 'Extended the previous activity'
+));
+
+defineAction('openTime.add', fromOperation(
+  (plan, { openTime, activity }) => addInOpenTime(plan, openTime, activity),
+  (_, payload) => `Added ${payload.activity.title || 'activity'}`
+));
 
 defineAction('plan.settings', (plan, { changes }) => {
   Object.assign(plan, changes);

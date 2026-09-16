@@ -5,8 +5,8 @@ test('signs in and shows the seeded plan', async ({ page }) => {
   await signInAndWaitForPlan(page);
 
   await expect(page.locator('.planner-heading h1')).toHaveText('Wedding Day');
-  await expect(page.locator('.activity-row')).toHaveCount(11);
-  await expect(page.locator('.activity-row').first()).toContainText('Getting Ready');
+  await expect(page.locator('.card')).toHaveCount(11);
+  await expect(page.locator('.card').first()).toContainText('Getting Ready');
 });
 
 test('a wrong password keeps the sign-in screen', async ({ page }) => {
@@ -15,7 +15,7 @@ test('a wrong password keeps the sign-in screen', async ({ page }) => {
   await page.locator('#login-form button[type="submit"]').click();
 
   await expect(page.locator('#login-error')).toBeVisible();
-  await expect(page.locator('#activity-list')).toHaveCount(0);
+  await expect(page.locator('.timeline-grid')).toHaveCount(0);
 });
 
 test.describe('only public files are served', () => {

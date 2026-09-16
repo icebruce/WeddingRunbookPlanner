@@ -12,7 +12,7 @@ export async function signIn(page, password = TEST_PASSWORD) {
 
 export async function signInAndWaitForPlan(page, password = TEST_PASSWORD) {
   await signIn(page, password);
-  await expect(page.locator('#activity-list')).toBeVisible();
+  await expect(page.locator('.timeline-grid')).toBeVisible();
 }
 
 /**
@@ -27,7 +27,7 @@ export async function openPlanner(page, password = TEST_PASSWORD) {
     await field.fill(password);
     await page.locator('#login-form button[type="submit"]').click();
   }
-  await expect(page.locator('#activity-list')).toBeVisible();
+  await expect(page.locator('.timeline-grid')).toBeVisible();
 }
 
 /**
@@ -38,9 +38,11 @@ export async function openPlanner(page, password = TEST_PASSWORD) {
  * The phone's own gesture for this is a long press, which arrives with the
  * direct manipulation stage.
  */
-export async function openActivityEditor(page, row) {
-  await row.locator('.card-menu-toggle').click();
-  await row.locator('[data-action="edit"]').click();
+export async function openActivityEditor(page, card) {
+  await card.locator('.card-menu-toggle').click();
+  // The menu is drawn above the timeline, not inside the card, because a card
+  // is clipped to its own height.
+  await page.locator('.card-menu [data-action="edit"]').click();
   await expect(page.locator('#activity-dialog')).toBeVisible();
 }
 

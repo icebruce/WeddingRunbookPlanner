@@ -151,3 +151,37 @@ body.is-reordering { user-select: none; cursor: grabbing; }
 /* The desktop add button says where the new activity will land, because
    "after the selected one" is not guessable from the button alone. */
 .add-hint { margin: 6px 0 0; color: var(--soft); font-size: 13px; }
+
+/* Highlight after a summary link scrolls to open time or a conflict. */
+.is-highlighted { animation: highlight 1.6s ease-out; }
+@keyframes highlight {
+  0%, 60% { box-shadow: 0 0 0 3px var(--sel-tint), 0 0 0 4px var(--sel); }
+  100% { box-shadow: none; }
+}
+
+/* The bubble beside an edge being dragged. */
+.resize-bubble {
+  position: fixed;
+  z-index: 95;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.card.is-drag-source { opacity: .25; }
+.card.is-lifted {
+  box-shadow: var(--shadow-lifted), 0 0 0 1px var(--sel);
+  transform: rotate(-.6deg) scale(1.02);
+}
+.card.is-drop-before { box-shadow: 0 -3px 0 var(--sel), var(--shadow-card); }
+.card.is-drop-after { box-shadow: 0 3px 0 var(--sel), var(--shadow-card); }
+
+@media (prefers-reduced-motion: reduce) {
+  .is-highlighted { animation: none; box-shadow: 0 0 0 3px var(--sel); }
+}

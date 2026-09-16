@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures.mjs';
 import { failRequests, openActivityEditor, signInAndWaitForPlan } from './helpers.mjs';
 
-const firstCard = page => page.locator('.activity-row').first();
+const firstCard = page => page.locator('.card').first();
 
 test('F14: toggling a lock keeps focus on the button that was pressed', async ({ page }) => {
   await signInAndWaitForPlan(page);
@@ -34,7 +34,7 @@ test('F14: a save landing in the background does not rebuild an open sheet', asy
   await failRequests(page, { url: '**/api/plan', method: 'PUT', status: 200, times: 1, delayMs: 1500, body: { revision: 2, updatedAt: null } });
   await firstCard(page).locator('.lock-button').click();
 
-  await openActivityEditor(page, page.locator('.activity-row').nth(2));
+  await openActivityEditor(page, page.locator('.card').nth(2));
   const dialog = page.locator('#activity-dialog');
 
   await dialog.locator('input[name="location"]').fill('Half-typed while saving');
@@ -47,12 +47,12 @@ test('F14: a save landing in the background does not rebuild an open sheet', asy
 test('the stage menu closes once a stage is picked', async ({ page }) => {
   await signInAndWaitForPlan(page);
 
-  await firstCard(page).locator('.stage-pill--button').click();
-  await expect(firstCard(page).locator('.stage-menu')).toBeVisible();
+  await firstCard(page).locator('.stage-tag--button').click();
+  await expect(page.locator('.stage-menu')).toBeVisible();
 
-  await firstCard(page).locator('[data-action="set-stage"][data-stage="ceremony"]').click();
+  await page.locator('.stage-menu [data-action="set-stage"][data-stage="ceremony"]').click();
   await expect(page.locator('.stage-menu')).toHaveCount(0);
-  await expect(firstCard(page).locator('.stage-pill--button')).toContainText('Ceremony');
+  await expect(firstCard(page).locator('.stage-tag--button')).toContainText('Ceremony');
 });
 
 test('F26: Escape closes every menu and returns focus to what opened it', async ({ page }) => {
@@ -64,7 +64,7 @@ test('F26: Escape closes every menu and returns focus to what opened it', async 
   await expect(page.locator('.menu-popover')).toHaveCount(0);
   await expect(page.locator('[data-action="menu"][data-menu="app"]')).toBeFocused();
 
-  await firstCard(page).locator('.stage-pill--button').click();
+  await firstCard(page).locator('.stage-tag--button').click();
   await expect(page.locator('.stage-menu')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.locator('.stage-menu')).toHaveCount(0);
@@ -137,7 +137,9 @@ test('F19: a fixed time off the 5-minute grid rounds up, with no browser message
   await expect(page.locator('.save-indicator')).toHaveText('Saved');
 
   expect((await server.read()).plan.activities[0].lockedStart).toBe('14:50');
-  await expect(firstCard(page)).toContainText('2:50 PM');
+  // The card shows a range, and a range drops the first AM/PM when both
+  // halves share it: "2:50 – 3:35 PM".
+  await expect(firstCard(page)).toContainText('2:50 – 3:35 PM');
 });
 
 test('F19: a typed duration rounds up instead of being refused', async ({ page, server }) => {
@@ -155,7 +157,7 @@ test('F19: a typed duration rounds up instead of being refused', async ({ page, 
 test('F21: people are shown by name, never as initials', async ({ page }) => {
   await signInAndWaitForPlan(page);
 
-  await expect(firstCard(page).locator('.person-display-tag').first()).toHaveText('Bride');
+  await expect(firstCard(page).locator('.card-people .tag').first()).toHaveText('Bride');
   await expect(page.locator('.person-avatar')).toHaveCount(0);
   await expect(page.locator('.people-more')).toHaveCount(0);
 });
@@ -170,7 +172,7 @@ test('the toast region is the only live region, and #app is not one', async ({ p
 test('an activity added from the card menu is placed after the selected card', async ({ page, server }) => {
   await signInAndWaitForPlan(page);
 
-  await page.locator('.activity-row').nth(1).locator('.activity-card').click();
+  await page.locator('.card').nth(1).click();
   // Two add controls exist in the markup; only one is shown at a given width.
   await page.locator('[data-action="add"]:visible').click();
 
@@ -198,12 +200,12 @@ test('closing a sheet returns focus to the control that opened it', async ({ pag
 test('a card opens its editor and gets focus back when the sheet closes', async ({ page }) => {
   await signInAndWaitForPlan(page);
 
-  const row = page.locator('.activity-row').nth(1);
+  const row = page.locator('.card').nth(1);
   await openActivityEditor(page, row);
 
   await page.locator('#activity-dialog .sheet-close').click();
   await expect(page.locator('#activity-dialog')).toHaveCount(0);
-  await expect(page.locator('.activity-row').nth(1).locator('.activity-card')).toBeFocused();
+  await expect(page.locator('.card').nth(1)).toBeFocused();
 });
 
 test('exactly one add control is offered, and the header one says where it lands', async ({ page }) => {
@@ -227,25 +229,25 @@ test('exactly one add control is offered, and the header one says where it lands
 test('F26: Escape on a card menu returns focus to the button that opened it', async ({ page }) => {
   await signInAndWaitForPlan(page);
 
-  const toggle = page.locator('.activity-row').first().locator('.card-menu-toggle');
+  const toggle = page.locator('.card').first().locator('.card-menu-toggle');
   await toggle.click();
   await expect(page.locator('.card-menu')).toBeVisible();
 
   await page.keyboard.press('Escape');
   await expect(page.locator('.card-menu')).toHaveCount(0);
-  await expect(page.locator('.activity-row').first().locator('.card-menu-toggle')).toBeFocused();
+  await expect(page.locator('.card').first().locator('.card-menu-toggle')).toBeFocused();
 });
 
 test('F26: Escape on the stage menu returns focus to the stage tag', async ({ page }) => {
   await signInAndWaitForPlan(page);
 
-  const tag = page.locator('.activity-row').first().locator('.stage-pill--button');
+  const tag = page.locator('.card').first().locator('.stage-tag--button');
   await tag.click();
   await expect(page.locator('.stage-menu')).toBeVisible();
 
   await page.keyboard.press('Escape');
   await expect(page.locator('.stage-menu')).toHaveCount(0);
-  await expect(page.locator('.activity-row').first().locator('.stage-pill--button')).toBeFocused();
+  await expect(page.locator('.card').first().locator('.stage-tag--button')).toBeFocused();
 });
 
 test('double-click opens the editor where there is a mouse', async ({ page, isMobile }) => {
@@ -254,6 +256,6 @@ test('double-click opens the editor where there is a mouse', async ({ page, isMo
   test.skip(Boolean(isMobile), 'double-click is a pointer gesture');
   await signInAndWaitForPlan(page);
 
-  await firstCard(page).locator('.activity-card').dblclick();
+  await firstCard(page).dblclick();
   await expect(page.locator('#activity-dialog')).toBeVisible();
 });
