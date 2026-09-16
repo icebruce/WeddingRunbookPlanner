@@ -1,16 +1,18 @@
 # Wedding Runbook Planner — Technical Specification
 
-**Status:** Source of truth for architecture and implementation · **Version:** 2.0 · **Date:** 2026-09-16
+**Status:** Source of truth for architecture and implementation · **Version:** 2.1 · **Date:** 2026-09-16
 **Replaces:** `WeddingRunbookPlanner_Technical_Spec.md` (v1)
 **Baseline reviewed:** `main` @ `b016c09` · **Working branch:** `redesign`
 **Behaviour:** see `FUNCTIONAL_SPEC.md` (wins on behaviour). **Look:** see `DESIGN_GUIDE.md` and mockups.
+
+> **Post-release update (commit `2939550` onward):** the scheduling model in §5 and the data model in §4.1 below describe the *original* redesign as reviewed. A follow-on rewrite replaced propagation/`gapBefore` scheduling with absolute per-activity starts and deliberate group moves; §4.1 and §5 have been updated in place to match. See `IMPLEMENTATION_PLAN.md` and `RELEASE_CHECK.md` for the stage history this superseded.
 
 ---
 
 ## 1. Constraints
 
 - Stack unchanged: HTML, CSS, vanilla JS (ES modules), Node 20+, Vercel static hosting + Functions, Upstash Redis REST.
-- **No runtime dependencies.** Allowed dev-only dependency: `@playwright/test`.
+- **One vendored runtime dependency:** flatpickr (`public/vendor/flatpickr/`), loaded by `index.html` for date/time pickers — see §8.5. No other runtime dependencies. Allowed dev-only dependency: `@playwright/test`.
 - No framework, bundler or build step. Files are served as written.
 - Browser support: Safari/iOS 16.4+, last two versions of Chrome, Edge, Firefox.
 - Prefer small, explicit modules over abstraction.
@@ -75,11 +77,13 @@ WeddingRunbookPlanner/
 │       ├── state.js          # store, actions, undo
 │       ├── schedule.js       # pure scheduling
 │       ├── layout.js         # pure geometry: positions, lanes, ruler ticks
-│       ├── render/ header.js  timeline.js  card.js  toolbar.js  sheets.js  strip.js  toast.js  print.js
-│       ├── gestures.js       # select, long-press, resize, reorder, autoscroll
+│       ├── render/ header.js  timeline.js  card.js  toolbar.js  sheets.js  strip.js  toast.js  print.js  pickers.js
+│       ├── gestures.js       # select, long-press, resize, drag-to-time, group select/move, autoscroll
+│       ├── operations.js     # pure plan operations (resize, moveTo, moveGroup, toggleLock, ...)
 │       ├── save.js           # autosave pipeline, device copy, sync
 │       ├── dayof.js          # clock, day-of state, strip content
 │       ├── api.js  config.js  icons.js  format.js
+│   └── vendor/flatpickr/     # vendored date/time picker (the one runtime dependency)
 ├── scripts/dev-server.mjs    # serves public/ + api/
 ├── tests/
 │   ├── unit/   schedule  layout  save  validate  storage  auth  ratelimit
@@ -96,13 +100,14 @@ WeddingRunbookPlanner/
 
 ### 4.1 Plan (stored)
 
+There is no `dayStart` on the plan — nothing schedules from a single anchor time any more. Every activity carries its own absolute `start`; the day's visible start/end are derived from the activities (`schedule.dayStart`/`dayEnd` in §5), not stored as a setting.
+
 ```ts
 type Plan = {
   id: string;
   title: string;            // "Wedding Day", 1–80
   coupleLabel: string;      // "Our Wedding", 1–60
   date: string;             // YYYY-MM-DD
-  dayStart: string;         // HH:MM, 5-min, "First activity starts"
   timelineStart?: string | null; // HH:MM, 5-min, view only
   timelineEnd?: string | null;   // HH:MM, 5-min, view only; may be <= timelineStart (= next day)
   sunset?: string | null;        // HH:MM, any minute; null hides marker; default "16:19"
@@ -118,12 +123,12 @@ type Activity = {
   location: string;         // 0–140
   people: string[];         // max 30, each 1–80, unique case-insensitively
   notes: string;            // 0–1000
-  lockedStart: string | null;   // HH:MM, 5-min; null = flexible
-  gapBefore?: number;       // NEW. minutes, 0..720, multiple of 5; ignored when lockedStart set
+  start: number;            // minutes from the plan date's midnight; absolute, can exceed 1440 for after-midnight activities
+  locked: boolean;          // exempts this activity from a group move (moveGroup); not a "flexible vs fixed" flag
 };
 ```
 
-Migration: none required. Missing optional fields default (`gapBefore` 0, `sunset` "16:19", view range derived). Unknown fields are dropped on save.
+Migration: none required. Missing optional fields default (`sunset` "16:19", view range derived). Unknown fields are dropped on save. There is no `lockedStart`/`gapBefore` any more — an activity's position is always its own `start`, whether `locked` or not.
 
 ### 4.2 Storage envelope (Redis)
 
@@ -160,33 +165,32 @@ Colours per phase are in `DESIGN_GUIDE.md`. Stage ids are unchanged, so stored d
 
 ## 5. Scheduling (`schedule.js`, pure)
 
+There is no propagation and nothing is a chain. Every activity stores its own absolute `start`. Nothing here moves an activity that was not explicitly asked to move — shortening, deleting or moving one activity never pulls its neighbours along. Two activities can occupy the same minutes; `buildSchedule` finds every such pair and reports it as an overlap rather than resolving or hiding it (n-way, not just "one fixed activity vs. the work running into it").
+
 ```text
-cursor = dayStart
-for each activity in order:
-  if lockedStart:
-      start = normalize(lockedStart, relativeTo = cursor)   // next-day rule
-      if start > cursor: openTime(cursor → start, before = activity, kind = "fixed")
-      if start < cursor: conflict(activity, overlap = cursor - start)
-  else:
-      start = cursor + (gapBefore || 0)
-      if gapBefore: openTime(cursor → start, before = activity, kind = "stored")
-  end = start + duration
-  cursor = max(cursor, end)
+buildSchedule(plan):
+  items = activities, each with end = start + duration
+  overlaps = every pair of items whose [start,end) ranges intersect, with the exact shared minutes
+  openTimes = the gaps between merged occupied blocks (interval-merge of all items)
+  dayStart = start of the earliest block; dayEnd = end of the latest block
+  summary = { count, start, end, openMinutes, conflictMinutes }
 ```
 
-Output: `{ items[{id,start,end,conflictMinutes}], openTimes[], conflicts[{fixedId, overrunIds[], minutes}], dayEnd, summary }`. All times are absolute minutes from the plan date's midnight.
+Output: `{ items[{id, start, end, overlaps[{withId, withTitle, start, end, minutes}], overlapMinutes}], openTimes[{start, end, beforeId, beforeTitle}], overlaps[{aId, bId, start, end, minutes}], dayStart, dayEnd, summary }`. All times are absolute minutes from the plan date's midnight, and may exceed 1440.
 
-Operations (pure, each returns a new plan):
-- `resizeBottom(plan, id, newEnd)`
-- `resizeTop(plan, id, newStart)` — flexible only; `newStart ∈ [cursorBefore, end − 5]`; sets `gapBefore = newStart − cursorBefore`, `duration = end − newStart`.
-- `move(plan, id, toIndex)` — rejects fixed.
-- `keepAsBuffer(plan, openTime)` — inserts Buffer activity of that length before `openTime.before`; clears its `gapBefore`.
-- `extendPrevious(plan, openTime)`, `addInOpenTime(plan, openTime)`
-- `fix(plan, id)` (sets `lockedStart` to current start, clears `gapBefore`), `unfix(plan, id)`
-- `insertAfter(plan, afterId|null, activity)`, `duplicate(plan, id)`, `remove(plan, id)`
-- `normalizeDuration(n)` = clamp(ceil(n/5)*5, 5, 720); `roundTime(hhmm)` = ceil to 5 min.
+Operations (pure, each returns a new plan — `operations.js`):
+- `resizeBottom(plan, id, newEnd)` — end follows the pointer; rejects locked activities; no neighbour is moved.
+- `resizeTop(plan, id, newStart)` — start follows the pointer, clamped to `[0, end − 5]`; rejects locked activities; no neighbour is moved or gains stored open time.
+- `moveTo(plan, id, newStart)` — sets an activity's absolute start directly (a drag or drop anywhere on the timeline); rejects locked activities.
+- `moveGroup(plan, ids, deltaMinutes)` — the one deliberate way several activities move together: shifts every activity in `ids` by the same `deltaMinutes`; a locked activity inside the selection is skipped, not moved.
+- `toggleLock(plan, id)` — flips `locked`. `locked` means only "not a participant in a group move"; it does not move the activity or its neighbours, and there is no "unfixing snaps back to follow the previous activity" behaviour.
+- `keepAsBuffer(plan, openTime, newId)` — inserts a Buffer activity of exactly that length, spliced before the activity that follows the gap.
+- `extendPrevious(plan, openTime)` — stretches the activity right before the open time so it ends where the gap ends.
+- `addInOpenTime(plan, openTime, activity)` — inserts a new activity starting at the gap, defaulting to the gap's length.
+- `insertAfter(plan, afterId|null, activity)`, `duplicate(plan, id, newId)` (copy starts 1× the original's duration later, unlocked), `remove(plan, id)`, `update(plan, activity)`, `setStage(plan, id, stage)`, `setSettings(plan, changes)`.
+- `normalizeDuration(n)` = clamp(round-to-5(n), 5, 720).
 
-Each operation also returns `shifted: { count, deltaMinutes }` for toasts.
+No operation returns a `shifted` count — nothing is shifted as a side effect of another change. `moveGroup` returns `movedCount` (how many of the requested ids actually moved, excluding locked ones), used for its own undo label only.
 
 ---
 
@@ -196,10 +200,11 @@ Each operation also returns `shifted: { count, deltaMinutes }` for toasts.
 - `range(plan, schedule)`: `from = floor5(min(timelineStart, firstStart))`, `to = ceil5(max(timelineEnd(next-day aware), dayEnd))`. Defaults when unset: `from = firstStart − 30`, `to = dayEnd + 30`.
 - `y(min) = (min − from) * PX_PER_MIN`. Card box: `top = y(start) + 1`, `height = duration * PX − 2`.
 - `ticks(from, to)`: every 5 min with `kind ∈ {hour, half, quarter, five}`; labels only for the first three.
-- `lanes(schedule)`: for each conflict, assign fixed activity to lane 1 and overlapping overrun activities to lane 0 for the whole card; others span full width. Lane widths: 55 % / 45 % (phone and desktop).
+- `lanes(items)`: general interval-graph colouring, not a fixed-vs-overrun split. Activities are walked in start order; each goes into the first lane whose last activity has already ended, opening a new lane otherwise. Mutually-touching activities form a cluster and share that cluster's lane count; activities outside any overlap stay in lane 0 at full width. Lane widths are equal shares of the card width (`100% / totalLanes`, minus a fixed `LANE_GAP_PX` gutter) — there is no 55%/45% asymmetry and no notion of a "fixed" lane.
+- `overlapBox(item)`: the exact overlapping sub-range of a card (not its whole height), as a `{top, height}` relative to the card's own top — used to hatch only the minutes that truly collide.
 - `density(duration)`: `line` (≤10), `small` (15–25), `standard` (≥30). Controls padding only; which rows show is decided by measurement (§8.3).
 
-Invariant tests: no two full-width boxes intersect; every box top/bottom equals its time; lanes never intersect.
+Invariant: every box top/bottom equals its time; overlapping activities are drawn overlapping (side by side in their shared lanes), not prevented — "no two full-width boxes intersect" no longer holds by design.
 
 ---
 
@@ -234,6 +239,12 @@ Before a region re-renders, remember the focused element's `data-focus-key`; res
 ### 8.4 Print
 `@media print` stylesheet plus `render/print.js`, which builds a hidden list layout from the current schedule and filter before calling `window.print()`.
 
+### 8.5 Date/time pickers (`render/pickers.js`)
+The one vendored runtime dependency (flatpickr, `public/vendor/flatpickr/`), lazy-loaded on first use rather than pulled from a CDN so the app keeps working with no network beyond the page itself. `initPickers(root, {onChange})` wires every `[data-picker]` input under `root`: `time` (5-minute grid), `date` (calendar only), or `datetime` (an activity's absolute start, which can land on the day after the plan date). `onChange` fires on flatpickr's own change event, not every keystroke. If the script fails to load (offline, nothing cached), the plain input underneath still works.
+
+### 8.6 Back-button / history guard (`app.js`)
+On a phone, hardware/gesture back goes to browser history, not the app — left alone it would leave a sheet, menu, or card selection open while navigating away from the whole plan. A single dummy `history.pushState` entry is pushed exactly while any such overlay is open; back then lands on that entry (same URL, no navigation) and the resulting `popstate` is read as "close the top thing" instead. Closing the overlay any other way (Cancel, scrim tap, Escape) consumes the same entry via `history.back()` so the back stack never accumulates dead stops. Because `history.back()`'s `popstate` lands on a later tick while `pushState` is synchronous, the push/pop bookkeeping reacts once on a microtask after a synchronous stretch of store updates finishes, so closing one overlay and immediately opening another (e.g. an open-time sheet handing off to the activity editor) nets out correctly instead of racing.
+
 ---
 
 ## 9. Gestures (`gestures.js`)
@@ -242,17 +253,18 @@ Pointer Events only; one active gesture at a time.
 
 | Gesture | Target | Rules |
 |---|---|---|
-| Select | card body | `pointerup` without movement > 6 px and no long-press |
+| Select | card body | `pointerup` without movement > 6 px and no long-press. Ctrl/Cmd-click adds the card to a `groupSelection` (2+ cards) instead of replacing the single selection. |
 | Long-press edit | card body (touch) | 500 ms; cancel on move > 10 px, `pointercancel`, or scroll; immediate `.pressed`; suppress following click; not from controls |
-| Resize | `.handle.top`, `.handle.bottom` | `touch-action:none` on handles only; pointer capture; visual bar 36×5, hit area 44 px tall × 120 px wide; top handle not rendered for fixed |
-| Reorder | grip (mouse: immediate) / reorder handle (touch: 150 ms hold) | pointer capture; lifted clone follows pointer; slot index from midpoints with 8 px hysteresis; autoscroll within 64 px of viewport edges |
+| Resize | `.handle.top`, `.handle.bottom` | `touch-action:none` on handles only; pointer capture; visual bar 36×5, hit area 44 px tall × 120 px wide; neither handle rendered for a locked activity |
+| Move | card grip (`.card-grip`, always visible on any unlocked, non-view-only card) | pointer capture; dragging sets the card's absolute start via `moveTo` (continuous drag-to-time, not a discrete reorder/index move). With an active `groupSelection`, dragging any selected card's grip moves the whole group together by the same delta via `moveGroup`; locked activities inside the group are skipped. |
 | Scroll | everything else | card body `touch-action: pan-y`; never `preventDefault` before a gesture starts |
+| Back guard | hardware/gesture back (phone) | see §8.6 — closes the open sheet/menu/selection instead of navigating away |
 
-Performance rules during resize/reorder:
+Performance rules during resize/move:
 - Read pointer position in `pointermove`; do all DOM writes in one `requestAnimationFrame`.
 - Pointer delta maps to minutes with `PX_PER_MIN` (1:1 with rendered geometry), snapped to 5.
 - Schedule preview recomputed at most once per frame, only when the snapped value changes.
-- No CSS transitions on the active card; neighbours animate `transform` (not `top`) 180 ms.
+- No CSS transitions on the active card. Nothing else moves automatically during a single-card resize/move; during a group move, the other selected cards animate `transform` (not `top`) 180 ms.
 - Esc / `pointercancel` restores the pre-gesture snapshot exactly.
 
 Input capability, not width, decides hover behaviour: `@media (hover:hover) and (pointer:fine)` shows hover handles and inline controls; otherwise the selection model applies (iPad included).
