@@ -14,7 +14,9 @@
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: var(--shadow-card);
-  overflow: hidden;
+  /* Not `overflow: hidden`. The handles sit astride the card's edges by
+     design, and clipping the card clipped them out of existence. The content
+     is clipped by .card-body instead. */
   -webkit-touch-callout: none;
   user-select: none;
   /* A swipe that starts on a card scrolls the day. Only the handles take
@@ -42,6 +44,7 @@
   flex-direction: column;
   gap: 4px;
   overflow: hidden;
+  border-radius: var(--radius);
 }
 .card--small .card-body { padding: 7px 12px 7px 26px; gap: 2px; }
 
@@ -144,7 +147,9 @@
 .lock-button.is-fixed { color: var(--fixed); }
 
 /* The grip is the only place a drag starts with a mouse. */
-.card-grip { position: absolute; left: 0; top: 0; bottom: 0; width: 22px; display: none; place-items: center; color: var(--dots); cursor: grab; }
+/* The body is painted after the grip, so without a stacking order of its own
+   the grip is laid out but never receives a pointer. */
+.card-grip { position: absolute; z-index: 3; left: 0; top: 0; bottom: 0; width: 22px; display: none; place-items: center; color: var(--dots); cursor: grab; }
 .card-reorder { position: absolute; top: 0; right: 0; width: 44px; height: 44px; display: grid; place-items: center; color: var(--sel); touch-action: none; }
 .card-reorder .icon { width: 20px; height: 20px; }
 
@@ -184,6 +189,7 @@
   right: 0;
   bottom: 0;
   height: var(--overrun-height, 0);
+  border-radius: 0 0 var(--radius) var(--radius);
   pointer-events: none;
   background: repeating-linear-gradient(135deg,
     rgba(208, 52, 44, .10) 0 6px,

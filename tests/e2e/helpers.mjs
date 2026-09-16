@@ -133,6 +133,30 @@ export function centreOf(box) {
 }
 
 /**
+ * Brings a target to the middle of the viewport and returns its box there.
+ *
+ * A touch point outside the visual viewport lands on the document, not on the
+ * element — on a phone-sized screen most of the timeline is off-screen, so a
+ * box read without scrolling first is not where a finger can reach.
+ */
+export async function boxInView(page, locator) {
+  await locator.scrollIntoViewIfNeeded();
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+
+  const box = await locator.boundingBox();
+  const height = page.viewportSize().height;
+  const centre = box.y + box.height / 2;
+  const drift = centre - height / 2;
+
+  if (Math.abs(drift) > height / 4) {
+    await page.evaluate(by => window.scrollBy(0, by), drift);
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+    return locator.boundingBox();
+  }
+  return box;
+}
+
+/**
  * Fault injection for API routes.
  *   fail(page, { url: '**\/api/plan', method: 'PUT', status: 500 })
  * `times` limits how many requests are affected; later ones pass through, which

@@ -1,170 +1,426 @@
 /**
- * Pointer gestures: reorder by grip, resize by the bottom handle.
+ * Direct manipulation: select, long-press, resize and reorder.
  *
- * Still the pre-redesign behaviour, moved onto the time-true geometry so the
- * preview matches what will be committed. Top-edge resizing, long-press,
- * touch reordering and the snap label belong to the direct manipulation stage,
- * which replaces this file.
+ * The rule that shapes all of it: a swipe that starts anywhere on a card
+ * scrolls the day. Cards carry `touch-action: pan-y` and nothing here calls
+ * preventDefault before a gesture has actually begun, so the browser is free to
+ * take the touch as a scroll. Only the handles — which exist only on the
+ * selected card — opt out with `touch-action: none`. The old build put a
+ * full-width resize strip with `touch-action: none` on every card, so a swipe
+ * down the timeline silently changed a duration (F5).
+ *
+ * One gesture at a time. Pointer positions are read in `pointermove` and every
+ * write to the DOM happens in one `requestAnimationFrame`, so an edge follows
+ * the finger without the layout being rebuilt per event (F7).
  */
-import { buildLayout } from './layout.js';
-import { buildSchedule, formatDuration } from './schedule.js';
-import { resizeBottom } from './operations.js';
+import { PX_PER_MIN, buildLayout } from './layout.js';
+import { buildSchedule, formatDuration, formatTime } from './schedule.js';
+import { resizeBottom, resizeTop, move } from './operations.js';
 import { cssEscape } from './dom.js';
 
-export function createGestures({ root, store, commit, repaint }) {
-  let drag = null;
-  let resize = null;
+/** Movement thresholds, in CSS pixels. */
+const TAP_SLOP = 6;
+const LONG_PRESS_CANCEL = 10;
+const LONG_PRESS_MS = 500;
+const REORDER_HOLD_MS = 150;
+/** Enough to stop the slot flickering between two positions. */
+const SLOT_HYSTERESIS = 8;
+const AUTOSCROLL_EDGE = 64;
+const AUTOSCROLL_STEP = 12;
+
+export function createGestures({ root, store, commit, repaint, onLongPress }) {
+  /** The one gesture in progress, if any. */
+  let active = null;
+  /** A press that has not yet become a tap, a long press or a scroll. */
+  let candidate = null;
+  let frame = null;
+  let suppressClickUntil = 0;
 
   const cardFor = id => root.querySelector(`.card[data-activity-id="${cssEscape(id)}"]`);
+  const scheduleOf = plan => buildSchedule(plan);
 
-  function startDrag(event, id) {
-    if (event.button !== 0) return;
-    event.preventDefault();
-
-    const card = cardFor(id);
-    if (!card) return;
-    const fromIndex = Number(card.dataset.index);
-    store.setUi({ selectedId: id, openMenu: null }, { regions: ['timeline'] });
-
-    const rect = card.getBoundingClientRect();
-    const clone = card.cloneNode(true);
-    clone.classList.add('is-lifted');
-    clone.style.position = 'fixed';
-    clone.style.width = `${rect.width}px`;
-    clone.style.height = `${rect.height}px`;
-    clone.style.left = `${rect.left}px`;
-    clone.style.top = `${rect.top}px`;
-    clone.style.zIndex = '90';
-    clone.setAttribute('aria-hidden', 'true');
-    clone.querySelectorAll('button').forEach(button => { button.tabIndex = -1; });
-    document.body.append(clone);
-
-    card.classList.add('is-drag-source');
-    const handle = event.currentTarget;
-    drag = { pointerId: event.pointerId, id, card, clone, fromIndex, offsetY: event.clientY - rect.top, slot: fromIndex, moved: false, handle };
-    handle.setPointerCapture(event.pointerId);
-    handle.addEventListener('pointermove', moveDrag);
-    handle.addEventListener('pointerup', endDrag, { once: true });
-    handle.addEventListener('pointercancel', cancelDrag, { once: true });
-    document.body.classList.add('is-reordering');
+  function schedulePaint(write) {
+    if (frame !== null) cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => {
+      frame = null;
+      write();
+    });
   }
 
-  function moveDrag(event) {
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    drag.moved = true;
-    drag.clone.style.top = `${event.clientY - drag.offsetY}px`;
+  function cancelPaint() {
+    if (frame === null) return;
+    cancelAnimationFrame(frame);
+    frame = null;
+  }
 
-    const others = [...root.querySelectorAll('.card')].filter(card => card !== drag.card);
-    others.forEach(card => card.classList.remove('is-drop-before', 'is-drop-after'));
+  // ------------------------------------------------------------- selection
 
+  function onCardPointerDown(event) {
+    if (active || event.button > 0) return;
+    const card = event.target.closest('.card');
+    if (!card) return;
+    // Controls and handles run their own gestures.
+    if (event.target.closest('button, .handle, .card-grip, .card-reorder, .card-menu, .stage-menu')) return;
+
+    const id = card.dataset.activityId;
+    card.classList.add('is-pressed');
+
+    candidate = {
+      id,
+      card,
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      touch: event.pointerType !== 'mouse',
+      longPress: null
+    };
+
+    // A long press opens the editor. It is the phone's alternative to
+    // double-click, and it is cancelled by any movement that looks like a
+    // scroll — which is why the pressed state appears at once but nothing is
+    // committed until the timer fires.
+    if (candidate.touch) {
+      candidate.longPress = setTimeout(() => {
+        if (!candidate) return;
+        const pressed = candidate;
+        clearCandidate();
+        suppressClickUntil = Date.now() + 700;
+        onLongPress?.(pressed.id);
+      }, LONG_PRESS_MS);
+    }
+  }
+
+  function onCardPointerMove(event) {
+    if (!candidate || candidate.pointerId !== event.pointerId) return;
+    const moved = Math.hypot(event.clientX - candidate.x, event.clientY - candidate.y);
+    if (moved > LONG_PRESS_CANCEL || (!candidate.touch && moved > TAP_SLOP)) clearCandidate();
+  }
+
+  function onCardPointerUp(event) {
+    if (!candidate || candidate.pointerId !== event.pointerId) return;
+    const moved = Math.hypot(event.clientX - candidate.x, event.clientY - candidate.y);
+    const { id } = candidate;
+    clearCandidate();
+    if (moved > TAP_SLOP) return;
+    store.setUi({ selectedId: id, openMenu: null }, { regions: ['timeline', 'toolbar'] });
+  }
+
+  function clearCandidate() {
+    if (!candidate) return;
+    clearTimeout(candidate.longPress);
+    candidate.card.classList.remove('is-pressed');
+    candidate = null;
+  }
+
+  // ---------------------------------------------------------------- resize
+
+  function startResize(event, id, edge) {
+    if (active || event.button > 0) return;
+    const card = cardFor(id);
+    if (!card) return;
+
+    const item = scheduleOf(store.plan).items.find(entry => entry.id === id);
+    if (!item) return;
+    if (edge === 'top' && item.isFixed) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    clearCandidate();
+
+    const handle = event.currentTarget;
+    handle.setPointerCapture(event.pointerId);
+
+    active = {
+      kind: 'resize',
+      edge,
+      id,
+      card,
+      handle,
+      pointerId: event.pointerId,
+      originY: event.clientY,
+      item,
+      // The value currently previewed, in minutes.
+      value: edge === 'bottom' ? item.end : item.start,
+      plan: store.plan,
+      bubble: createBubble()
+    };
+
+    document.body.classList.add('is-resizing');
+    card.classList.add('is-resizing');
+    drawResize();
+
+    handle.addEventListener('pointermove', onResizeMove);
+    handle.addEventListener('pointerup', onResizeEnd, { once: true });
+    handle.addEventListener('pointercancel', cancelGesture, { once: true });
+  }
+
+  function onResizeMove(event) {
+    if (active?.kind !== 'resize' || active.pointerId !== event.pointerId) return;
+
+    // One pixel of finger is one pixel of card, because the preview is drawn at
+    // the same scale as the timeline.
+    const deltaMinutes = Math.round((event.clientY - active.originY) / PX_PER_MIN / 5) * 5;
+    const next = active.edge === 'bottom'
+      ? clampEnd(active.item, deltaMinutes)
+      : clampStart(active.item, deltaMinutes);
+
+    if (next === active.value) return;
+    active.value = next;
+    schedulePaint(drawResize);
+  }
+
+  function clampEnd(item, deltaMinutes) {
+    return Math.max(item.start + 5, Math.min(item.start + 720, item.end + deltaMinutes));
+  }
+
+  function clampStart(item, deltaMinutes) {
+    // Dragging up stops where the previous activity ends: resizing never
+    // creates an overlap.
+    const earliest = item.start - (Number(item.gapBefore) || 0);
+    return Math.max(earliest, Math.min(item.end - 5, item.start + deltaMinutes));
+  }
+
+  function previewPlanForResize() {
+    const result = active.edge === 'bottom'
+      ? resizeBottom(active.plan, active.id, active.value)
+      : resizeTop(active.plan, active.id, active.value);
+    return result ? result.plan : active.plan;
+  }
+
+  function drawResize() {
+    if (active?.kind !== 'resize') return;
+    const plan = previewPlanForResize();
+    const layout = applyPreview(plan);
+
+    const minutes = active.edge === 'bottom'
+      ? active.value - active.item.start
+      : active.item.end - active.value;
+    active.bubble.textContent = active.edge === 'bottom'
+      ? `Ends ${formatTime(active.value)} · ${formatDuration(minutes)}`
+      : `Starts ${formatTime(active.value)} · ${formatDuration(minutes)}`;
+    positionBubble(active.bubble, active.card, active.edge);
+    markSnapLine(active.value, layout.from);
+  }
+
+  function onResizeEnd() {
+    if (active?.kind !== 'resize') return;
+    const { edge, id, value, item } = active;
+    const unchanged = edge === 'bottom' ? value === item.end : value === item.start;
+    finishGesture();
+
+    if (unchanged) return repaint(['timeline']);
+    commit(edge === 'bottom' ? 'activity.resizeBottom' : 'activity.resizeTop',
+      edge === 'bottom' ? { id, newEnd: value } : { id, newStart: value });
+  }
+
+  // --------------------------------------------------------------- reorder
+
+  function startReorder(event, id, { hold }) {
+    if (active || event.button > 0) return;
+    const card = cardFor(id);
+    if (!card) return;
+
+    const item = scheduleOf(store.plan).items.find(entry => entry.id === id);
+    // A fixed activity starts at its clock time whatever its position in the
+    // list, so there is nothing for a drag to change.
+    if (!item || item.isFixed) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    clearCandidate();
+
+    const handle = event.currentTarget;
+    handle.setPointerCapture(event.pointerId);
+
+    const begin = () => {
+      active = {
+        kind: 'reorder',
+        id,
+        card,
+        handle,
+        pointerId: event.pointerId,
+        pointerY: event.clientY,
+        offsetY: event.clientY - card.getBoundingClientRect().top,
+        fromIndex: Number(card.dataset.index),
+        slot: Number(card.dataset.index),
+        plan: store.plan,
+        started: false,
+        clone: null,
+        slotNode: null,
+        autoscroll: null
+      };
+      document.body.classList.add('is-reordering');
+    };
+
+    if (hold) {
+      // A short hold before the card lifts, so a finger resting on the handle
+      // while scrolling does not start a drag (D23). The hold has to be still:
+      // moving before it completes means this was a scroll, not a drag, and
+      // the timer is abandoned.
+      const origin = { x: event.clientX, y: event.clientY };
+      let timer = null;
+
+      const abort = () => {
+        if (timer) clearTimeout(timer);
+        timer = null;
+        handle.removeEventListener('pointermove', watch);
+        handle.removeEventListener('pointerup', abort);
+        handle.removeEventListener('pointercancel', abort);
+      };
+      const watch = moveEvent => {
+        if (!timer) return;
+        if (Math.hypot(moveEvent.clientX - origin.x, moveEvent.clientY - origin.y) > LONG_PRESS_CANCEL) abort();
+      };
+
+      timer = setTimeout(() => {
+        timer = null;
+        handle.removeEventListener('pointermove', watch);
+        begin();
+        liftCard();
+      }, REORDER_HOLD_MS);
+
+      handle.addEventListener('pointermove', watch);
+      handle.addEventListener('pointerup', abort);
+      handle.addEventListener('pointercancel', abort);
+    } else {
+      begin();
+      liftCard();
+    }
+
+    handle.addEventListener('pointermove', onReorderMove);
+    handle.addEventListener('pointerup', onReorderEnd, { once: true });
+    handle.addEventListener('pointercancel', cancelGesture, { once: true });
+  }
+
+  function liftCard() {
+    if (active?.kind !== 'reorder') return;
+    const rect = active.card.getBoundingClientRect();
+
+    const clone = active.card.cloneNode(true);
+    clone.classList.add('is-lifted');
+    clone.style.position = 'fixed';
+    clone.style.left = `${rect.left}px`;
+    clone.style.top = `${rect.top}px`;
+    clone.style.width = `${rect.width}px`;
+    clone.style.height = `${rect.height}px`;
+    clone.style.zIndex = '90';
+    clone.setAttribute('aria-hidden', 'true');
+    clone.querySelectorAll('button, [tabindex]').forEach(node => { node.tabIndex = -1; });
+    document.body.append(clone);
+
+    const slotNode = document.createElement('div');
+    slotNode.className = 'drop-slot';
+    root.querySelector('.timeline-plan')?.append(slotNode);
+
+    active.clone = clone;
+    active.slotNode = slotNode;
+    active.started = true;
+    active.card.classList.add('is-drag-source');
+    drawReorder();
+  }
+
+  function onReorderMove(event) {
+    if (active?.kind !== 'reorder' || active.pointerId !== event.pointerId) return;
+    active.pointerY = event.clientY;
+    if (!active.started) return;
+
+    const next = slotFromPointer(event.clientY);
+    if (next !== active.slot) active.slot = next;
+    runAutoscroll();
+    schedulePaint(drawReorder);
+  }
+
+  /**
+   * The slot changes only once the pointer has passed the midpoint of the next
+   * position by a few pixels, which stops it flickering back and forth on the
+   * boundary.
+   */
+  function slotFromPointer(clientY) {
+    const others = [...root.querySelectorAll('.card')].filter(card => card !== active.card);
     let slot = others.length;
     for (let i = 0; i < others.length; i += 1) {
       const rect = others[i].getBoundingClientRect();
-      if (event.clientY < rect.top + rect.height / 2) {
+      const midpoint = rect.top + rect.height / 2;
+      const bias = i < active.slot ? -SLOT_HYSTERESIS : SLOT_HYSTERESIS;
+      if (clientY < midpoint + bias) {
         slot = i;
         break;
       }
     }
-    drag.slot = slot;
-    if (!others.length) return;
-    if (slot < others.length) others[slot].classList.add('is-drop-before');
-    else others[others.length - 1].classList.add('is-drop-after');
+    return slot;
   }
 
-  function cleanupDrag() {
-    if (!drag) return;
-    root.querySelectorAll('.is-drop-before, .is-drop-after').forEach(card => card.classList.remove('is-drop-before', 'is-drop-after'));
-    drag.clone.remove();
-    drag.card.classList.remove('is-drag-source');
-    drag.handle.removeEventListener('pointermove', moveDrag);
-    document.body.classList.remove('is-reordering');
-    drag = null;
-  }
+  /** Near the top or bottom of the screen, the page follows the drag. */
+  function runAutoscroll() {
+    const distanceTop = active.pointerY;
+    const distanceBottom = window.innerHeight - active.pointerY;
+    const direction = distanceTop < AUTOSCROLL_EDGE ? -1 : distanceBottom < AUTOSCROLL_EDGE ? 1 : 0;
 
-  function endDrag() {
-    if (!drag) return;
-    const { id, slot, moved } = drag;
-    cleanupDrag();
-    // Dropping a card back where it started is not a change, so it is not saved.
-    if (moved) commit('activity.move', { id, toIndex: slot });
-    else repaint(['timeline']);
-  }
+    if (!direction) {
+      if (active.autoscroll) {
+        cancelAnimationFrame(active.autoscroll);
+        active.autoscroll = null;
+      }
+      return;
+    }
+    if (active.autoscroll) return;
 
-  function cancelDrag() {
-    cleanupDrag();
-    repaint(['timeline']);
-  }
-
-  function startResize(event, id) {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.stopPropagation();
-
-    const card = cardFor(id);
-    if (!card) return;
-    const item = buildSchedule(store.plan).items.find(entry => entry.id === id);
-
-    const bubble = document.createElement('div');
-    bubble.className = 'resize-bubble';
-    document.body.append(bubble);
-
-    card.classList.add('is-resizing');
-    resize = {
-      pointerId: event.pointerId,
-      id,
-      card,
-      handle: event.currentTarget,
-      startY: event.clientY,
-      start: item.start,
-      startEnd: item.end,
-      nextEnd: item.end,
-      bubble
+    const step = () => {
+      if (active?.kind !== 'reorder') return;
+      const top = active.pointerY;
+      const bottom = window.innerHeight - active.pointerY;
+      const way = top < AUTOSCROLL_EDGE ? -1 : bottom < AUTOSCROLL_EDGE ? 1 : 0;
+      if (!way) {
+        active.autoscroll = null;
+        return;
+      }
+      window.scrollBy(0, way * AUTOSCROLL_STEP);
+      active.slot = slotFromPointer(active.pointerY);
+      drawReorder();
+      active.autoscroll = requestAnimationFrame(step);
     };
-    paintBubble();
-
-    event.currentTarget.setPointerCapture(event.pointerId);
-    event.currentTarget.addEventListener('pointermove', moveResize);
-    event.currentTarget.addEventListener('pointerup', endResize, { once: true });
-    event.currentTarget.addEventListener('pointercancel', cancelResize, { once: true });
+    active.autoscroll = requestAnimationFrame(step);
   }
 
-  function paintBubble() {
-    if (!resize) return;
-    const minutes = resize.nextEnd - resize.start;
-    resize.bubble.textContent = `Ends ${formatEnd(resize.nextEnd)} · ${formatDuration(minutes)}`;
-    const rect = resize.card.getBoundingClientRect();
-    resize.bubble.style.left = `${rect.right - 150}px`;
-    resize.bubble.style.top = `${rect.bottom + 6}px`;
+  function drawReorder() {
+    if (active?.kind !== 'reorder' || !active.started) return;
+
+    const rect = active.card.getBoundingClientRect();
+    active.clone.style.top = `${active.pointerY - active.offsetY}px`;
+    active.clone.style.left = `${rect.left}px`;
+
+    const preview = move(active.plan, active.id, active.slot);
+    const plan = preview ? preview.plan : active.plan;
+    const layout = applyPreview(plan, { skipId: active.id, animate: true });
+
+    // The slot shows where the card will land, and says when that is.
+    const landing = layout.cards.find(entry => entry.item.id === active.id);
+    if (landing) {
+      active.slotNode.style.top = `${landing.top}px`;
+      active.slotNode.style.height = `${landing.height}px`;
+      active.slotNode.textContent = `Lands at ${formatTime(landing.item.start)}`;
+    }
   }
 
-  function formatEnd(minutes) {
-    const wrapped = ((minutes % 1440) + 1440) % 1440;
-    const hours = Math.floor(wrapped / 60);
-    return `${hours % 12 || 12}:${String(wrapped % 60).padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`;
+  function onReorderEnd() {
+    if (active?.kind !== 'reorder') return;
+    const { id, slot, fromIndex, started } = active;
+    finishGesture();
+
+    // Dropping a card back where it started changes nothing, so it is not
+    // saved and does not become an undo step.
+    if (!started || slot === fromIndex) return repaint(['timeline']);
+    commit('activity.move', { id, toIndex: slot });
   }
+
+  // ---------------------------------------------------------------- shared
 
   /**
-   * The edge follows the pointer one-to-one, because the preview uses the same
-   * scale the timeline is drawn at. The old code mapped 8 px to five minutes
-   * against a 13 px rendering, so the edge ran 1.63 times the finger (F7).
+   * Draws a plan without changing it. Positions are written directly so the
+   * preview is exactly the geometry that will be committed.
    */
-  function moveResize(event) {
-    if (!resize || resize.pointerId !== event.pointerId) return;
-
-    const deltaMinutes = Math.round((event.clientY - resize.startY) / 4 / 5) * 5;
-    const nextEnd = Math.max(resize.start + 5, Math.min(resize.start + 720, resize.startEnd + deltaMinutes));
-    if (nextEnd === resize.nextEnd) return;
-    resize.nextEnd = nextEnd;
-
-    // Preview only: the plan changes on release.
-    const result = resizeBottom(store.plan, resize.id, nextEnd);
-    const preview = result ? result.plan : store.plan;
-    applyPreview(preview);
-    paintBubble();
-  }
-
-  function applyPreview(plan) {
-    const schedule = buildSchedule(plan);
+  function applyPreview(plan, { skipId = null, animate = false } = {}) {
+    const schedule = scheduleOf(plan);
     const layout = buildLayout(plan, schedule);
 
     const grid = root.querySelector('.timeline-grid');
@@ -173,8 +429,21 @@ export function createGestures({ root, store, commit, repaint }) {
     for (const entry of layout.cards) {
       const card = cardFor(entry.item.id);
       if (!card) continue;
-      card.style.top = `${entry.top}px`;
-      card.style.height = `${entry.height}px`;
+
+      if (entry.item.id === skipId) {
+        card.style.visibility = 'hidden';
+        continue;
+      }
+      // Neighbours move by transform, which the browser can animate without
+      // laying the page out again.
+      if (animate) {
+        card.classList.add('is-settling');
+        card.style.transform = `translateY(${entry.top - parseFloat(card.style.top || '0')}px)`;
+      } else {
+        card.style.top = `${entry.top}px`;
+        card.style.height = `${entry.height}px`;
+      }
+
       const time = card.querySelector('.card-time span');
       const duration = card.querySelector('.card-time strong');
       if (time) time.textContent = entry.item.rangeLabel;
@@ -183,43 +452,114 @@ export function createGestures({ root, store, commit, repaint }) {
 
     const end = root.querySelector('.timeline-end');
     if (end) end.style.top = `${layout.endTop + 10}px`;
+    return layout;
   }
 
-  function cleanupResize() {
-    if (!resize) return;
-    resize.card.classList.remove('is-resizing');
-    resize.bubble.remove();
-    resize.handle.removeEventListener('pointermove', moveResize);
-    resize = null;
+  /** The five-minute line being snapped to turns blue and shows its time. */
+  function markSnapLine(minute, from) {
+    clearSnapLine();
+    const top = (minute - from) * PX_PER_MIN;
+    const tick = [...root.querySelectorAll('.tick')]
+      .find(node => Math.abs(parseFloat(node.style.top) - top) < 0.5);
+    if (!tick) return;
+    tick.classList.add('tick--snap');
+    tick.dataset.previousLabel = tick.querySelector('b')?.textContent ?? '';
+    let label = tick.querySelector('b');
+    if (!label) {
+      label = document.createElement('b');
+      tick.append(label);
+      tick.dataset.labelAdded = 'true';
+    }
+    label.textContent = formatTime(minute, { meridiem: false });
   }
 
-  function endResize() {
-    if (!resize) return;
-    const { id, nextEnd, startEnd } = resize;
-    cleanupResize();
-    if (nextEnd !== startEnd) commit('activity.resizeBottom', { id, newEnd: nextEnd });
-    else repaint(['timeline']);
+  function clearSnapLine() {
+    for (const tick of root.querySelectorAll('.tick--snap')) {
+      tick.classList.remove('tick--snap');
+      const label = tick.querySelector('b');
+      if (tick.dataset.labelAdded === 'true') label?.remove();
+      else if (label) label.textContent = tick.dataset.previousLabel ?? '';
+      delete tick.dataset.labelAdded;
+      delete tick.dataset.previousLabel;
+    }
   }
 
-  function cancelResize() {
-    cleanupResize();
+  function createBubble() {
+    const bubble = document.createElement('div');
+    bubble.className = 'resize-bubble';
+    document.body.append(bubble);
+    return bubble;
+  }
+
+  function positionBubble(bubble, card, edge) {
+    const rect = card.getBoundingClientRect();
+    bubble.style.left = `${Math.max(12, rect.left)}px`;
+    bubble.style.top = edge === 'bottom' ? `${rect.bottom + 8}px` : `${rect.top - 40}px`;
+  }
+
+  function finishGesture() {
+    cancelPaint();
+    clearSnapLine();
+    if (!active) return;
+
+    if (active.kind === 'resize') {
+      active.bubble.remove();
+      active.card.classList.remove('is-resizing');
+      active.handle.removeEventListener('pointermove', onResizeMove);
+      document.body.classList.remove('is-resizing');
+    }
+    if (active.kind === 'reorder') {
+      if (active.autoscroll) cancelAnimationFrame(active.autoscroll);
+      active.clone?.remove();
+      active.slotNode?.remove();
+      active.card.classList.remove('is-drag-source');
+      active.handle.removeEventListener('pointermove', onReorderMove);
+      document.body.classList.remove('is-reordering');
+    }
+    for (const card of root.querySelectorAll('.card')) {
+      card.style.transform = '';
+      card.style.visibility = '';
+      card.classList.remove('is-settling');
+    }
+    active = null;
+  }
+
+  function cancelGesture() {
+    if (!active) return;
+    finishGesture();
+    // Esc and a cancelled touch put everything back exactly as it was.
     repaint(['timeline']);
   }
 
+  // ----------------------------------------------------------------- wiring
+
+  root.addEventListener('pointerdown', onCardPointerDown);
+  root.addEventListener('pointermove', onCardPointerMove);
+  root.addEventListener('pointerup', onCardPointerUp);
+  root.addEventListener('pointercancel', clearCandidate);
+  // A scroll anywhere means this was never a press.
+  window.addEventListener('scroll', clearCandidate, { passive: true });
+
   return {
-    /** Attached after every timeline repaint; the handles are recreated each time. */
+    /** Re-attached after every timeline repaint; handles are recreated each time. */
     bind() {
-      root.querySelectorAll('[data-role="reorder"]').forEach(handle => {
-        handle.addEventListener('pointerdown', event => startDrag(event, handle.dataset.id));
-      });
-      root.querySelectorAll('[data-role="resize"]').forEach(handle => {
-        handle.addEventListener('pointerdown', event => startResize(event, handle.dataset.id));
-      });
+      for (const handle of root.querySelectorAll('[data-role="resize"]')) {
+        handle.addEventListener('pointerdown', event => startResize(event, handle.dataset.id, 'bottom'));
+      }
+      for (const handle of root.querySelectorAll('[data-role="resize-top"]')) {
+        handle.addEventListener('pointerdown', event => startResize(event, handle.dataset.id, 'top'));
+      }
+      // A mouse on the grip drags at once; a finger on the handle holds first.
+      for (const grip of root.querySelectorAll('.card-grip[data-role="reorder"]')) {
+        grip.addEventListener('pointerdown', event => startReorder(event, grip.dataset.id, { hold: event.pointerType !== 'mouse' }));
+      }
+      for (const handle of root.querySelectorAll('.card-reorder[data-role="reorder"]')) {
+        handle.addEventListener('pointerdown', event => startReorder(event, handle.dataset.id, { hold: event.pointerType !== 'mouse' }));
+      }
     },
-    get active() { return Boolean(drag || resize); },
-    cancel() {
-      if (drag) cancelDrag();
-      if (resize) cancelResize();
-    }
+    get active() { return Boolean(active); },
+    /** True while a long press has just fired, so the click it causes is ignored. */
+    get suppressingClick() { return Date.now() < suppressClickUntil; },
+    cancel: cancelGesture
   };
 }

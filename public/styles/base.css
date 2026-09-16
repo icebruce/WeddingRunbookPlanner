@@ -185,3 +185,88 @@ body.is-reordering { user-select: none; cursor: grabbing; }
 @media (prefers-reduced-motion: reduce) {
   .is-highlighted { animation: none; box-shadow: 0 0 0 3px var(--sel); }
 }
+
+/*
+ * The selection toolbar replaces the floating + while a card is selected. Its
+ * second line repeats whatever that card had to hide, so selecting a short card
+ * is how you read the rest of it.
+ */
+.toolbar {
+  position: fixed;
+  z-index: 40;
+  left: 12px;
+  right: 12px;
+  bottom: calc(18px + var(--safe-bottom));
+  padding: 10px 12px 12px;
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  box-shadow: var(--shadow-float);
+}
+.toolbar-context { padding: 0 6px 8px; font-size: 13px; color: var(--ink-2); }
+.toolbar-context strong { font-weight: 650; }
+.toolbar-hidden {
+  display: block;
+  margin-top: 2px;
+  color: var(--soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.toolbar-buttons { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; }
+.toolbar-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 54px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+}
+.toolbar-button .icon { width: 22px; height: 22px; }
+.toolbar-button--danger { color: var(--bad); }
+
+/* While a card is selected the + is not offered: the toolbar has taken its place. */
+.toolbar ~ .mobile-add { display: none; }
+
+/* Where the card will land, and when. */
+.drop-slot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: flex-start;
+  padding: 6px 10px;
+  border: 1.5px solid var(--sel);
+  border-radius: var(--radius);
+  background: var(--sel-tint);
+  color: var(--sel);
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* Neighbours settle into place after the drop, never during it. */
+.card.is-settling { transition: transform 180ms ease-out; }
+.card.is-pressed { transform: scale(.99); transition: transform 100ms ease-out; }
+
+/* Nothing selects text or shows a callout while a gesture is running. */
+body.is-reordering, body.is-resizing { user-select: none; -webkit-user-select: none; }
+body.is-resizing { cursor: ns-resize; }
+
+@media (min-width: 721px) {
+  .toolbar { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card.is-settling, .card.is-pressed { transition: none; }
+}

@@ -12,7 +12,7 @@
 import './actions.js';
 import { api } from './api.js';
 import { STAGES, deviceId } from './config.js';
-import { escapeHtml, focusByKey, paint, uid } from './dom.js';
+import { cssEscape, escapeHtml, focusByKey, paint, uid } from './dom.js';
 import { createGestures } from './gestures.js';
 import { icon } from './icons.js';
 import { SAVE_STATES, createSavePipeline } from './save.js';
@@ -22,7 +22,7 @@ import { renderConflict, renderHeader } from './render/header.js';
 import { peopleChips, renderSheet } from './render/sheets.js';
 import { renderStrip } from './render/strip.js';
 import { renderHeading, renderSummary, renderTimeline } from './render/timeline.js';
-import { fitCards, watchFit } from './render/fit.js';
+import { fitCards, hiddenDetails, watchFit } from './render/fit.js';
 import { createToaster } from './render/toast.js';
 import { renderToolbar } from './render/toolbar.js';
 import { checkPlan, normalizeDuration, roundTimeUp, validateActivity } from './validate.js';
@@ -67,7 +67,13 @@ const REGIONS = {
   heading: ({ plan }) => renderHeading({ plan }),
   summary: ({ plan, ui }) => renderSummary({ plan, ui }),
   timeline: ({ plan, ui }) => renderTimeline({ plan, ui }),
-  toolbar: () => renderToolbar()
+  // The toolbar's second line repeats what the selected card had to hide, so
+  // it is drawn after the cards have been measured.
+  toolbar: ({ plan, ui }) => renderToolbar({
+    plan,
+    ui,
+    hiddenDetails: ui.selectedId ? hiddenDetails(app.querySelector(`.card[data-activity-id="${cssEscape(ui.selectedId)}"]`)) : ''
+  })
 };
 
 let currentScreen = null;
@@ -151,8 +157,11 @@ function paintRegions(names) {
   if (names.includes('timeline')) {
     gestures.bind();
     // What a card can show depends on its rendered size, so it is measured
-    // after the paint rather than guessed from the duration.
-    fitCards(app);
+    // after the paint rather than guessed from the duration. The toolbar then
+    // repeats whatever the selected card had to drop.
+    fitCards(app, () => {
+      if (store.ui.selectedId) paintRegions(['toolbar']);
+    });
   }
 }
 
@@ -201,7 +210,10 @@ const gestures = createGestures({
   root: app,
   store,
   commit: (action, payload) => commit(action, payload),
-  repaint
+  repaint,
+  // A long press is the phone's way into the editor; double-click is the
+  // pointer equivalent.
+  onLongPress: id => openEditor(id)
 });
 
 // ------------------------------------------------------------------ changes
@@ -510,7 +522,11 @@ function addActivity() {
 
 const ACTION_HANDLERS = {
   select(_, element) {
-    store.setUi({ selectedId: element.dataset.id, openMenu: null }, { regions: ['timeline'] });
+    store.setUi({ selectedId: element.dataset.id, openMenu: null }, { regions: ['timeline', 'toolbar'] });
+  },
+  duplicate(_, element) {
+    const result = commit('activity.duplicate', { id: element.dataset.id, newId: uid() });
+    if (result) store.setUi({ openMenu: null }, { regions: ['timeline', 'toolbar'] });
   },
   edit(_, element) {
     openEditor(element.dataset.id);
@@ -519,7 +535,7 @@ const ACTION_HANDLERS = {
   delete(_, element) {
     const id = element.dataset.id;
     commit('activity.remove', { id });
-    store.setUi({ selectedId: null, openMenu: null }, { regions: ['timeline'] });
+    store.setUi({ selectedId: null, openMenu: null }, { regions: ['timeline', 'toolbar'] });
   },
   lock(_, element) {
     const id = element.dataset.id;
@@ -624,6 +640,13 @@ async function handleLogin(event, form) {
 // --------------------------------------------------------------- listeners
 
 document.addEventListener('click', event => {
+  // The click a long press leaves behind must not also select or open
+  // something.
+  if (gestures.suppressingClick) {
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
   const control = event.target.closest('[data-action]');
   if (control) {
     // `closest` finds the innermost control, so a button inside a card wins
@@ -641,8 +664,8 @@ document.addEventListener('click', event => {
     store.setUi({ openMenu: null });
     return;
   }
-  if (store.ui.selectedId && !event.target.closest('.card, dialog, .topbar')) {
-    store.setUi({ selectedId: null }, { regions: ['timeline'] });
+  if (store.ui.selectedId && !event.target.closest('.card, dialog, .topbar, .toolbar')) {
+    store.setUi({ selectedId: null }, { regions: ['timeline', 'toolbar'] });
   }
 });
 
@@ -665,7 +688,7 @@ document.addEventListener('keydown', event => {
       return;
     }
     if (store.ui.selectedId && !sheetRoot.querySelector('dialog')) {
-      store.setUi({ selectedId: null }, { regions: ['timeline'] });
+      store.setUi({ selectedId: null }, { regions: ['timeline', 'toolbar'] });
     }
     return;
   }
@@ -673,14 +696,34 @@ document.addEventListener('keydown', event => {
   const card = event.target.closest?.('.card');
   if (card && (event.key === 'Enter' || event.key === ' ') && event.target === card) {
     event.preventDefault();
-    store.setUi({ selectedId: card.dataset.id, openMenu: null }, { regions: ['timeline'] });
+    // Enter on a card that is already selected opens it, as the spec says.
+    if (event.key === 'Enter' && store.ui.selectedId === card.dataset.id) openEditor(card.dataset.id);
+    else store.setUi({ selectedId: card.dataset.id, openMenu: null }, { regions: ['timeline', 'toolbar'] });
   }
 
+  // Every gesture has a keyboard alternative: Alt and the arrows move a card,
+  // and the arrows on a focused handle move that edge five minutes.
   if (card && event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
     event.preventDefault();
     const index = Number(card.dataset.index);
-    commit('activity.move', { id: card.dataset.id, toIndex: index + (event.key === 'ArrowUp' ? -1 : 1) }, { regions: ['timeline'] });
+    commit('activity.move', { id: card.dataset.id, toIndex: index + (event.key === 'ArrowUp' ? -1 : 1) }, { regions: ['timeline', 'toolbar'] });
     focusByKey(app, `card:${card.dataset.id}`);
+    return;
+  }
+
+  const handle = event.target.closest?.('[data-role="resize"], [data-role="resize-top"]');
+  if (handle && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+    event.preventDefault();
+    // Down moves the edge later, up moves it earlier — the same direction the
+    // edge itself moves on screen (F30).
+    const delta = event.key === 'ArrowDown' ? 5 : -5;
+    const item = buildSchedule(store.plan).items.find(entry => entry.id === handle.dataset.id);
+    if (!item) return;
+    const top = handle.dataset.role === 'resize-top';
+    commit(top ? 'activity.resizeTop' : 'activity.resizeBottom',
+      top ? { id: item.id, newStart: item.start + delta } : { id: item.id, newEnd: item.end + delta },
+      { regions: ['timeline', 'toolbar'] });
+    focusByKey(app, `${top ? 'resize-top' : 'resize'}:${handle.dataset.id}`);
   }
 });
 

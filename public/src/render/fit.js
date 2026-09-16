@@ -104,12 +104,15 @@ export function hiddenDetails(card) {
 let queued = false;
 
 /** Runs the pass once per frame, however many times it is asked for. */
-export function fitCards(root) {
+export function fitCards(root, done) {
   if (queued) return;
   queued = true;
   requestAnimationFrame(() => {
     queued = false;
     for (const card of root.querySelectorAll('.card')) fitCard(card);
+    // The toolbar repeats what the selected card dropped, so it can only be
+    // drawn once the measuring is finished.
+    done?.();
   });
 }
 

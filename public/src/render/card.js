@@ -135,7 +135,7 @@ export function renderCard(card, { ui, filter = null }) {
     tabindex="0" data-action="select" data-id="${id}" data-focus-key="card:${id}"
     aria-label="${escapeHtml(accessibleName(item, stage))}">
     <span class="card-rule" aria-hidden="true"></span>
-    <span class="card-grip" data-role="reorder" data-id="${id}" aria-hidden="true">${icon('grip')}</span>
+    ${item.isFixed ? '' : `<span class="card-grip" data-role="reorder" data-id="${id}" aria-hidden="true">${icon('grip')}</span>`}
     <div class="card-body">${body}</div>
     <span class="card-dots" aria-hidden="true"><i></i><i></i><i></i></span>
     <div class="card-controls">
@@ -146,8 +146,11 @@ export function renderCard(card, { ui, filter = null }) {
         data-action="menu" data-menu="card-menu:${id}" data-focus-key="card-menu:${id}"
         aria-label="More options for ${title}" aria-haspopup="menu" aria-expanded="${menuOpen}">${icon('more')}</button>
     </div>
-    ${selected && !item.isFixed ? `<span class="handle handle--top" data-role="resize-top" data-id="${id}" aria-hidden="true"></span>` : ''}
-    ${selected ? `<span class="handle handle--bottom" data-role="resize" data-id="${id}" aria-hidden="true"></span>
-      <span class="card-reorder" data-role="reorder" data-id="${id}" aria-hidden="true">${icon('reorder')}</span>` : ''}
+    <!-- Handles exist only on the selected card, and the top one only where
+         there is a start to move: a fixed activity has none. They are real
+         buttons so the arrow keys can move an edge without a pointer. -->
+    ${selected && !item.isFixed ? `<button type="button" class="handle handle--top" data-role="resize-top" data-id="${id}" data-focus-key="resize-top:${id}" aria-label="Move the start of ${title}"></button>` : ''}
+    ${selected ? `<button type="button" class="handle handle--bottom" data-role="resize" data-id="${id}" data-focus-key="resize:${id}" aria-label="Move the end of ${title}"></button>
+      <button type="button" class="card-reorder" data-role="reorder" data-id="${id}" data-focus-key="reorder:${id}" aria-label="Move ${title}">${icon('reorder')}</button>` : ''}
   </article>`;
 }
