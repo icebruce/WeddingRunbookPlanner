@@ -153,6 +153,25 @@ export function laneStyle(lane, totalLanes) {
 }
 
 /**
+ * The same slice, written straight onto an element's live style — for a
+ * gesture's preview, which restyles a card every frame and cannot keep
+ * appending to `cssText` without the attribute growing without bound. A card
+ * that has left an overlap has its lane properties cleared, not just left
+ * unset, so it falls back to the full-width rule in the stylesheet.
+ */
+export function applyLaneStyle(el, lane, totalLanes) {
+  if (totalLanes <= 1) {
+    el.style.left = '';
+    el.style.width = '';
+    el.style.right = '';
+    return;
+  }
+  el.style.width = `calc(${100 / totalLanes}% - ${LANE_GAP_PX * (totalLanes - 1) / totalLanes}px)`;
+  el.style.left = `calc((100% + ${LANE_GAP_PX}px) / ${totalLanes} * ${lane})`;
+  el.style.right = 'auto';
+}
+
+/**
  * The exact minutes an activity overlaps with any other — not the card's
  * whole height, just the part that truly collides — expressed as a top/height
  * relative to the card's own top.

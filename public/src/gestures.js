@@ -17,7 +17,7 @@
  * write to the DOM happens in one `requestAnimationFrame`, so an edge follows
  * the finger without the layout being rebuilt per event (F7).
  */
-import { PX_PER_MIN, buildLayout, laneStyle } from './layout.js';
+import { PX_PER_MIN, applyLaneStyle, buildLayout } from './layout.js';
 import { buildSchedule, formatDuration, formatTime } from './schedule.js';
 import { resizeBottom, resizeTop, moveTo, moveGroup } from './operations.js';
 import { cssEscape } from './dom.js';
@@ -406,7 +406,7 @@ export function createGestures({ root, store, commit, repaint, onLongPress }) {
 
       card.style.top = `${entry.top}px`;
       card.style.height = `${entry.height}px`;
-      card.style.cssText += laneStyle(entry.lane, entry.totalLanes);
+      applyLaneStyle(card, entry.lane, entry.totalLanes);
 
       const time = card.querySelector('.card-time span');
       const duration = card.querySelector('.card-time strong');

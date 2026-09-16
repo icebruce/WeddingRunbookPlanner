@@ -27,7 +27,7 @@ const round5 = minutes => Math.round(minutes / 5) * 5;
 /** The bottom edge follows the pointer; the start stays where it is. */
 export function resizeBottom(plan, id, newEnd) {
   const activity = find(plan, id);
-  if (!activity) return null;
+  if (!activity || activity.locked) return null;
 
   const duration = normalizeDuration(round5(newEnd) - activity.start);
   if (duration === activity.duration) return null;

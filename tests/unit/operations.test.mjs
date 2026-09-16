@@ -85,6 +85,11 @@ test('the top edge cannot pass the end, and a locked activity has no handle to m
   assert.equal(resizeTop(locked, 'b', T(11, 30)), null);
 });
 
+test('a locked activity has no bottom handle to drag either', () => {
+  const locked = plan([activity('a', T(10), 30, { locked: true })]);
+  assert.equal(resizeBottom(locked, 'a', T(11)), null);
+});
+
 test('moving sets the start directly, anywhere on the timeline', () => {
   const before = plan([activity('a', T(10), 30), activity('b', T(11), 60)]);
   const { plan: after } = moveTo(before, 'b', T(9));
