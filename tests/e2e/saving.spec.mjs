@@ -34,7 +34,7 @@ test('F1: editing offline makes a bounded number of requests and one message', a
   await page.waitForTimeout(10_000);
 
   expect(seen.count, `saw ${seen.count} save requests in 10 s`).toBeLessThanOrEqual(3);
-  expect(await toasts.count(), 'one message per failure episode, not one per attempt').toBe(1);
+  expect(await toasts.errorCount(), 'one message per failure episode, not one per attempt').toBe(1);
   // The edit is still on screen; nothing was rolled back.
   await expect(page.locator('.card').first()).toContainText('Edited while offline');
 });
@@ -62,7 +62,7 @@ test('F1: a server error shows Not saved and backs off instead of flooding', asy
 
   await page.waitForTimeout(8_000);
   expect(seen.count, `saw ${seen.count} save attempts in 8 s`).toBeLessThanOrEqual(3);
-  expect(await toasts.count()).toBe(1);
+  expect(await toasts.errorCount()).toBe(1);
 });
 
 test('Not saved is tappable and retries', async ({ page, server }) => {
@@ -107,7 +107,7 @@ test('F2: a rejected save does not block later valid edits', async ({ page, serv
   const toasts = await trackToasts(page);
   await renameFirstActivity(page, 'First attempt');
   await expect(saveState(page)).toHaveText('Not saved');
-  expect((await toasts.all()).join(' ')).toContain("Name can't be empty.");
+  expect((await toasts.errors()).join(' ')).toContain("Name can't be empty.");
 
   await page.waitForTimeout(6_000);
   expect(seen.count, 'invalid data is not retried on a timer').toBe(1);

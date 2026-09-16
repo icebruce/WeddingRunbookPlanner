@@ -16,19 +16,20 @@ import { cssEscape, escapeHtml, focusByKey, paint, uid } from './dom.js';
 import { createGestures } from './gestures.js';
 import { icon } from './icons.js';
 import { SAVE_STATES, createSavePipeline } from './save.js';
-import { buildSchedule } from './schedule.js';
 import { createStore } from './state.js';
 import { renderConflict, renderHeader } from './render/header.js';
-import { peopleChips, renderSheet } from './render/sheets.js';
+import { discardSheet, peopleChips, renderSheet } from './render/sheets.js';
+import { buildSchedule, formatTime } from './schedule.js';
 import { renderStrip } from './render/strip.js';
 import { renderHeading, renderSummary, renderTimeline } from './render/timeline.js';
 import { fitCards, hiddenDetails, watchFit } from './render/fit.js';
-import { createToaster } from './render/toast.js';
+import { createToaster, shiftMessage } from './render/toast.js';
 import { renderToolbar } from './render/toolbar.js';
 import { checkPlan, normalizeDuration, roundTimeUp, validateActivity } from './validate.js';
 
 const app = document.querySelector('#app');
 const sheetRoot = document.querySelector('#sheet-root');
+const alertRoot = document.querySelector('#alert-root');
 const toast = createToaster(document.querySelector('#toast-region'));
 
 const store = createStore();
@@ -40,7 +41,7 @@ const saver = createSavePipeline({
   deviceId: DEVICE_ID,
   onStateChange: next => store.setUi({ saveState: next }, { regions: ['header'] }),
   onSaved: ({ revision, updatedAt }) => store.setRevision(revision, updatedAt),
-  onError: message => toast(message, 'error'),
+  onError: message => toast(message, { tone: 'error' }),
   // The local side of a conflict is read when the user chooses, not captured
   // here, so "Keep my changes" means the plan as it is now (F12).
   onConflict: latest => store.setUi({ conflict: { latest } }, { regions: ['conflict'] }),
@@ -81,6 +82,8 @@ let currentDialogKey = null;
 // Focus is returned to whatever opened the sheet when it closes, so a dialog
 // never leaves the next Tab starting from the top of the page.
 let dialogOpener = null;
+/** The editor's contents when it opened, so Cancel knows whether to ask. */
+let editorBaseline = null;
 
 function screenOf(ui) {
   if (ui.loadError && !store.plan) return 'error';
@@ -177,6 +180,8 @@ function dialogKey(dialog) {
   if (!dialog) return null;
   if (dialog.type === 'activity') return `activity:${dialog.mode}:${dialog.activity.id}`;
   if (dialog.type === 'versions') return `versions:${store.ui.versions.length}`;
+  if (dialog.type === 'open-time') return `open-time:${dialog.openTime.beforeId}:${dialog.openTime.start}`;
+  if (dialog.type === 'stage') return `stage:${dialog.item.id}`;
   return dialog.type;
 }
 
@@ -202,8 +207,47 @@ function syncSheet() {
 }
 
 function closeSheet() {
+  editorBaseline = null;
   store.setUi({ dialog: null }, { regions: [] });
   syncSheet();
+}
+
+/**
+ * Closing the editor. Swiping a sheet down and pressing Cancel are the same
+ * thing, so both ask before throwing away typing — and neither asks when
+ * nothing was typed.
+ *
+ * The question is asked *on top of* the editor, not instead of it: tearing the
+ * sheet down to ask "discard changes?" would discard them either way, and
+ * "Keep editing" would come back to an empty form.
+ */
+function requestCloseEditor() {
+  const form = sheetRoot.querySelector('#activity-form');
+  if (!form || editorBaseline === null || formSignature(form) === editorBaseline) {
+    closeSheet();
+    return;
+  }
+  showDiscardAlert();
+}
+
+function showDiscardAlert() {
+  alertRoot.innerHTML = discardSheet();
+  const alert = alertRoot.querySelector('dialog');
+
+  const dismiss = () => {
+    alert.close();
+    alertRoot.innerHTML = '';
+  };
+  alert.addEventListener('cancel', event => {
+    event.preventDefault();
+    dismiss();
+  });
+  alert.querySelector('[data-action="discard-confirm"]').addEventListener('click', () => {
+    dismiss();
+    closeSheet();
+  });
+  alert.querySelector('.sheet-close').addEventListener('click', dismiss);
+  alert.showModal();
 }
 
 const gestures = createGestures({
@@ -218,11 +262,36 @@ const gestures = createGestures({
 
 // ------------------------------------------------------------------ changes
 
-/** Apply an action and let the save pipeline know something changed. */
-function commit(action, payload, options) {
+/**
+ * Apply an action, save it, and offer it back.
+ *
+ * Every change that a person made deliberately can be taken back for six
+ * seconds, which is why deleting does not ask first (D7): the answer to "are
+ * you sure?" is being able to say no afterwards. A change that also moved the
+ * rest of the day says so in the same toast.
+ */
+function commit(action, payload, options = {}) {
   const result = store.dispatch(action, payload, options);
-  if (result) saver.markDirty();
+  if (!result) return null;
+  saver.markDirty();
+
+  if (options.silent) return result;
+  const shift = shiftMessage(result.shifted);
+  toast(shift ? `${result.label} · ${shift}` : result.label, {
+    action: { label: 'Undo', run: undo }
+  });
   return result;
+}
+
+function undo() {
+  const result = store.undo({ regions: ['all'] });
+  if (!result) return;
+  saver.markDirty();
+  // Selecting an activity that the undo removed would leave the toolbar
+  // describing something that is no longer there.
+  if (store.ui.selectedId && !store.plan.activities.some(a => a.id === store.ui.selectedId)) {
+    store.setUi({ selectedId: null }, { regions: ['timeline', 'toolbar'] });
+  }
 }
 
 async function flushSave() {
@@ -343,33 +412,62 @@ function bindPeopleEditor(dialog) {
 // ------------------------------------------------------------ sheet wiring
 
 function bindSheet(dialog) {
+  const close = dialog.id === 'activity-dialog' ? requestCloseEditor : closeSheet;
   dialog.addEventListener('cancel', event => {
     event.preventDefault();
-    closeSheet();
+    close();
   });
-  dialog.querySelectorAll('.sheet-close').forEach(button => button.addEventListener('click', closeSheet));
+  dialog.querySelectorAll('.sheet-close').forEach(button => button.addEventListener('click', close));
   dialog.addEventListener('click', event => {
-    if (event.target === dialog) closeSheet();
+    if (event.target === dialog) close();
   });
 
   if (dialog.id === 'activity-dialog') {
-    dialog.querySelector('#activity-form').addEventListener('submit', submitActivity);
+    const form = dialog.querySelector('#activity-form');
+    form.addEventListener('submit', submitActivity);
+
+    // Deleting from inside the editor is the same delete as anywhere else: no
+    // confirmation, and six seconds to undo.
     dialog.querySelector('#delete-activity')?.addEventListener('click', () => {
       const id = store.ui.dialog.activity.id;
+      editorBaseline = null;
       closeSheet();
       commit('activity.remove', { id });
-      store.setUi({ selectedId: null }, { regions: ['timeline'] });
+      store.setUi({ selectedId: null }, { regions: ['timeline', 'toolbar'] });
     });
-    dialog.querySelector('#lock-toggle')?.addEventListener('change', event => {
-      dialog.querySelector('#fixed-time-field')?.classList.toggle('is-hidden', !event.target.checked);
-    });
-    dialog.querySelectorAll('[data-duration-step]').forEach(button => button.addEventListener('click', () => {
-      const input = dialog.querySelector('input[name="duration"]');
-      input.value = normalizeDuration(Number(input.value) + Number(button.dataset.durationStep));
-    }));
+
+    // Flexible and Fixed are one choice, so picking one shows what that means.
+    for (const radio of dialog.querySelectorAll('input[name="timing"]')) {
+      radio.addEventListener('change', () => {
+        const fixed = dialog.querySelector('input[name="timing"][value="fixed"]').checked;
+        dialog.querySelector('.timing-fixed')?.classList.toggle('is-hidden', !fixed);
+        dialog.querySelector('.timing-flexible')?.classList.toggle('is-hidden', fixed);
+        for (const label of dialog.querySelectorAll('.segmented label')) {
+          label.classList.toggle('is-on', label.querySelector('input').checked);
+        }
+        updateEnds(dialog);
+      });
+    }
+
+    for (const button of dialog.querySelectorAll('[data-duration-step]')) {
+      button.addEventListener('click', () => {
+        const input = dialog.querySelector('input[name="duration"]');
+        input.value = normalizeDuration(Number(input.value) + Number(button.dataset.durationStep));
+        updateEnds(dialog);
+      });
+    }
+
     const duration = dialog.querySelector('input[name="duration"]');
-    duration?.addEventListener('blur', () => { duration.value = normalizeDuration(Number(duration.value)); });
+    duration?.addEventListener('blur', () => {
+      duration.value = normalizeDuration(Number(duration.value));
+      updateEnds(dialog);
+    });
+    duration?.addEventListener('input', () => updateEnds(dialog));
+    dialog.querySelector('input[name="lockedStart"]')?.addEventListener('input', () => updateEnds(dialog));
+
     bindPeopleEditor(dialog);
+    // What the form looked like on open, so Cancel knows whether to ask.
+    editorBaseline = formSignature(form);
     return;
   }
 
@@ -382,6 +480,39 @@ function bindSheet(dialog) {
   if (dialog.id === 'settings-dialog') {
     dialog.querySelector('#settings-form').addEventListener('submit', submitSettings);
   }
+
+}
+
+/** "Ends" is worked out from the start and the duration, and shown live. */
+function updateEnds(dialog) {
+  const node = dialog.querySelector('[data-ends]');
+  if (!node) return;
+
+  const fixed = dialog.querySelector('input[name="timing"][value="fixed"]')?.checked;
+  const duration = normalizeDuration(Number(dialog.querySelector('input[name="duration"]').value));
+  const startText = fixed
+    ? roundTimeUp(dialog.querySelector('input[name="lockedStart"]').value)
+    : null;
+
+  let start;
+  if (startText) {
+    start = Number(startText.slice(0, 2)) * 60 + Number(startText.slice(3));
+  } else {
+    const scheduled = buildSchedule(store.plan).items.find(item => item.id === store.ui.dialog?.activity?.id);
+    start = scheduled ? scheduled.start : null;
+  }
+
+  node.textContent = start === null ? '—' : formatTime(start + duration);
+  const flexibleStart = dialog.querySelector('.timing-flexible .group-value');
+  if (flexibleStart && start !== null && !fixed) flexibleStart.textContent = formatTime(start);
+}
+
+/** A stable description of the form, for telling "changed" from "untouched". */
+function formSignature(form) {
+  const data = [...new FormData(form).entries()].map(([key, value]) => `${key}=${value}`);
+  const people = form.querySelector('.people-editor')?.dataset.people ?? '[]';
+  const pending = form.querySelector('.people-add-input')?.value ?? '';
+  return JSON.stringify([data, people, pending]);
 }
 
 function submitActivity(event) {
@@ -390,7 +521,7 @@ function submitActivity(event) {
   clearFieldErrors(form);
 
   const data = new FormData(form);
-  const locked = data.get('locked') === 'on';
+  const locked = data.get('timing') === 'fixed';
   const candidate = {
     id: String(data.get('id')),
     title: String(data.get('title')).trim(),
@@ -412,9 +543,15 @@ function submitActivity(event) {
   }
 
   const creating = store.ui.dialog.mode === 'create';
+  editorBaseline = null;
   closeSheet();
-  if (creating) commit('activity.add', { activity, afterId: store.ui.selectedId });
-  else commit('activity.update', { activity });
+
+  if (creating) {
+    commit('activity.add', { activity, afterId: store.ui.selectedId });
+    store.setUi({ selectedId: activity.id }, { regions: ['timeline', 'toolbar'] });
+  } else {
+    commit('activity.update', { activity });
+  }
 }
 
 function submitSettings(event) {
@@ -505,9 +642,8 @@ function openEditor(id) {
   store.setUi({ dialog: { type: 'activity', mode: 'edit', activity: structuredClone(activity) }, openMenu: null });
 }
 
-function addActivity() {
-  rememberOpener();
-  const activity = {
+function blankActivity() {
+  return {
     id: uid(),
     title: '',
     duration: 30,
@@ -517,7 +653,11 @@ function addActivity() {
     notes: '',
     lockedStart: null
   };
-  store.setUi({ dialog: { type: 'activity', mode: 'create', activity }, openMenu: null });
+}
+
+function addActivity() {
+  rememberOpener();
+  store.setUi({ dialog: { type: 'activity', mode: 'create', activity: blankActivity() }, openMenu: null });
 }
 
 const ACTION_HANDLERS = {
@@ -540,19 +680,40 @@ const ACTION_HANDLERS = {
   lock(_, element) {
     const id = element.dataset.id;
     const activity = store.plan.activities.find(item => item.id === id);
-    const action = activity?.lockedStart ? 'activity.unfix' : 'activity.fix';
+    const unfixing = Boolean(activity?.lockedStart);
     // The menu closes before the plan changes: closing it afterwards would be
     // undone by the repaint the change triggers.
     store.setUi({ selectedId: id, openMenu: null }, { regions: [] });
-    commit(action, { id, scheduleBefore: buildSchedule(store.plan) }, { regions: ['timeline'] });
+
+    const result = commit(unfixing ? 'activity.unfix' : 'activity.fix', { id },
+      { regions: ['timeline', 'toolbar'], silent: unfixing });
+
+    // Unfixing moves the activity, so the toast says where it went as well as
+    // what it cost the rest of the day.
+    if (result && unfixing) {
+      const moved = buildSchedule(store.plan).items.find(entry => entry.id === id);
+      const shift = shiftMessage(result.shifted);
+      const where = moved ? `${activity.title} now starts ${moved.startLabel}` : result.label;
+      toast(shift ? `${where} · ${shift}` : where, { action: { label: 'Undo', run: undo } });
+    }
   },
   'set-stage'(_, element) {
     const id = element.dataset.id;
+    if (store.ui.dialog?.type === 'stage') closeSheet();
     store.setUi({ selectedId: id, openMenu: null }, { regions: [] });
-    commit('activity.stage', { id, stage: element.dataset.stage }, { regions: ['timeline'] });
+    commit('activity.stage', { id, stage: element.dataset.stage }, { regions: ['timeline', 'toolbar'] });
   },
   menu(_, element) {
     const name = element.dataset.menu;
+    // The toolbar's Stage button opens a list sheet; the stage tag on a card
+    // opens a menu beside it.
+    if (element.closest('.toolbar') && name.startsWith('stage:')) {
+      const item = store.plan.activities.find(entry => entry.id === name.slice(6));
+      if (!item) return;
+      rememberOpener('toolbar-stage');
+      store.setUi({ openMenu: null, dialog: { type: 'stage', item } });
+      return;
+    }
     store.setUi({ openMenu: store.ui.openMenu === name ? null : name });
   },
   'menu-action'(_, element) {
@@ -566,6 +727,41 @@ const ACTION_HANDLERS = {
   },
   conflict(_, element) {
     resolveConflict(element.dataset.choice);
+  },
+  'open-time'(_, element) {
+    rememberOpener(`open-time:${element.dataset.before}`);
+    store.setUi({
+      openMenu: null,
+      dialog: {
+        type: 'open-time',
+        openTime: {
+          beforeId: element.dataset.before,
+          start: Number(element.dataset.start),
+          end: Number(element.dataset.end)
+        }
+      }
+    });
+  },
+  'open-time-choice'(_, element) {
+    const { openTime } = store.ui.dialog;
+    const choice = element.dataset.choice;
+    closeSheet();
+
+    if (choice === 'buffer') {
+      const result = commit('openTime.buffer', { openTime, newId: uid('buffer') });
+      if (result) store.setUi({ selectedId: null }, { regions: ['timeline', 'toolbar'] });
+      return;
+    }
+    if (choice === 'extend') return void commit('openTime.extend', { openTime });
+
+    // "Add activity here" creates the activity and opens it, so the name can
+    // be typed straight away.
+    const activity = blankActivity();
+    const result = commit('openTime.add', { openTime, activity });
+    if (result) {
+      store.setUi({ selectedId: activity.id }, { regions: [] });
+      openEditor(activity.id);
+    }
   },
   jump(_, element) {
     const target = element.dataset.target === 'conflict'
@@ -676,6 +872,14 @@ document.addEventListener('dblclick', event => {
 });
 
 document.addEventListener('keydown', event => {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z' && !event.shiftKey) {
+    // Inside a field, the browser's own undo is the one that is wanted.
+    if (event.target.closest?.('input, textarea, [contenteditable]')) return;
+    event.preventDefault();
+    undo();
+    return;
+  }
+
   if (event.key === 'Escape') {
     if (gestures.active) {
       gestures.cancel();

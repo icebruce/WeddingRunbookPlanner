@@ -121,10 +121,9 @@ test('F19: a fixed time off the 5-minute grid rounds up, with no browser message
 
   await openActivityEditor(page, firstCard(page));
   const dialog = page.locator('#activity-dialog');
-  // The checkbox is visually replaced by the switch, so the switch is what a
-  // person clicks.
-  await dialog.locator('.switch').click();
-  await expect(dialog.locator('#lock-toggle')).toBeChecked();
+  // Flexible and Fixed are one choice, not a switch with a field beside it.
+  await dialog.locator('.segmented label', { hasText: 'Fixed' }).click();
+  await expect(dialog.locator('.timing-fixed')).toBeVisible();
   await dialog.locator('input[name="lockedStart"]').fill('14:47');
 
   // The browser must not be the one objecting: no step attribute, no bubble.

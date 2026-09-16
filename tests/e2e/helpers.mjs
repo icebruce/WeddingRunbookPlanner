@@ -59,14 +59,23 @@ export async function trackToasts(page) {
     new MutationObserver(records => {
       for (const record of records) {
         for (const node of record.addedNodes) {
-          if (node.nodeType === 1) window.__toastLog.push(node.textContent || '');
+          if (node.nodeType !== 1) continue;
+          window.__toastLog.push({
+            text: node.textContent || '',
+            error: node.classList.contains('toast--error')
+          });
         }
       }
     }).observe(region, { childList: true });
   });
+
+  const read = () => page.evaluate(() => window.__toastLog.slice());
   return {
-    all: () => page.evaluate(() => window.__toastLog.slice()),
-    count: () => page.evaluate(() => window.__toastLog.length)
+    all: async () => (await read()).map(entry => entry.text),
+    count: async () => (await read()).length,
+    /** Only the failures. Ordinary changes also raise a toast, to offer Undo. */
+    errors: async () => (await read()).filter(entry => entry.error).map(entry => entry.text),
+    errorCount: async () => (await read()).filter(entry => entry.error).length
   };
 }
 

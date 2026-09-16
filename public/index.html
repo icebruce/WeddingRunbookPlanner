@@ -18,6 +18,9 @@
        change; only the toast region speaks. -->
   <div id="app" class="app-shell"></div>
   <div id="sheet-root"></div>
+  <!-- Alerts stack on top of an open sheet rather than replacing it, so
+       asking "discard changes?" cannot itself discard them. -->
+  <div id="alert-root"></div>
   <div id="toast-region" class="toast-region" role="status" aria-atomic="false"></div>
 </body>
 </html>
