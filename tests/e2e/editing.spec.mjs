@@ -207,7 +207,7 @@ test.describe('open time', () => {
     await server.seed({ plan: withGap() });
     await signInAndWaitForPlan(page);
 
-    await page.locator('.open-time').click();
+    await page.locator('.open-time-add').click();
     const sheet = page.locator('#open-time-dialog');
     await expect(sheet).toBeVisible();
     await expect(sheet.locator('.action-header')).toContainText('1 hr 15 min open before Ceremony');
@@ -223,7 +223,7 @@ test.describe('open time', () => {
     await server.seed({ plan: withGap() });
     await signInAndWaitForPlan(page);
 
-    await page.locator('.open-time').click();
+    await page.locator('.open-time-add').click();
     await page.locator('[data-choice="buffer"]').click();
     await saved(page);
 
@@ -238,7 +238,7 @@ test.describe('open time', () => {
     await server.seed({ plan: withGap() });
     await signInAndWaitForPlan(page);
 
-    await page.locator('.open-time').click();
+    await page.locator('.open-time-add').click();
     await expect(page.locator('[data-choice="extend"]')).toContainText('Extend Arrival & Buffer');
     await expect(page.locator('[data-choice="extend"]')).toContainText('Ends at 2:45 PM instead of 1:30 PM');
     await page.locator('[data-choice="extend"]').click();
@@ -252,7 +252,7 @@ test.describe('open time', () => {
     await server.seed({ plan: withGap() });
     await signInAndWaitForPlan(page);
 
-    await page.locator('.open-time').click();
+    await page.locator('.open-time-add').click();
     await page.locator('[data-choice="add"]').click();
 
     await expect(editor(page)).toBeVisible();
@@ -270,7 +270,7 @@ test.describe('open time', () => {
     await signInAndWaitForPlan(page);
     const before = await server.read();
 
-    await page.locator('.open-time').click();
+    await page.locator('.open-time-add').click();
     await page.locator('[data-choice="add"]').click();
     await expect(editor(page)).toBeVisible();
 
@@ -300,7 +300,7 @@ test.describe('open time', () => {
     await server.seed({ plan: withGap() });
     await signInAndWaitForPlan(page);
 
-    await page.locator('.open-time').click();
+    await page.locator('.open-time-add').click();
     await page.locator('[data-choice="add"]').click();
 
     // The gap's length is offered, and overtyping it is respected.
@@ -320,13 +320,51 @@ test.describe('open time', () => {
     await server.seed({ plan: withGap() });
     await signInAndWaitForPlan(page);
 
-    await page.locator('.open-time').click();
+    await page.locator('.open-time-add').click();
     await page.locator('[data-choice="buffer"]').click();
     await saved(page);
 
     await page.locator('.toast-action').click();
     await saved(page);
     expect((await server.read()).plan.activities.map(a => a.title)).toEqual(['Arrival & Buffer', 'Ceremony']);
+  });
+
+  test('tapping the body of a tall block selects it instead, revealing its handles', async ({ page, server }) => {
+    await server.seed({ plan: withGap() });
+    await signInAndWaitForPlan(page);
+
+    const gap = page.locator('.open-time');
+    await expect(gap.locator('.handle')).toHaveCount(2);
+    // The next activity (ceremony) is locked, so only the top handle — the
+    // previous, unlocked activity's own bottom edge — is offered.
+    await gap.locator('strong').click();
+    await expect(page.locator('#open-time-dialog')).toHaveCount(0);
+    await expect(gap).toHaveClass(/is-selected/);
+    await expect(gap.locator('.handle--top')).toBeVisible();
+    await expect(gap.locator('.handle--bottom')).toHaveCount(0);
+
+    // Tapping it again clears the selection.
+    await gap.locator('strong').click();
+    await expect(gap).not.toHaveClass(/is-selected/);
+  });
+
+  test('a thin block has no + button, so tapping it still opens the sheet directly', async ({ page, server }) => {
+    await server.seed({
+      plan: seedPlan({
+        activities: [
+          activity('arrive', T(14), 30, { title: 'Arrival' }),
+          activity('ceremony', T(14, 40), 60, { title: 'Ceremony' })
+        ]
+      })
+    });
+    await signInAndWaitForPlan(page);
+
+    const gap = page.locator('.open-time');
+    await expect(gap).toHaveClass(/open-time--thin/);
+    await expect(gap.locator('.open-time-add')).toHaveCount(0);
+
+    await gap.click();
+    await expect(page.locator('#open-time-dialog')).toBeVisible();
   });
 });
 

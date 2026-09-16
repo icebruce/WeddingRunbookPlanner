@@ -304,6 +304,74 @@ test.describe('resize', () => {
     await select(page, 'ceremony');
     await expect(card(page, 'ceremony').locator('.handle--top')).toHaveCount(0);
   });
+
+  test.describe('open-time handles resize a neighbour', () => {
+    const gapPlan = () => seedPlan({
+      activities: [
+        activity('arrive', T(13), 30, { title: 'Arrival & Buffer' }),
+        activity('ceremony', T(14), 60, { title: 'Ceremony' })
+      ]
+    });
+
+    test('dragging the top handle grows the previous activity, shrinking the gap', async ({ page, server, isMobile }) => {
+      test.skip(Boolean(isMobile), 'measured with a mouse');
+      await server.seed({ plan: gapPlan() });
+      await signInAndWaitForPlan(page);
+
+      const gap = page.locator('.open-time');
+      await gap.locator('strong').click();
+      await expect(gap).toHaveClass(/is-selected/);
+
+      const handle = await gap.locator('.handle--top').boundingBox();
+      await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2 + 10 * PX_PER_MIN, { steps: 8 });
+      await page.mouse.up();
+
+      await expect(page.locator('.save-indicator')).toHaveText('Saved');
+      const stored = (await server.read()).plan.activities;
+      expect(stored.find(a => a.id === 'arrive').duration).toBe(40);
+      expect(stored.find(a => a.id === 'ceremony').start).toBe(T(14), 'the next activity did not move');
+      await expect(page.locator('.open-time')).toContainText('20 min open');
+    });
+
+    test('dragging the bottom handle grows the next activity, shrinking the gap', async ({ page, server, isMobile }) => {
+      test.skip(Boolean(isMobile), 'measured with a mouse');
+      await server.seed({ plan: gapPlan() });
+      await signInAndWaitForPlan(page);
+
+      const gap = page.locator('.open-time');
+      await gap.locator('strong').click();
+
+      const handle = await gap.locator('.handle--bottom').boundingBox();
+      await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2 - 10 * PX_PER_MIN, { steps: 8 });
+      await page.mouse.up();
+
+      await expect(page.locator('.save-indicator')).toHaveText('Saved');
+      const stored = (await server.read()).plan.activities;
+      expect(stored.find(a => a.id === 'ceremony').start).toBe(T(13, 50));
+      expect(stored.find(a => a.id === 'ceremony').duration).toBe(70, 'the end stayed where it was');
+      expect(stored.find(a => a.id === 'arrive').duration).toBe(30, 'the previous activity did not move');
+    });
+
+    test('a locked neighbour has no handle on that side of the gap', async ({ page, server, isMobile }) => {
+      test.skip(Boolean(isMobile), 'measured with a mouse');
+      await server.seed({ plan: seedPlan({
+        activities: [
+          activity('arrive', T(13), 30, { title: 'Arrival & Buffer', locked: true }),
+          activity('ceremony', T(14), 60, { title: 'Ceremony' })
+        ]
+      }) });
+      await signInAndWaitForPlan(page);
+
+      const gap = page.locator('.open-time');
+      await gap.locator('strong').click();
+      await expect(gap.locator('.handle--top')).toHaveCount(0);
+      await expect(gap.locator('.handle--bottom')).toHaveCount(1);
+    });
+  });
 });
 
 test.describe('moving a card', () => {
