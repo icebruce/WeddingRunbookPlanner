@@ -62,9 +62,9 @@
 .tick--quarter::after { background: var(--grid-quarter); }
 .tick--five::after { background: var(--grid-five); }
 
-.tick--hour s { width: 14px; height: 1.5px; background: #8F8F88; }
-.tick--half s { width: 10px; background: #A9A9A2; }
-.tick--quarter s { width: 7px; background: #C0C0B9; }
+.tick--hour s { width: 14px; height: 1.5px; background: var(--tick-hour); }
+.tick--half s { width: 10px; background: var(--tick-half); }
+.tick--quarter s { width: 7px; background: var(--tick-quarter); }
 .tick--five s { width: 4px; background: var(--grid-hour); }
 
 .tick--hour b { font-size: 14px; font-weight: 700; color: var(--ink); }
@@ -74,7 +74,7 @@
 /* The live snap label while an edge is being dragged. */
 .tick--snap::after { background: var(--sel); height: 1.5px; }
 .tick--snap b {
-  color: #fff;
+  color: var(--bg);
   background: var(--sel);
   border-radius: 5px;
   padding: 0 5px;
@@ -145,7 +145,7 @@
   padding: 0 12px;
   border: 1.5px dashed var(--spine);
   border-radius: var(--radius);
-  background: rgba(255, 255, 255, .35);
+  background: color-mix(in srgb, var(--surface) 35%, transparent);
   color: var(--ink-2);
   text-align: center;
   overflow: hidden;
@@ -190,7 +190,7 @@
   font-size: 15px;
   font-variant-numeric: tabular-nums;
 }
-.summary-sep { color: #C4C5C9; }
+.summary-sep { color: var(--soft); }
 .summary-break { flex-basis: 100%; height: 0; }
 .summary-link {
   display: inline-flex;
@@ -199,12 +199,12 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--sel);
+  color: var(--sel-text);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
 }
-.summary-link--bad { color: var(--bad); }
+.summary-link--bad { color: var(--bad-text); }
 .summary-link .icon { width: 13px; height: 13px; }
 
 .planner-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; padding: 0 4px 18px; }
@@ -250,7 +250,7 @@
   padding: 0 8px;
   border-radius: 11px;
   background: var(--live);
-  color: #fff;
+  color: var(--bg);
   font-size: 12px;
   font-weight: 650;
   font-variant-numeric: tabular-nums;

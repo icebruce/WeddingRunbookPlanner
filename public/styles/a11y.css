@@ -1,0 +1,126 @@
+/*
+ * Type, targets, focus and contrast.
+ *
+ * Loaded last so it settles the things that are true everywhere, whatever
+ * component a control belongs to.
+ */
+
+/*
+ * F24 — readable sizes on a phone.
+ *
+ * The old build used 12.5, 9.5 and 8 px text with 34 px targets. Those are
+ * not small-but-workable; they are unreadable in a car on the way to a church.
+ * iOS text sizes: 17 for a title, 15 for detail, 13 for a label, and nothing
+ * below 12 px anywhere.
+ */
+body { font-size: 17px; line-height: 1.4; }
+
+/*
+ * Any text input below 16 px makes iOS Safari zoom the page when it is
+ * focused, and the zoom is never undone — one tap on a field and the plan is
+ * off the side of the screen for good.
+ */
+input, select, textarea { font-size: 17px; }
+@supports (-webkit-touch-callout: none) {
+  input, select, textarea { font-size: max(16px, 1rem); }
+}
+
+/*
+ * Touch targets. The visible glyph may be smaller — a 5 px handle bar is the
+ * right size to look at — but what takes the touch is never under 44 px.
+ */
+button, [role="button"], summary, .filter-chip, .stage-choice {
+  min-height: 44px;
+}
+/* Controls whose box is deliberately smaller keep a 44 px hit area instead. */
+.card-controls button,
+.delete-version,
+.filter-clear,
+.stepper button,
+.icon-button {
+  position: relative;
+}
+.card-controls button::after,
+.delete-version::after,
+.filter-clear::after,
+.stepper button::after,
+.icon-button::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
+}
+/* Tags and chips inside a card are not controls and keep their own height. */
+.tag, .stage-tag:not(.stage-tag--button), .card-dots, .now-tag, .mode-pill { min-height: 0; }
+.card-controls button, .stepper button, .icon-button, .delete-version, .filter-clear { min-height: 0; }
+
+/*
+ * F25 — focus is never removed, and never relies on colour alone.
+ * The ring is two pixels of selection blue, two pixels clear of whatever it
+ * surrounds, on everything that can be focused.
+ */
+:focus-visible {
+  outline: 2px solid var(--sel);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+/* A control drawn on the selection colour needs a ring that is not the
+   selection colour. */
+.filter-chip.is-on:focus-visible,
+.button--primary:focus-visible,
+.version-badge:focus-visible {
+  outline-color: var(--ink);
+}
+
+/*
+ * F25 — contrast.
+ *
+ * The unlocked lock was 1.76:1 against white, the drag dots 2.62:1 and the
+ * quarter-hour labels 2.87:1. An icon or a control outline needs 3:1 and text
+ * needs 4.5:1, so these move to tokens that meet it.
+ */
+.card-controls button { color: var(--faint); }
+.card-grip { color: var(--soft); }
+.tick--quarter b { color: var(--soft); }
+
+/* Reduced motion, everywhere and without exception. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Safe areas: a phone in landscape has a notch on one side. */
+.topbar, .live-strip, .pinned-bar {
+  padding-left: max(18px, env(safe-area-inset-left));
+  padding-right: max(12px, env(safe-area-inset-right));
+}
+.planner {
+  padding-left: max(18px, env(safe-area-inset-left));
+  padding-right: max(18px, env(safe-area-inset-right));
+}
+.toolbar {
+  left: max(12px, env(safe-area-inset-left));
+  right: max(12px, env(safe-area-inset-right));
+}
+
+/* Narrow phones: 320 px still has to work. */
+@media (max-width: 340px) {
+  .toolbar-button span { display: none; }
+  .toolbar-button { min-height: 48px; }
+}
+
+@media (min-width: 721px) {
+  body { font-size: 15px; }
+  input, select, textarea { font-size: 15px; }
+  .topbar, .live-strip, .pinned-bar, .planner {
+    padding-left: max(28px, env(safe-area-inset-left));
+    padding-right: max(28px, env(safe-area-inset-right));
+  }
+}

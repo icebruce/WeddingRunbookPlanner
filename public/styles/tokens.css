@@ -3,9 +3,9 @@
  * and never hard-code a value, so the dark pass is a matter of redefining them
  * rather than hunting through the other files.
  *
- * Dark values are defined here but not yet switchable: the switch, and the pass
- * over every screen that goes with it, belong to the visual polish stage. Light
- * is and stays the default — the app does not follow the system setting.
+ * Dark is chosen in settings and remembered on the device. Light is and stays
+ * the default: the app does not follow the system setting, because a phone that
+ * flips to dark at sunset must not repaint the plan in the middle of the day.
  */
 :root {
   color-scheme: light;
@@ -58,6 +58,26 @@
   --grid-quarter: #E6E6E1;
   --grid-five: #EEEEEA;
   --spine: #CFCFC8;
+  --tick-hour: #8F8F88;
+  --tick-half: #A9A9A2;
+  --tick-quarter: #C0C0B9;
+
+  /*
+   * Selection blue as *text* needs more contrast than selection blue as a
+   * ring or a fill: #0A6CFF on the page background is 4.25:1, just under what
+   * body text needs. This is the same blue, one step darker, and it is used
+   * wherever the blue has to be read rather than seen.
+   */
+  --sel-text: #0A5FE6;
+
+  /*
+   * Red and green have the same problem as blue. #D0342C on its own tint is
+   * 4.39:1 and #1E9E52 on the page is 3.17:1 — both fine as a ring, a dot or a
+   * progress bar, neither readable as words. These are the same two colours
+   * darkened until they are, and they are used only where the colour is text.
+   */
+  --bad-text: #B4271F;
+  --live-text: #146E38;
 
   /* Elevation */
   --shadow-card: 0 0 0 .5px rgba(0,0,0,.05), 0 1px 2px rgba(0,0,0,.04), 0 3px 10px rgba(0,0,0,.03);
@@ -107,6 +127,13 @@
   --grid-quarter: #2C2D31;
   --grid-five: #26272A;
   --spine: #3A3B3F;
+  --tick-hour: #7C7F86;
+  --tick-half: #6A6D73;
+  --tick-quarter: #55585E;
+  /* On a dark page the brighter colours are already the readable ones. */
+  --sel-text: #5C9DFF;
+  --bad-text: var(--bad);
+  --live-text: var(--live);
 
   /* Shadows read as dirt on a dark background; a hairline outline reads as depth. */
   --shadow-card: 0 0 0 .5px rgba(255,255,255,.07);
@@ -116,20 +143,10 @@
 }
 
 /*
- * Names the pre-redesign stylesheets still use. They are aliases, not a second
- * palette, and they go away as each component stylesheet is rewritten.
+ * How much of the phase colour goes into a tag's background. The mix itself
+ * has to happen on the element that carries --phase, because a custom
+ * property is resolved where it is declared: a --phase-tint defined here
+ * would only ever see the fallback.
  */
-:root {
-  --surface-muted: var(--surface-2);
-  --text: var(--ink);
-  --text-soft: var(--soft);
-  --line: var(--hair);
-  --line-strong: var(--spine);
-  --accent: #627b6a;
-  --accent-soft: #edf5ef;
-  --danger: var(--bad);
-  --danger-soft: var(--bad-tint);
-  --blue: var(--sel);
-  --shadow-sm: var(--shadow-card);
-  --shadow-lg: var(--shadow-float);
-}
+:root { --phase-mix: 12%; }
+:root[data-theme="dark"] { --phase-mix: 24%; }

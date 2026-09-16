@@ -108,7 +108,7 @@ export function renderSummary({ plan, ui }) {
 
   return `<p class="summary">
     <span>${escapeHtml(formatTime(summary.start))} – ${escapeHtml(formatTime(summary.end))}</span>
-    <span class="summary-sep">·</span>
+    <span class="summary-sep" aria-hidden="true">·</span>
     <span>${summary.count} ${summary.count === 1 ? 'activity' : 'activities'}</span>
     ${links.length ? `<span class="summary-break"></span>${links.join('')}` : ''}
   </p>`;

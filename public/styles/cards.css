@@ -77,7 +77,7 @@
 }
 .card-time strong { color: var(--ink-2); font-weight: 500; }
 
-.card-warn { color: var(--bad); font-size: 14px; font-weight: 600; line-height: 18px; }
+.card-warn { color: var(--bad-text); font-size: 14px; font-weight: 600; line-height: 18px; }
 .card-warn .icon { width: 14px; height: 14px; flex: none; }
 
 .card-location { color: var(--soft); font-size: 15px; line-height: 20px; }
@@ -116,13 +116,16 @@
   padding: 0 9px;
   border: 0;
   border-radius: 13px;
-  background: var(--phase-tint);
-  color: var(--ink-2);
+  background: color-mix(in srgb, var(--phase) var(--phase-mix), var(--surface));
+  color: var(--ink);
   font-size: 13px;
   font-weight: 550;
   white-space: nowrap;
 }
+/* On a dark surface the raw phase colour is too dark to see, so it is
+   lightened towards white. */
 .stage-tag .icon { width: 14px; height: 14px; color: var(--phase); }
+:root[data-theme="dark"] .stage-tag .icon { color: color-mix(in srgb, var(--phase) 70%, #fff); }
 .stage-tag--button { cursor: pointer; font-family: inherit; }
 .stage-tag--button .icon:last-child { width: 12px; height: 12px; color: var(--soft); }
 
@@ -141,7 +144,7 @@
   border: 0;
   border-radius: 8px;
   background: none;
-  color: #9A9CA3;
+  color: var(--faint);
 }
 .card-controls .icon { width: 18px; height: 18px; }
 .lock-button.is-fixed { color: var(--fixed); }
@@ -227,8 +230,8 @@
 .card-menu button .icon, .stage-menu-option .icon { width: 17px; height: 17px; color: var(--soft); }
 .stage-menu-option .icon { color: var(--phase); }
 .stage-menu-option.is-current { background: var(--fill); font-weight: 600; }
-.card-menu button.is-danger { color: var(--bad); }
-.card-menu button.is-danger .icon { color: var(--bad); }
+.card-menu button.is-danger { color: var(--bad-text); }
+.card-menu button.is-danger .icon { color: var(--bad-text); }
 
 /* Where there is a mouse, controls appear on hover instead of on selection. */
 @media (hover: hover) and (pointer: fine) {
@@ -275,7 +278,7 @@
   padding: 0 8px;
   border-radius: 10px;
   background: var(--live-tint);
-  color: var(--live);
+  color: var(--live-text);
   font-size: 12px;
   font-weight: 650;
 }

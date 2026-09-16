@@ -13,9 +13,9 @@ export function stageOf(id) {
 export function stagePill(stage, { interactive = false, expanded = false, id = '' } = {}) {
   const content = `${icon(stage.icon)}<span>${escapeHtml(stage.label)}</span>`;
   if (!interactive) {
-    return `<span class="stage-tag" style="--phase:${stage.color};--phase-tint:${stage.tint}">${content}</span>`;
+    return `<span class="stage-tag" style="--phase:${stage.color}">${content}</span>`;
   }
-  return `<button class="stage-tag stage-tag--button" type="button" style="--phase:${stage.color};--phase-tint:${stage.tint}"
+  return `<button class="stage-tag stage-tag--button" type="button" style="--phase:${stage.color}"
     data-action="menu" data-menu="stage:${escapeHtml(id)}" data-focus-key="stage:${escapeHtml(id)}"
     aria-haspopup="menu" aria-expanded="${expanded}" aria-label="Change stage">${content}${icon('chevron')}</button>`;
 }
@@ -47,7 +47,7 @@ function stageMenu(item) {
     ${STAGES.map(stage => `<button type="button" role="menuitemradio" aria-checked="${stage.id === item.stage}"
       class="stage-menu-option ${stage.id === item.stage ? 'is-current' : ''}"
       data-action="set-stage" data-id="${escapeHtml(item.id)}" data-stage="${stage.id}"
-      style="--phase:${stage.color};--phase-tint:${stage.tint}">${icon(stage.icon)}<span>${escapeHtml(stage.label)}</span></button>`).join('')}
+      style="--phase:${stage.color}">${icon(stage.icon)}<span>${escapeHtml(stage.label)}</span></button>`).join('')}
   </div>`;
 }
 

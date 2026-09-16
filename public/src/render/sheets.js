@@ -42,7 +42,7 @@ function suggestionsFrom(plan) {
 
 function stageGrid(current) {
   return `<div class="stage-grid" role="radiogroup" aria-label="Stage">
-    ${STAGES.map(stage => `<label class="stage-choice ${stage.id === current ? 'is-current' : ''}" style="--phase:${stage.color};--phase-tint:${stage.tint}">
+    ${STAGES.map(stage => `<label class="stage-choice ${stage.id === current ? 'is-current' : ''}" style="--phase:${stage.color}">
       <input type="radio" name="stage" value="${stage.id}" ${stage.id === current ? 'checked' : ''}>
       ${icon(stage.icon)}<span>${escapeHtml(stage.label)}</span>
     </label>`).join('')}
@@ -77,12 +77,12 @@ function timingBlock(item, scheduled, plan) {
       <span class="group-value">${start === null ? '—' : escapeHtml(formatTime(start))}</span>
     </div>
 
-    <div class="group-row timing-fixed ${fixed ? '' : 'is-hidden'}">
+    <label class="group-row timing-fixed ${fixed ? '' : 'is-hidden'}">
       <span>Starts at</span>
       <!-- No step attribute: a value off the five-minute grid is rounded up on
            Done rather than refused by the browser in its own words. -->
       <input name="lockedStart" type="time" value="${escapeHtml(item.lockedStart || (start === null ? plan.dayStart : minutesToTime(start)))}">
-    </div>
+    </label>
 
     <div class="group-row">
       <span>Duration</span>
@@ -116,19 +116,19 @@ export function activitySheet(payload, plan) {
       <div class="sheet-body">
         <input type="hidden" name="id" value="${escapeHtml(item.id)}">
 
-        <div class="field">
+        <label class="field">
           <span class="field-label">Name</span>
           <input name="title" maxlength="120" value="${escapeHtml(item.title)}" autocomplete="off" ${creating ? 'autofocus' : ''}>
-        </div>
+        </label>
 
         ${timingBlock(item, scheduled, plan)}
 
-        <div class="field">
+        <label class="field">
           <span class="field-label">Location</span>
           <input name="location" maxlength="140" value="${escapeHtml(item.location || '')}" placeholder="Add a location"
             autocomplete="off" list="location-suggestions">
           <datalist id="location-suggestions">${suggestions.locations.map(place => `<option value="${escapeHtml(place)}"></option>`).join('')}</datalist>
-        </div>
+        </label>
 
         <div class="field">
           <span class="field-label">Stage</span>
@@ -140,10 +140,10 @@ export function activitySheet(payload, plan) {
           ${peopleEditor(item.people, suggestions.people)}
         </div>
 
-        <div class="field">
+        <label class="field">
           <span class="field-label">Notes</span>
           <textarea name="notes" maxlength="1000" rows="4" placeholder="Optional planning notes">${escapeHtml(item.notes || '')}</textarea>
-        </div>
+        </label>
 
         ${creating ? '' : `<button id="delete-activity" class="danger-action" type="button">${icon('trash')}<span>Delete activity</span></button>`}
       </div>
@@ -193,7 +193,7 @@ export function stageSheet(item) {
         <div class="action-header"><strong>Stage</strong><small>${escapeHtml(item.title)}</small></div>
         ${STAGES.map(stage => `<button type="button" class="action-option action-option--row ${stage.id === item.stage ? 'is-current' : ''}"
           data-action="set-stage" data-id="${escapeHtml(item.id)}" data-stage="${stage.id}"
-          style="--phase:${stage.color};--phase-tint:${stage.tint}">
+          style="--phase:${stage.color}">
           ${icon(stage.icon)}<b>${escapeHtml(stage.label)}</b>${stage.id === item.stage ? icon('check') : ''}
         </button>`).join('')}
       </div>
@@ -253,10 +253,10 @@ export function versionsSheet(versions, { plan, updatedAt, deviceLabel = 'this d
       </header>
       <div class="sheet-body">
         <form id="version-form" class="version-create" novalidate>
-          <div class="field">
+          <label class="field">
             <span class="field-label">Save the current plan as a named version</span>
             <input name="name" maxlength="80" placeholder="e.g. After photographer review">
-          </div>
+          </label>
           <button class="button button--primary" type="submit">${icon('save')}<span>Save version</span></button>
         </form>
 
@@ -327,22 +327,22 @@ export function settingsSheet(plan, ui = {}) {
       <div class="sheet-body">
         <fieldset class="field-group settings-group">
           <legend class="field-label">Plan</legend>
-          <div class="group-row"><span>Planner name</span><input name="coupleLabel" maxlength="60" value="${escapeHtml(plan.coupleLabel || 'Our Wedding')}"></div>
-          <div class="group-row"><span>Day title</span><input name="title" maxlength="80" value="${escapeHtml(plan.title)}"></div>
-          <div class="group-row"><span>Date</span><input name="date" type="date" value="${escapeHtml(plan.date)}"></div>
+          <label class="group-row"><span>Planner name</span><input name="coupleLabel" maxlength="60" value="${escapeHtml(plan.coupleLabel || 'Our Wedding')}"></label>
+          <label class="group-row"><span>Day title</span><input name="title" maxlength="80" value="${escapeHtml(plan.title)}"></label>
+          <label class="group-row"><span>Date</span><input name="date" type="date" value="${escapeHtml(plan.date)}"></label>
         </fieldset>
 
         <fieldset class="field-group settings-group">
           <legend class="field-label">Schedule</legend>
-          <div class="group-row"><span>First activity starts</span><input name="dayStart" type="time" value="${escapeHtml(plan.dayStart)}"></div>
-          <div class="group-row"><span>Sunset marker</span><input name="sunset" type="time" value="${escapeHtml(plan.sunset ?? DEFAULT_SUNSET)}"></div>
+          <label class="group-row"><span>First activity starts</span><input name="dayStart" type="time" value="${escapeHtml(plan.dayStart)}"></label>
+          <label class="group-row"><span>Sunset marker</span><input name="sunset" type="time" value="${escapeHtml(plan.sunset ?? DEFAULT_SUNSET)}"></label>
         </fieldset>
 
         <fieldset class="field-group settings-group">
           <legend class="field-label">Timeline view</legend>
-          <div class="group-row"><span>Shows from</span><input name="timelineStart" type="time" value="${escapeHtml(plan.timelineStart ?? '')}"></div>
-          <div class="group-row"><span>Shows until</span><input name="timelineEnd" type="time" value="${escapeHtml(plan.timelineEnd ?? '')}">
-            ${nextDayNote(plan)}</div>
+          <label class="group-row"><span>Shows from</span><input name="timelineStart" type="time" value="${escapeHtml(plan.timelineStart ?? '')}"></label>
+          <label class="group-row"><span>Shows until</span><input name="timelineEnd" type="time" value="${escapeHtml(plan.timelineEnd ?? '')}">
+            ${nextDayNote(plan)}</label>
           <p class="group-help">Only changes what you see. The view always grows to fit every activity.</p>
         </fieldset>
 
