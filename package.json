@@ -7,7 +7,7 @@
     "dev": "node scripts/dev-server.mjs",
     "test": "node --test tests/unit/*.test.mjs",
     "test:e2e": "playwright test",
-    "check": "node --check public/src/app.js && node --check public/src/schedule.js && node --check public/src/api.js && node --check lib/server/auth.js && node --check lib/server/storage.js"
+    "check": "node --check scripts/dev-server.mjs && for f in api/*.js lib/server/*.js public/src/*.js; do node --check \"$f\" || exit 1; done"
   },
   "engines": {
     "node": ">=20"

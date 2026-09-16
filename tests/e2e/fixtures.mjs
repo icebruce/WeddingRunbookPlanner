@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test as base, expect } from '@playwright/test';
 
-import { DEFAULT_DATA } from '../../lib/server/seed-template.js';
+import { SEED_PLAN } from '../../lib/server/seed-template.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -13,7 +13,7 @@ export const TEST_PASSWORD = 'e2e-password-987';
 export const TEST_SESSION_SECRET = 'e2e-session-secret-0123456789abcdef';
 
 export function seedPlan(overrides = {}) {
-  return { ...structuredClone(DEFAULT_DATA.plan), ...overrides };
+  return { ...structuredClone(SEED_PLAN), ...overrides };
 }
 
 export function activity(id, duration, extra = {}) {

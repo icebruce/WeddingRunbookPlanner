@@ -1,23 +1,44 @@
 import { isAuthenticated } from '../lib/server/auth.js';
-import { json, methodNotAllowed, requireSameOrigin, readJson } from '../lib/server/http.js';
+import { fail, json, methodNotAllowed, readJson, requireSameOrigin } from '../lib/server/http.js';
+import { respondWithError } from '../lib/server/respond.js';
 import { readData, savePlan } from '../lib/server/storage.js';
 
+const ROUTE = 'plan';
+
 export default async function handler(req, res) {
-  if (!isAuthenticated(req)) return json(res, 401, { error: 'Authentication required' });
+  if (!isAuthenticated(req)) return fail(res, 401, 'unauthenticated', 'Sign in to open the plan.');
+
   try {
     if (req.method === 'GET') {
       const data = await readData();
-      return json(res, 200, { plan: data.plan, revision: data.revision, updatedAt: data.updatedAt });
+      // `since` lets an idle tab ask "is there anything newer?" without
+      // pulling the whole plan down every minute.
+      const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+      const since = url.searchParams.get('since');
+      if (since !== null && Number(since) === Number(data.revision)) {
+        return json(res, 200, { unchanged: true, revision: data.revision });
+      }
+      return json(res, 200, {
+        plan: data.plan,
+        revision: data.revision,
+        updatedAt: data.updatedAt,
+        updatedBy: data.updatedBy ?? null
+      });
     }
+
     if (req.method === 'PUT') {
       requireSameOrigin(req);
-      const { plan, revision } = await readJson(req);
-      const data = await savePlan(plan, revision);
-      return json(res, 200, { plan: data.plan, revision: data.revision, updatedAt: data.updatedAt });
+      const { plan, revision, deviceId } = await readJson(req);
+      const data = await savePlan(plan, revision, { updatedBy: typeof deviceId === 'string' ? deviceId.slice(0, 64) : null });
+      return json(res, 200, { revision: data.revision, updatedAt: data.updatedAt });
     }
+
     return methodNotAllowed(res, ['GET', 'PUT']);
   } catch (error) {
-    if (error.statusCode === 409) return json(res, 409, { error: error.message, latest: { plan: error.data.plan, revision: error.data.revision, updatedAt: error.data.updatedAt } });
-    return json(res, error.statusCode || 500, { error: error.statusCode ? error.message : 'Unable to access the plan' });
+    return respondWithError(res, ROUTE, error, {
+      latest: error.current
+        ? { plan: error.current.plan, revision: error.current.revision, updatedAt: error.current.updatedAt, updatedBy: error.current.updatedBy ?? null }
+        : undefined
+    });
   }
 }

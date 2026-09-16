@@ -1,30 +1,70 @@
-async function request(path, options = {}) {
-  const response = await fetch(path, {
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    ...options
-  });
+/**
+ * Every call is bounded. A request that never settles used to leave the header
+ * on "Saving…" for as long as the tab stayed open (F11); now it aborts and is
+ * reported as a timeout, which the save pipeline treats as retryable.
+ */
+export const REQUEST_TIMEOUT_MS = 15_000;
+
+export class ApiError extends Error {
+  constructor(message, { status = 0, code = 'network', field = null, body = null } = {}) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.field = field;
+    this.body = body;
+  }
+
+  /** Worth trying again unprompted: nothing about the request itself was wrong. */
+  get retryable() {
+    return this.status === 0 || this.status === 408 || this.status === 429 || this.status >= 500;
+  }
+}
+
+async function request(path, { timeoutMs = REQUEST_TIMEOUT_MS, ...options } = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response;
+  try {
+    response = await fetch(path, {
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+      signal: controller.signal,
+      ...options
+    });
+  } catch (error) {
+    if (error.name === 'AbortError') throw new ApiError('The request took too long.', { code: 'timeout' });
+    throw new ApiError('No connection.', { code: 'network' });
+  } finally {
+    clearTimeout(timer);
+  }
 
   const type = response.headers.get('content-type') || '';
-  const body = type.includes('application/json') ? await response.json() : null;
+  const body = type.includes('application/json') ? await response.json().catch(() => null) : null;
 
   if (!response.ok) {
-    const error = new Error(body?.error || `Request failed (${response.status})`);
-    error.status = response.status;
-    error.body = body;
-    throw error;
+    const detail = body?.error;
+    throw new ApiError(detail?.message || `Request failed (${response.status})`, {
+      status: response.status,
+      code: detail?.code || `http_${response.status}`,
+      field: detail?.field || null,
+      body
+    });
   }
 
   return body;
 }
 
 export const api = {
-  session: () => request('/api/session'),
+  session: () => request('/api/session', { timeoutMs: 10_000 }),
   login: password => request('/api/login', { method: 'POST', body: JSON.stringify({ password }) }),
   logout: () => request('/api/logout', { method: 'POST', body: '{}' }),
-  load: () => request('/api/plan'),
-  save: (plan, revision) => request('/api/plan', { method: 'PUT', body: JSON.stringify({ plan, revision }) }),
+  load: since => request(since === undefined || since === null ? '/api/plan' : `/api/plan?since=${encodeURIComponent(since)}`),
+  save: (plan, revision, deviceId) => request('/api/plan', { method: 'PUT', body: JSON.stringify({ plan, revision, deviceId }) }),
   versions: () => request('/api/versions'),
-  createVersion: (name, revision) => request('/api/versions', { method: 'POST', body: JSON.stringify({ name, revision }) }),
+  createVersion: (name, revision, extra = {}) => request('/api/versions', { method: 'POST', body: JSON.stringify({ name, revision, ...extra }) }),
   restoreVersion: (id, revision) => request('/api/versions', { method: 'PUT', body: JSON.stringify({ id, revision }) })
 };
+
+export { request };

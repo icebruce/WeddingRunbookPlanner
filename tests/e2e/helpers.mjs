@@ -16,6 +16,45 @@ export async function signInAndWaitForPlan(page, password = TEST_PASSWORD) {
 }
 
 /**
+ * Opens the planner in a page that may already carry the session cookie — a
+ * second tab in the same browser context does, so it never sees the sign-in
+ * form.
+ */
+export async function openPlanner(page, password = TEST_PASSWORD) {
+  await page.goto('/');
+  const field = page.locator('#login-form input[name="password"]');
+  if (await field.count()) {
+    await field.fill(password);
+    await page.locator('#login-form button[type="submit"]').click();
+  }
+  await expect(page.locator('#activity-list')).toBeVisible();
+}
+
+/**
+ * Counts toasts as they are created. Toasts hide themselves after a few
+ * seconds, so counting the elements still on screen at the end of a long wait
+ * would report zero whether one was shown or a hundred were.
+ */
+export async function trackToasts(page) {
+  await page.evaluate(() => {
+    if (window.__toastLog) return;
+    window.__toastLog = [];
+    const region = document.querySelector('#toast-region');
+    new MutationObserver(records => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (node.nodeType === 1) window.__toastLog.push(node.textContent || '');
+        }
+      }
+    }).observe(region, { childList: true });
+  });
+  return {
+    all: () => page.evaluate(() => window.__toastLog.slice()),
+    count: () => page.evaluate(() => window.__toastLog.length)
+  };
+}
+
+/**
  * Touch drags. Playwright's public touchscreen API only taps, so a real swipe
  * needs CDP. That restricts swipe-based specs to Chromium-backed projects;
  * `supportsTouchDrag` lets a spec skip rather than silently pass on WebKit.
@@ -83,12 +122,16 @@ export function centreOf(box) {
  * `times` limits how many requests are affected; later ones pass through, which
  * is how "fails twice then succeeds" backoff cases are written.
  */
-export async function failRequests(page, { url = '**/api/**', method, status = 500, body = { error: 'Injected failure' }, times = Infinity, delayMs = 0 } = {}) {
-  const seen = { count: 0 };
+export async function failRequests(page, { url = '**/api/**', method, status = 500, body = { error: { code: 'server_error', message: 'Injected failure' } }, times = Infinity, delayMs = 0 } = {}) {
+  // `count` is every matching request, injected or not. Playwright runs the
+  // most recently registered route first, so a separate counting route added
+  // earlier would never see a request this one fulfils.
+  const seen = { count: 0, injected: 0 };
   await page.route(url, async (route, request) => {
     if (method && request.method() !== method) return route.fallback();
-    if (seen.count >= times) return route.fallback();
     seen.count += 1;
+    if (seen.injected >= times) return route.fallback();
+    seen.injected += 1;
     if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs));
     await route.fulfill({
       status,

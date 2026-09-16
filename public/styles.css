@@ -49,10 +49,14 @@ svg.icon { width: 1.05em; height: 1.05em; fill: none; stroke: currentColor; stro
 .brand .icon { width: 21px; height: 21px; color: #df6a72; stroke-width: 1.45; }
 .topbar-actions { display: flex; align-items: center; gap: 8px; }
 
-.save-indicator { display: none; align-items: center; gap: 6px; color: var(--text-soft); font-size: 12px; font-weight: 560; white-space: nowrap; }
-.save-dot { width: 6px; height: 6px; border-radius: 50%; background: #5ba270; }
+/* The save state is the one place the app admits it has not stored something,
+   so it is shown at every width. It used to be hidden below 760 px (F23). */
+.save-indicator { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--text-soft); font: inherit; font-size: 13px; font-weight: 560; white-space: nowrap; }
+.save-dot { width: 6px; height: 6px; border-radius: 50%; background: #5ba270; flex: none; }
 .save-indicator--saving .save-dot { background: #c99b36; animation: pulse 1s ease-in-out infinite; }
-.save-indicator--error .save-dot, .save-indicator--conflict .save-dot { background: var(--danger); }
+.save-indicator--offline .save-dot { background: #8e9098; }
+.save-indicator--not-saved { color: var(--danger); cursor: pointer; min-height: 44px; }
+.save-indicator--not-saved .save-dot { background: var(--danger); }
 @keyframes pulse { 50% { opacity: .35; } }
 
 .status-control { height: 36px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px 0 10px; border-radius: 999px; background: var(--accent-soft); color: #385542; position: relative; }
@@ -255,7 +259,9 @@ body.is-reordering { user-select: none; cursor: grabbing; }
 .brand--login { margin-bottom: 38px; }
 .login-copy h1 { margin: 0; font-size: 36px; letter-spacing: -.04em; line-height: 1; }
 .login-copy > p:last-child { margin: 12px 0 24px; color: var(--text-soft); font-size: 13px; line-height: 1.5; }
-.form-error { margin: -8px 0 0; color: var(--danger); font-size: 12px; }
+.form-error { margin: -8px 0 0; color: var(--danger); font-size: 13px; }
+.field-error { margin: 6px 0 0; color: var(--danger); font-size: 13px; line-height: 1.4; }
+[aria-invalid="true"] { outline: 1.5px solid var(--danger); outline-offset: 1px; }
 .loading-view { align-content: center; gap: 10px; color: var(--text-soft); font-size: 13px; }
 .loading-mark .icon { width: 32px; height: 32px; color: #df6a72; animation: pulse 1.2s ease-in-out infinite; }
 .fatal-view { text-align: center; align-content: center; }
@@ -322,7 +328,6 @@ body.is-reordering { user-select: none; cursor: grabbing; }
 
 @media (min-width: 760px) {
   .topbar { padding: 12px 24px; min-height: 70px; }
-  .save-indicator { display: inline-flex; }
   .planner { padding: 44px 28px 80px; }
   .planner-heading { padding: 0 0 30px 82px; }
   .planner-heading h1 { font-size: 48px; }

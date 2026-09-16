@@ -1,7 +1,9 @@
 import { api } from './api.js';
-import { PLAN_STATUSES, STAGES } from './config.js';
+import { PLAN_STATUSES, STAGES, deviceId } from './config.js';
+import { SAVE_STATES, createSavePipeline } from './save.js';
 import { buildSchedule, buildTimelineLayout, clampDuration, formatDuration, formatTime, minutesToTime, parseTime } from './schedule.js';
 import { icon } from './icons.js';
+import { checkPlan, normalizeDuration, roundTimeUp, validateActivity } from './validate.js';
 
 const app = document.querySelector('#app');
 const toastRegion = document.querySelector('#toast-region');
@@ -12,11 +14,10 @@ const state = {
   revision: null,
   updatedAt: null,
   versions: [],
-  saveState: 'saved',
-  saveTimer: null,
-  savePromise: null,
-  changeSeq: 0,
-  savedSeq: 0,
+  saveState: SAVE_STATES.saved,
+  // Set when the plan could not be loaded at all, so the app can offer Retry
+  // instead of the sign-in screen (F27).
+  loadError: null,
   conflict: null,
   dialog: null,
   menuOpen: false,
@@ -26,6 +27,38 @@ const state = {
   drag: null,
   resize: null
 };
+
+const DEVICE_ID = deviceId();
+
+/**
+ * Autosave lives in save.js; this only connects it to the screen. The pipeline
+ * always asks for the plan as it is now, so nothing it sends can be stale.
+ */
+const saver = createSavePipeline({
+  save: (plan, revision, device) => api.save(plan, revision, device),
+  getPlan: () => state.plan,
+  deviceId: DEVICE_ID,
+  onStateChange: next => {
+    state.saveState = next;
+    updateSaveIndicator();
+  },
+  onSaved: ({ revision, updatedAt }) => {
+    state.revision = revision;
+    if (updatedAt) state.updatedAt = updatedAt;
+  },
+  onError: message => toast(message, 'error'),
+  onConflict: latest => {
+    // The local side of the conflict is read when the user chooses, not
+    // captured here, so "Keep my changes" means the plan as it is now (F12).
+    state.conflict = { latest };
+    render();
+  },
+  onUnauthorized: () => {
+    // The plan and its unsaved changes stay in memory; only the screen changes.
+    state.authenticated = false;
+    render();
+  }
+});
 
 const stageMap = new Map(STAGES.map(stage => [stage.id, stage]));
 
@@ -74,14 +107,20 @@ function getScheduledActivity(id) {
   return buildSchedule(state.plan).items.find(activity => activity.id === id) || null;
 }
 
+const SAVE_LABELS = {
+  [SAVE_STATES.saved]: 'Saved',
+  [SAVE_STATES.saving]: 'Saving…',
+  [SAVE_STATES.offline]: 'Offline',
+  [SAVE_STATES.notSaved]: 'Not saved'
+};
+
 function saveIndicator() {
-  const labels = {
-    saved: 'Saved',
-    saving: 'Saving…',
-    error: 'Save failed',
-    conflict: 'Needs attention'
-  };
-  return `<span class="save-indicator save-indicator--${state.saveState}"><span class="save-dot"></span>${labels[state.saveState] || 'Saved'}</span>`;
+  const label = SAVE_LABELS[state.saveState] || SAVE_LABELS[SAVE_STATES.saved];
+  // "Not saved" is the one state the user can act on, so it is a button.
+  if (state.saveState === SAVE_STATES.notSaved) {
+    return `<button type="button" class="save-indicator save-indicator--not-saved" id="save-retry" aria-label="Not saved. Tap to try again."><span class="save-dot"></span>${label}</button>`;
+  }
+  return `<span class="save-indicator save-indicator--${state.saveState}" role="status"><span class="save-dot"></span>${label}</span>`;
 }
 
 function loginTemplate() {
@@ -94,7 +133,7 @@ function loginTemplate() {
           <h1 id="login-title">Wedding Day</h1>
           <p>Enter the shared password to open the day plan.</p>
         </div>
-        <form id="login-form" class="form-stack">
+        <form id="login-form" class="form-stack" novalidate>
           <label class="field">
             <span>Password</span>
             <input name="password" type="password" autocomplete="current-password" required autofocus>
@@ -312,7 +351,7 @@ function activityDialogTemplate(payload) {
   const scheduled = creating ? null : getScheduledActivity(item.id);
   const lockTime = item.lockedStart || scheduled ? (item.lockedStart || minutesToTime(scheduled.start)) : state.plan.dayStart;
   return `<dialog id="activity-dialog" class="sheet-dialog">
-    <form id="activity-form" class="sheet" method="dialog">
+    <form id="activity-form" class="sheet" method="dialog" novalidate>
       <header class="sheet-header">
         <button class="icon-button sheet-close" type="button" aria-label="Close">${icon('x')}</button>
         <h2>${creating ? 'Add Activity' : 'Edit Activity'}</h2>
@@ -349,7 +388,7 @@ function versionsDialogTemplate() {
         <span class="sheet-header-spacer"></span>
       </header>
       <div class="sheet-body">
-        <form id="version-form" class="version-create">
+        <form id="version-form" class="version-create" novalidate>
           <label class="field"><span>Save the current plan as a named version</span><input name="name" maxlength="80" placeholder="e.g. After photographer review" required></label>
           <button class="button button--primary" type="submit">${icon('save')}<span>Save version</span></button>
         </form>
@@ -363,7 +402,7 @@ function versionsDialogTemplate() {
 
 function settingsDialogTemplate() {
   return `<dialog id="settings-dialog" class="sheet-dialog">
-    <form id="settings-form" class="sheet" method="dialog">
+    <form id="settings-form" class="sheet" method="dialog" novalidate>
       <header class="sheet-header"><button class="icon-button sheet-close" type="button" aria-label="Close">${icon('x')}</button><h2>Plan Settings</h2><button class="button button--text" type="submit">Done</button></header>
       <div class="sheet-body form-stack">
         <label class="field"><span>Planner name</span><input name="coupleLabel" maxlength="60" required value="${escapeHtml(state.plan.coupleLabel || 'Our Wedding')}"></label>
@@ -383,8 +422,20 @@ function dialogTemplate() {
   return '';
 }
 
+function loadErrorTemplate() {
+  return `<main class="fatal-view">
+    <div>${icon('warning')}</div>
+    <h1>Can't load the plan right now</h1>
+    <p>${escapeHtml(state.loadError)}</p>
+    <button id="retry-load" class="button button--primary" type="button">Retry</button>
+  </main>`;
+}
+
 function render() {
-  if (state.authenticated === null) app.innerHTML = loadingTemplate();
+  // A failed load is never shown as an empty plan or as a sign-in prompt: both
+  // would suggest something that is not true.
+  if (state.loadError && !state.plan) app.innerHTML = loadErrorTemplate();
+  else if (state.authenticated === null) app.innerHTML = loadingTemplate();
   else if (!state.authenticated) app.innerHTML = loginTemplate();
   else if (!state.plan) app.innerHTML = loadingTemplate();
   else app.innerHTML = appTemplate();
@@ -397,78 +448,18 @@ function updatePlan(mutator, { save = true } = {}) {
   const next = structuredClone(state.plan);
   mutator(next);
   state.plan = next;
-  if (save) {
-    state.changeSeq += 1;
-    scheduleSave();
-  }
+  if (save) saver.markDirty();
   render();
 }
 
-function scheduleSave() {
-  if (state.conflict) return;
-  state.saveState = 'saving';
-  clearTimeout(state.saveTimer);
-  state.saveTimer = setTimeout(() => void saveNow(), 650);
-}
-
-async function saveNow() {
-  clearTimeout(state.saveTimer);
-  state.saveTimer = null;
-  if (!state.plan || state.conflict) return;
-
-  if (state.savePromise) {
-    await state.savePromise.catch(() => {});
-    if (!state.conflict && state.changeSeq > state.savedSeq) return saveNow();
-    return;
-  }
-
-  if (state.changeSeq <= state.savedSeq) {
-    state.saveState = 'saved';
-    updateSaveIndicator();
-    return;
-  }
-
-  const planSnapshot = structuredClone(state.plan);
-  const revisionSnapshot = state.revision;
-  const sequenceSnapshot = state.changeSeq;
-  state.saveState = 'saving';
-  updateSaveIndicator();
-
-  const request = api.save(planSnapshot, revisionSnapshot);
-  state.savePromise = request;
-  try {
-    const result = await request;
-    state.revision = result.revision;
-    state.updatedAt = result.updatedAt;
-    state.savedSeq = Math.max(state.savedSeq, sequenceSnapshot);
-    state.saveState = state.changeSeq > state.savedSeq ? 'saving' : 'saved';
-  } catch (error) {
-    if (error.status === 409 && error.body?.latest) {
-      state.conflict = { local: structuredClone(state.plan), latest: error.body.latest };
-      state.saveState = 'conflict';
-      render();
-      return;
-    }
-    if (error.status === 401) {
-      state.authenticated = false;
-      state.plan = null;
-      render();
-      return;
-    }
-    state.saveState = 'error';
-    toast('Could not save. Your changes are still on this screen.', 'error');
-  } finally {
-    if (state.savePromise === request) state.savePromise = null;
-    updateSaveIndicator();
-  }
-
-  if (!state.conflict && state.changeSeq > state.savedSeq) return saveNow();
-}
-
+/**
+ * Sends anything outstanding and reports whether the plan is safely stored.
+ * Used before actions that read the server's copy (versions, sign-out).
+ */
 async function flushSave() {
-  if (state.saveTimer || state.saveState === 'saving') await saveNow();
-  if (state.savePromise) await state.savePromise;
-  if (state.saveState === 'error' || state.saveState === 'conflict') throw new Error('Plan is not fully saved');
+  await saver.flushNow();
+  if (saver.hasPendingChanges || saver.isBlocked) throw new Error('Plan is not fully saved');
+  state.revision = saver.revision;
 }
 
 function updateSaveIndicator() {
@@ -476,7 +467,9 @@ function updateSaveIndicator() {
   if (!node) return;
   const replacement = document.createElement('template');
   replacement.innerHTML = saveIndicator();
-  node.replaceWith(replacement.content.firstElementChild);
+  const next = replacement.content.firstElementChild;
+  node.replaceWith(next);
+  if (next.id === 'save-retry') next.addEventListener('click', () => void saver.retry());
 }
 
 function openActivityDialog(activity, mode = 'edit') {
@@ -503,13 +496,61 @@ function closeDialog() {
   render();
 }
 
+/**
+ * Inline field errors.
+ *
+ * Validation runs through the same module the server uses, so a message shown
+ * here is exactly the reason the server would have given — and the sheet stays
+ * open with the offending field focused instead of the change being applied
+ * and then silently refused on save.
+ */
+function clearFieldErrors(form) {
+  form.querySelectorAll('.field-error').forEach(node => node.remove());
+  form.querySelectorAll('[aria-invalid="true"]').forEach(node => {
+    node.removeAttribute('aria-invalid');
+    node.removeAttribute('aria-describedby');
+  });
+}
+
+function fieldName(field) {
+  return String(field || '').split('.').pop();
+}
+
+function showFieldError(form, field, message) {
+  const name = fieldName(field);
+  const control = form.querySelector(`[name="${CSS.escape(name)}"]`) || form.querySelector(`.${CSS.escape(name)}-editor`);
+  const note = document.createElement('p');
+  note.className = 'field-error';
+  note.id = `error-${name}`;
+  note.setAttribute('role', 'alert');
+  note.textContent = message;
+
+  if (!control) {
+    form.querySelector('.sheet-body')?.prepend(note);
+    return;
+  }
+  control.setAttribute('aria-invalid', 'true');
+  control.setAttribute('aria-describedby', note.id);
+  (control.closest('.field') || control.parentElement).append(note);
+  control.focus();
+}
+
 function bindEvents() {
+  app.querySelector('#retry-load')?.addEventListener('click', () => {
+    state.loadError = null;
+    render();
+    void (state.authenticated ? loadPlan() : init());
+  });
+  if (state.loadError && !state.plan) return;
+
   if (!state.authenticated) {
     const form = app.querySelector('#login-form');
     form?.addEventListener('submit', handleLogin);
     return;
   }
   if (!state.plan) return;
+
+  app.querySelector('#save-retry')?.addEventListener('click', () => void saver.retry());
 
   app.querySelector('#plan-status')?.addEventListener('change', event => updatePlan(plan => { plan.status = event.target.value; }));
   app.querySelector('#add-activity')?.addEventListener('click', handleAdd);
@@ -727,6 +768,18 @@ async function handleLogin(event) {
   try {
     await api.login(new FormData(form).get('password'));
     state.authenticated = true;
+
+    // Signing in again in the middle of an edit must not cost that edit. When
+    // changes are still pending, the plan on screen is kept and only the
+    // revision is refreshed, so the save can be retried (or turn into a
+    // conflict). Loading here would replace the plan and lose the work (F10).
+    if (state.plan && saver.hasPendingChanges) {
+      render();
+      const current = await api.load().catch(() => null);
+      await saver.resume({ revision: current?.revision ?? state.revision });
+      return;
+    }
+
     await loadPlan();
   } catch (error) {
     errorNode.textContent = error.message || 'Unable to sign in';
@@ -742,17 +795,30 @@ function handleAdd() {
 function handleActivitySubmit(event) {
   event.preventDefault();
   const form = event.currentTarget;
+  clearFieldErrors(form);
+
   const data = new FormData(form);
-  const activity = {
+  const locked = data.get('locked') === 'on';
+  const candidate = {
     id: String(data.get('id')),
     title: String(data.get('title')).trim(),
-    duration: clampDuration(Number(data.get('duration'))),
+    duration: normalizeDuration(Number(data.get('duration'))),
     stage: String(data.get('stage')),
     location: String(data.get('location')).trim(),
     people: getPeopleEditorValues(form).slice(0, 30),
     notes: String(data.get('notes')).trim(),
-    lockedStart: data.get('locked') === 'on' ? String(data.get('lockedStart') || state.plan.dayStart) : null
+    // Typed times round up to the next 5 minutes rather than being refused.
+    lockedStart: locked ? (roundTimeUp(String(data.get('lockedStart') || '')) || state.plan.dayStart) : null
   };
+
+  let activity;
+  try {
+    activity = validateActivity(candidate);
+  } catch (error) {
+    showFieldError(form, error.field, error.message);
+    return;
+  }
+
   const creating = state.dialog.mode === 'create';
   updatePlan(plan => {
     if (creating) plan.activities.push(activity);
@@ -762,7 +828,6 @@ function handleActivitySubmit(event) {
     }
   });
   state.dialog = null;
-  toast(creating ? 'Activity added.' : 'Activity updated.', 'success');
   render();
 }
 
@@ -778,12 +843,29 @@ function handleDeleteActivity() {
 
 function handleSettingsSubmit(event) {
   event.preventDefault();
-  const data = new FormData(event.currentTarget);
+  const form = event.currentTarget;
+  clearFieldErrors(form);
+
+  const data = new FormData(form);
+  const candidate = {
+    ...structuredClone(state.plan),
+    coupleLabel: String(data.get('coupleLabel')).trim(),
+    title: String(data.get('title')).trim(),
+    date: String(data.get('date')),
+    dayStart: roundTimeUp(String(data.get('dayStart') || '')) || ''
+  };
+
+  const result = checkPlan(candidate);
+  if (!result.ok) {
+    showFieldError(form, result.error.field, result.error.message);
+    return;
+  }
+
   updatePlan(plan => {
-    plan.coupleLabel = String(data.get('coupleLabel')).trim();
-    plan.title = String(data.get('title')).trim();
-    plan.date = String(data.get('date'));
-    plan.dayStart = String(data.get('dayStart'));
+    plan.coupleLabel = result.plan.coupleLabel;
+    plan.title = result.plan.title;
+    plan.date = result.plan.date;
+    plan.dayStart = result.plan.dayStart;
   });
   state.dialog = null;
   render();
@@ -798,8 +880,8 @@ async function handleCreateVersion(event) {
     await flushSave();
     const result = await api.createVersion(new FormData(form).get('name'), state.revision);
     state.versions = result.versions;
+    saver.markClean(result.revision);
     state.revision = result.revision;
-    state.saveState = 'saved';
     state.dialog = { type: 'versions' };
     toast('Version saved.', 'success');
     render();
@@ -819,10 +901,8 @@ async function handleRestoreVersion(event) {
     state.versions = result.versions;
     state.revision = result.revision;
     state.updatedAt = result.updatedAt;
-    state.changeSeq = 0;
-    state.savedSeq = 0;
+    saver.markClean(result.revision);
     state.dialog = null;
-    state.saveState = 'saved';
     toast('Version restored.', 'success');
     render();
   } catch (error) {
@@ -851,23 +931,24 @@ async function handleMenuAction(event) {
 
 function resolveConflict(event) {
   const choice = event.currentTarget.dataset.conflict;
+  const latest = state.conflict.latest;
+  state.conflict = null;
+
   if (choice === 'cloud') {
-    state.plan = state.conflict.latest.plan;
-    state.revision = state.conflict.latest.revision;
-    state.updatedAt = state.conflict.latest.updatedAt;
-    state.conflict = null;
-    state.savedSeq = state.changeSeq;
-    state.saveState = 'saved';
-    toast('Cloud copy loaded.');
+    state.plan = latest.plan;
+    state.revision = latest.revision;
+    state.updatedAt = latest.updatedAt;
+    saver.markClean(latest.revision);
     render();
     return;
   }
-  state.plan = state.conflict.local;
-  state.revision = state.conflict.latest.revision;
-  state.conflict = null;
-  state.saveState = 'saving';
+
+  // "Keep my changes" saves the plan as it stands right now, on top of the
+  // revision the server reported. The old code restored a snapshot taken when
+  // the banner appeared, discarding anything typed since (F12).
+  state.revision = latest.revision;
   render();
-  scheduleSave();
+  void saver.resume({ revision: latest.revision });
 }
 
 function handleKeyboardReorder(event) {
@@ -1082,14 +1163,13 @@ function cancelResize(event) {
 }
 
 async function loadPlan() {
+  state.loadError = null;
   try {
     const result = await api.load();
     state.plan = result.plan;
     state.revision = result.revision;
     state.updatedAt = result.updatedAt;
-    state.changeSeq = 0;
-    state.savedSeq = 0;
-    state.saveState = 'saved';
+    saver.markClean(result.revision);
     render();
   } catch (error) {
     if (error.status === 401) {
@@ -1097,8 +1177,8 @@ async function loadPlan() {
       render();
       return;
     }
-    app.innerHTML = `<main class="fatal-view"><div>${icon('warning')}</div><h1>Couldn’t open the plan</h1><p>${escapeHtml(error.message || 'Please try again.')}</p><button id="retry-load" class="button button--primary" type="button">Try again</button></main>`;
-    app.querySelector('#retry-load')?.addEventListener('click', loadPlan);
+    state.loadError = error.message || 'Please try again.';
+    render();
   }
 }
 
@@ -1109,10 +1189,19 @@ async function init() {
     state.authenticated = Boolean(session.authenticated);
     render();
     if (state.authenticated) await loadPlan();
-  } catch {
-    state.authenticated = false;
+  } catch (error) {
+    // F27: a session check that could not be answered says nothing about
+    // whether this device is signed in. Showing the sign-in screen here asks
+    // the user to re-enter the password over a connection that is down, so a
+    // load error with Retry is shown instead.
+    state.loadError = error.code === 'network' || error.code === 'timeout'
+      ? "Can't reach the planner right now."
+      : (error.message || 'Please try again.');
     render();
   }
 }
+
+window.addEventListener('online', () => void saver.handleOnline());
+window.addEventListener('offline', () => updateSaveIndicator());
 
 void init();
