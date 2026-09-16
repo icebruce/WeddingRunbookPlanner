@@ -1,0 +1,282 @@
+# Wedding Runbook Planner — Design Guide
+
+**Status:** Source of truth for look and feel · **Version:** 1.0 · **Date:** 2026-09-16
+**Visual references:** `docs/mockups/mobile.html`, `docs/mockups/desktop.html` (approved). When a detail isn't covered here, match the mockups.
+
+---
+
+## 1. Principles
+
+1. **Time is the layout.** Vertical position always equals clock time. Density is handled by showing less, never by moving things.
+2. **Quiet at rest, clear in action.** Cards are calm; controls appear on selection (phone) or hover (desktop).
+3. **One colour, one job.** Colour carries meaning only as defined in §3.
+4. **Direct manipulation feels attached.** Edges and cards follow the finger with no lag; motion happens only after release.
+5. **Phone is not a squeezed desktop.** Same content and rules, different controls.
+6. **Readable first.** iOS text sizes on phones; nothing essential below 12 px.
+
+---
+
+## 2. Tokens
+
+Defined once in `public/styles/tokens.css` as CSS custom properties on `:root`, with dark values on `:root[data-theme="dark"]`. Never hard-code colours in component CSS.
+
+### 2.1 Neutrals
+
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--bg` | `#F7F7F4` | `#111214` | Page |
+| `--surface` | `#FFFFFF` | `#1C1D20` | Cards, sheets, menus |
+| `--surface-2` | `#F4F4F1` | `#232428` | Grouped fields, version rows |
+| `--fill` | `#F2F2EF` | `#2A2B2F` | People tags, icon wells |
+| `--fill-strong` | `#E9E9E5` | `#33343A` | `+N` tag, segmented background |
+| `--ink` | `#1C1C1E` | `#F2F2F0` | Titles, primary text, fixed lock |
+| `--ink-2` | `#3A3C42` | `#D5D6DA` | Secondary strong text, icons |
+| `--soft` | `#6B6E76` | `#9EA1A8` | Metadata, labels |
+| `--faint` | `#8E9098` | `#7C7F86` | Placeholders, note glyph |
+| `--hair` | `#E7E7E2` | `#2C2D31` | Dividers |
+| `--dots` | `#B3B5BA` | `#5E6066` | “More” indicator |
+
+### 2.2 Role colours
+
+| Token | Light | Dark | The only uses |
+|---|---|---|---|
+| `--sel` / `--sel-tint` | `#0A6CFF` / `#EAF2FF` | `#3D8BFF` / `#16233A` | Selection ring, handles, snap line and label, drop line/slot, links, primary text buttons, active filter row |
+| `--bad` / `--bad-tint` | `#D0342C` / `#FCEDEC` | `#FF6259` / `#3A1D1C` | Conflicts, overrun hatching, delete, “Not saved”, form errors |
+| `--live` / `--live-dot` / `--live-tint` | `#1E9E52` / `#34C759` / `#EEF7F1` | `#3DD06C` / `#34C759` / `#16301F` | Day-of strip, current activity outline and tag, time line and pill, progress |
+| `--fixed` (= `--ink`) | `#1C1C1E` | `#F2F2F0` | Solid lock only |
+| `--amber` / `--amber-tint` | `#8A5A00` / `#FFF1D6` | `#F2C46B` / `#3A2C10` | Sunset marker, “Editing” label on the day |
+| `--ok` | `#34A853` | `#34C759` | “Saved” dot only |
+| `--brand` | `#D65A73` | `#E27A90` | Heart in the brand mark only |
+
+Red never means “fixed”. Green never means “selected”. Blue never means “live”.
+
+### 2.3 Phase colours (stage bar, tag icon, tag tint)
+
+| Phase | Stages | Colour | Tint (light) |
+|---|---|---|---|
+| Getting ready | Preparation | `#7A66E8` | `#F1EEFD` |
+| Photos | First look, Photography | `#1F8A9B` | `#E5F3F5` |
+| Travel and buffer | Transition, Buffer | `#6F7885` | `#EFF1F3` |
+| Ceremony | Ceremony | `#A67C0F` | `#F8F1DC` |
+| Cocktail and celebration | Celebration, Cocktail | `#C44E78` | `#FBEBF1` |
+| Reception | Reception, Dinner, Party | `#3F8A57` | `#E7F3EA` |
+
+Dark tints: `color-mix(in srgb, <phase> 22%, var(--surface))`; tag icon `color-mix(in srgb, <phase> 70%, #fff)`. Tag text always uses `--ink-2`, never the phase colour.
+
+Stage icons: Preparation ✦ sparkle · First look ♡ heart · Photography camera · Transition car · Buffer clock · Ceremony rings · Celebration party popper · Cocktail glass · Reception table · Dinner fork & knife · Party music note. Inline SVG, 24-unit grid, 1.8 stroke, round caps.
+
+### 2.4 Typography
+
+Font: `-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif`. Brand mark only: `ui-serif, "New York", Georgia, serif`. Numbers in times use `font-variant-numeric: tabular-nums`.
+
+| Style | Phone | Desktop | Weight | Use |
+|---|---|---|---|---|
+| Large title | 34/37 | 44/46 | 700, −0.025em | Day title |
+| Title 3 | 20 | 20 | 650 | Empty state |
+| Headline | 17/22 | 16/21 | 600 | Card title, sheet title, live activity |
+| Body | 17 | 15 | 400 | Form values, list rows |
+| Subhead | 15/20 | 14/19 | 400 | Card time, location, summary line, date |
+| Footnote | 13 | 13 | 400–600 | Tags, labels, help, save state, toolbar context |
+| Caption | 12 | 12 | 500–700 | Toolbar labels, live label (caps, +0.04em), ruler quarter labels, pills |
+| Ruler hour / half / quarter | 14 / 13 / 12 | same | 700 / 600 / 500 | Time ruler |
+
+Minimum: 12 px anywhere; 16 px for any text input on phones (prevents iOS zoom).
+
+### 2.5 Spacing, radius, elevation
+
+- Spacing scale: 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28 px. Screen side padding: 18 px phone, 28 px desktop.
+- Radius: 12 cards, fields, gap blocks · 16–18 sheets top corners, toasts, dialogs, empty card · 24 toolbar · pills fully rounded.
+- Elevation:
+  - Card rest: `0 0 0 .5px rgba(0,0,0,.05), 0 1px 2px rgba(0,0,0,.04), 0 3px 10px rgba(0,0,0,.03)`
+  - Hover (desktop): `0 6px 20px rgba(0,0,0,.08)`
+  - Lifted (dragging): `0 22px 50px rgba(0,0,0,.2)` + 1 px `--sel` outline, rotate −0.6°, scale 1.02
+  - Floating (toolbar, menus, dialogs): `0 12px 36px rgba(0,0,0,.16)`
+  - Dark mode: replace shadows with a 0.5 px `rgba(255,255,255,.07)` outline.
+- Glass (top bar, pinned rows, toolbar): background at 92–96 % opacity + `backdrop-filter: blur(20px)` (with `-webkit-` prefix).
+
+---
+
+## 3. The time grid
+
+- **Scale:** 4 px per minute (20 px per 5 minutes), all widths.
+- **Columns:** phone ruler 56 px, plan starts at 64 px, 12 px right margin. Desktop ruler 80 px, plan starts at 92 px, max content width 1100 px.
+- **Spine:** 1 px vertical line at the ruler's right edge (`#CFCFC8` / dark `#3A3B3F`).
+- **Lines and ticks:**
+
+| Kind | Line across plan | Tick length | Tick colour | Label |
+|---|---|---|---|---|
+| Hour | `#D2D2CB`, 1 px | 14 px, 1.5 px | `#8F8F88` | `12 PM`, 14/700 `--ink` |
+| Half hour | `#DDDDD7` | 10 px | `#A9A9A2` | `12:30`, 13/600 `#43464D` |
+| Quarter | `#E6E6E1` | 7 px | `#C0C0B9` | `12:15`, 12/500 `#686B72` |
+| 5 minutes | `#EEEEEA` | 4 px | `#D2D2CB` | none |
+
+- **Snap label** (resizing/dragging): white text on `--sel` pill replacing the label at that line; the line itself turns `--sel` 1.5 px.
+- **Cards** sit 1 px inside their lines (top +1, height −2).
+- **Markers** in the ruler column use 22 px pills: time now (green), sunset (amber with sun icon). Their lines run *behind* cards.
+- **End marker:** `10:45 PM ——— End of day`, subhead, `--soft`.
+
+---
+
+## 4. Components
+
+### 4.1 Top bar
+Height 52 phone / 62 desktop, sticky, glass, hairline bottom border when content is under it.
+Left: brand (heart 20 px + serif 19 px) or, once scrolled, collapsed title (`Wedding Day` 17/650 over `Sat, Nov 21` 12). Right: save state (footnote, 7 px dot), then 44 px menu button. Desktop adds status control (34 px pill) before the menu.
+Day-of right side: `🔒 View only` pill (30 px) + **Edit** text button (17/600 `--sel`). Editing on the day: amber `● Editing` pill + **Done**.
+
+### 4.2 Summary line and filter chips
+Summary: subhead `--soft`; separators `·` in `#C4C5C9`; actionable items on their own line, 600 weight, `--sel` (open time) or `--bad` (conflict) with a 13 px chevron.
+Filter chips: 36 px tall, 18 px radius, 15 px text, `--surface` with hairline; selected: `--ink` fill, white text. Horizontal scroll, no scrollbar.
+Pinned filter row: 44 px, `--sel-tint` glass, `Showing **Photographer** · 2 of 12` and a 44 px ✕.
+
+### 4.3 Activity card
+
+```
+┌──────────────────────────────────────────┐
+│ ▌ Getting-ready Portraits  🔒 ▤  ● Now   │  title row (17/22)
+│ ▌ 12:45 – 1:15 PM   30 min               │  time (15/20, duration --ink-2 500)
+│ ▌ ⚠ Runs 5 min into Ceremony             │  warning (14/600 --bad) if any
+│ ▌ ▬▬▬▬▬▬▬▬▬▬───────────                  │  progress (3 px, live only)
+│ ▌ ⌖ Getting-ready location · TBD         │  location (15/20 --soft)
+│ ▌ (📷 Photography)                        │  stage tag (26 px)
+│ ▌ (Bride) (Photographer) (+4)        ··· │  people (26 px) · dots if clipped
+└──────────────────────────────────────────┘
+```
+
+- Stage bar: 3 px wide, 2 px radius, 10 px from the left, inset 8 px top/bottom (5 px on one-line cards).
+- Body: left 26 px, padding 9/12 (small cards 7/12, row gap 2), row gap 4.
+- One-line cards (≤10 min): title 15/18, lock, dots, start time (13 `--soft`) on one line.
+- Drop order when space runs out: people → stage → location → progress → time. Title and warning never drop.
+- “More” dots: three 3.5 px dots, 2.5 px apart, 9 px from right, 7 px from bottom.
+- Glyphs after title: lock 15 px `--fixed` (solid), note 15 px `--faint`, `● Now` tag 20 px `--live-tint`/`--live`.
+- Tags: 26 px tall, 13 px radius, 13/550; stage tag uses phase tint with phase-coloured icon; people tags use `--fill`; `+N` uses `--fill-strong` and 650.
+
+**Desktop card:** columns `grip 22 | bar | time 132 | stage 138 | title & meta (1fr) | controls`. Row 1: time range (13 `--soft`) over duration (14/600), stage tag, title (16/600) with glyphs, lock and ⋯ (34 px buttons, `#9A9CA3`, locked `--fixed`). Row 2: location left, people right. Under 30 min: padding 7, people hidden, dots shown.
+
+**States**
+
+| State | Treatment |
+|---|---|
+| Rest | Rest elevation |
+| Hover (desktop) | Hover elevation; controls `#5F6269`; resize bars 36×4 `--sel` at top (flexible) and bottom |
+| Pressed (touch) | Scale 0.99, 100 ms |
+| Focus | 2 px `--sel` ring offset 2 px |
+| Selected | 2 px `--sel` ring + `0 8px 22px rgba(10,108,255,.14)`; handles 40×5 `--sel` top (flexible) and bottom; reorder ≡ icon 20 px in a 44 px area at top-right; body right padding 44 px |
+| Resizing | Selected + snap line/label + bubble (`--ink` background, white 13/600, 10 px radius) |
+| Dragging | Lifted elevation; slot `--sel-tint` with 1.5 px `--sel` border and 3 px `--sel` insertion line; `Lands at 1:50 PM` 12/650 `--sel` |
+| Live | 1.5 px `--live` outline + soft green shadow; `● Now` tag; green progress |
+| Past (day-of) | Opacity 0.45 |
+| Filtered out | Opacity 0.32 |
+| Overrun | 1 px `rgba(208,52,44,.45)` outline; overlapping part hatched 135° red at 10 %/2 % |
+| Fixed in conflict | Same outline; `Fixed · 20 min overlap` warning |
+| Conflict columns | Overrun 55 % left, fixed 45 % right, 6 px gap; narrow cards wrap title and location, hide stage and people; red 3 px bar in the ruler over the overlap |
+
+### 4.4 Open time block
+Dashed 1.5 px `#CFCFC8`, 12 px radius, `rgba(255,255,255,.35)` fill. Centered `35 min open` (16/600 `--ink-2`), `before Ceremony` (14 `--soft`), 30 px + button. Under 70 px tall: single left-aligned line, 13/600, no button. Active (tapped): `--sel` border, `--sel-tint` fill, `--sel` text.
+
+### 4.5 Selection toolbar (phone)
+Floating, 12 px from sides, 30 px above the home indicator, 24 px radius, glass white. Context line 13 (`**Title** · time`), optional hidden-details line 13 `--soft` (single line, ellipsis). Five equal buttons 54 px tall: 22 px icon over 12 px label; Delete in `--bad`. Replaces the + button while a card is selected.
+
+### 4.6 Live strip
+Sticky under the top bar, full width, `--live-tint` at 94 % with blur, hairline `rgba(30,158,82,.18)` bottom border, no radius, no shadow.
+Phone (≈58 px): line 1 — pulsing dot 8 px, `NOW` (12/700 caps `--live`), activity (16/650, ellipsis), `23 min left` right-aligned (14/600 `--live`); line 2 — indented 16 px, `Next **1:55 PM** Arrival & Buffer` (14 `--soft`). 2 px progress line along the bottom (`--live-dot` on 12 % green).
+Desktop (44 px, one line): dot, `LIVE · 1:32 PM`, activity, `23 min left · ends 1:55 PM`, right-aligned `Next 1:55 PM Arrival & Buffer · location`.
+Pulse: `box-shadow` ring expanding 0 → 7 px and fading, 1.8 s, infinite; disabled with reduced motion.
+
+### 4.7 Sheets, dialogs, menus
+- **Sheet (phone):** 16 px top radius, grabber 36×5, header 52 px with `Cancel` (17 `--sel`), title (17/600), `Done` (17/650 `--sel`); body padding 18/16, section gap 22. Scrim `rgba(0,0,0,.3)`.
+- **Dialog (desktop):** 580 px wide, 16 px radius, same header at 15/16 px, two-column body grid where fields are short.
+- **Grouped fields:** `--surface-2`, 12 px radius, 50 px rows (42 desktop), 0.5 px dividers; label left (body), value right (`--soft`).
+- **Inputs:** 46 px (40 desktop), `--surface-2`, 12 px radius, 17 px text (15 desktop); focus 2 px `--sel` ring on `--surface`; error 1.5 px `--bad` ring plus message below (15 `--bad` with warning icon).
+- **Segmented control:** `--fill-strong` track 9 px radius, 30 px segments, selected white with small shadow.
+- **Stepper:** 36 px track, 44 px buttons, value 16/600.
+- **Action sheet (phone):** two grouped cards (14 px radius); header 14/600 + 13 `--soft`; options 62 px min, centered, 18 px `--sel` title + 13 `--soft` description; separate Cancel 58 px 18/650.
+- **Menu:** 250 px, 14 px radius, rows 46 px, icon 19 px + 17 px text; value or switch right-aligned; 6 px separators between groups. Desktop menus 15 px text, 40 px rows.
+- **Alert:** 36 px side margins, 18 px radius, icon well 44 px, title 17/650, body 14, stacked 46 px buttons (primary filled `--sel`), footnote 13.
+- **Toast:** dark `rgba(28,28,30,.96)` in both themes, 16 px radius, 50 px min height, 14 px text, `Undo` 15/650 `#7FB3FF`; phone 16 px side margins above the home indicator; desktop centered 28 px from bottom. Auto-hide 6 s; one at a time.
+- **Pinned bars** (offline, filter): 44 px min, glass, 14–15 px text, sticky under the top bar.
+
+### 4.8 Buttons
+Primary 50 px (phone) / 40 px (desktop), 14/12 px radius, `--ink` fill, white 17/15 px 600. Secondary: `#EDEDE9` fill, `--ink`. Text buttons: `--sel`, 44 px hit area. Destructive: `--bad` text. Icon buttons: 44 px hit area, 22 px icon. Floating add: 58 px circle, `--ink`, 26 px +, shadow `0 10px 26px rgba(0,0,0,.25)`.
+
+### 4.9 Empty, loading, error
+- Empty plan card: centered, 18 px radius, icon well 48 px (brand colour icon), Title 3, subhead text, primary + secondary buttons.
+- Loading: skeleton of 3 cards at their rest height pattern; no spinner for < 400 ms.
+- Load failure: centered message + Retry (primary); never an empty timeline.
+
+### 4.10 Print
+White A4/Letter, 44/52 px margins, header rule 1.5 px black; phase group labels 11 px caps with a 10 px colour square; rows `150 px time | details` with 0.5 px dividers; `Fixed` as a small outlined label; notes italic. No colour fills other than the phase squares.
+
+---
+
+## 5. Layout and responsiveness
+
+- **One width breakpoint: 720 px.** ≤720: phone layout (sheets, toolbar, floating add, collapsed-title behaviour). >720: desktop layout (dialogs, inline card controls, header add button, status control). Content max width 1100 px, centered.
+- **Input capability decides interaction**, not width: `(hover:hover) and (pointer:fine)` enables hover controls and edge handles on hover; coarse pointers use the selection model at any width (iPad, touch laptops).
+- Card content adapts to the card's own height and width through fitting (drop order + `+N` tags), not through extra breakpoints.
+- Narrow phones (320 px): ruler 48 px, plan starts at 54 px; filter chips scroll; toolbar labels may drop to icons only below 340 px.
+- Landscape phones: respect `env(safe-area-inset-left/right)` on the top bar, strip, timeline and toolbar.
+- Safe areas: top bar pads `env(safe-area-inset-top)` in standalone mode; toolbar, toasts and floating add sit above `env(safe-area-inset-bottom)`.
+- Use `dvh` for sheet heights; sheets scroll their body and keep the header visible; focused fields scroll into view above the keyboard (`visualViewport` resize).
+
+---
+
+## 6. Motion
+
+| What | Duration | Easing |
+|---|---|---|
+| Hover, pressed | 100–160 ms | ease-out |
+| Selection ring, handles, toolbar in/out | 180 ms | ease-out (toolbar slides 12 px + fade) |
+| Sheet / dialog | 240 ms in, 200 ms out | `cubic-bezier(.2,.8,.2,1)` |
+| Neighbours during drag, cards after a committed change | 180 ms `transform` | ease-out |
+| Active resize edge, dragged card | **none** (follows pointer) | — |
+| Live pulse | 1.8 s loop | ease-out |
+| Toast | 200 ms | ease-out |
+
+Motion happens after release, never during. `prefers-reduced-motion: reduce` removes all movement and the pulse (opacity changes allowed).
+
+---
+
+## 7. Touch and pointer
+
+- Touch targets ≥ 44 × 44 pt; visible glyphs may be smaller.
+- Handles: visible 40×5 (phone) / 36×4 (desktop); hit area 44 px tall × 120 px wide, centered on the edge, extending outward only on the selected card.
+- Long-press 500 ms with immediate pressed state; reorder hold 150 ms.
+- Movement thresholds: 6 px for tap vs drag, 10 px to cancel long-press.
+- `-webkit-touch-callout: none` and `user-select: none` on cards and handles; text in sheets remains selectable.
+
+---
+
+## 8. Accessibility
+
+- Contrast ≥ 4.5:1 text, ≥ 3:1 icons/borders (checked in both themes). Unlocked lock icon on desktop uses `#8E9098` minimum.
+- Focus ring on every control: 2 px `--sel`, 2 px offset; never removed.
+- Icon-only buttons have labels (`Lock Getting-ready Portraits`).
+- Card accessible name: `Getting-ready Portraits, 12:45 to 1:15 PM, 30 minutes, Photography, fixed` (+ hidden details).
+- Colour is never the only signal: fixed has a lock, conflict has an icon and text, live has “Now”.
+- Reduced motion and larger text (browser zoom to 200 %) keep the layout usable; card text wraps rather than overlaps.
+
+---
+
+## 9. Writing style
+
+- Plain, short, sentence case. No exclamation marks.
+- Times: `2:45 PM`; ranges `12:45 – 1:15 PM` (drop the first AM/PM when both match); durations `30 min`, `1 hr`, `1 hr 30 min`.
+- Name things the way the couple would: “Fixed” (not “locked”), “Open time” (not “gap”), “Changed on another device”, “Not saved”.
+- Toasts say what happened and offer the fix: `Deleted Toast · Undo`, `2 activities shifted · +15 min`.
+- Errors say what to do: “That password didn't work. Try again.”, “Name can't be empty.”
+
+---
+
+## 10. Do and don't
+
+| Do | Don't |
+|---|---|
+| Shrink content to fit true time | Give cards a minimum height that shifts them |
+| Show hidden details on selection | Show details on hover only |
+| Use blue for anything selected or tappable | Use blue for live or fixed |
+| Keep red for problems and delete | Colour the lock red |
+| Put one insertion line where the card will land | Show a floating “Drop here” pill |
+| Show full names then `+N` | Show initials |
+| Use sheets on phone, dialogs on desktop | Use browser `confirm()` / `alert()` |
+| Animate after commit | Animate an edge behind the finger |
