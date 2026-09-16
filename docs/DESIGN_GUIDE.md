@@ -1,7 +1,9 @@
 # Wedding Runbook Planner — Design Guide
 
-**Status:** Source of truth for look and feel · **Version:** 1.0 · **Date:** 2026-09-16
+**Status:** Source of truth for look and feel · **Version:** 1.1 · **Date:** 2026-09-16
 **Visual references:** `docs/mockups/mobile.html`, `docs/mockups/desktop.html` (approved). When a detail isn't covered here, match the mockups.
+
+> **Post-release update:** the post-release timeline rewrite (see `TECHNICAL_SPEC.md`/`FUNCTIONAL_SPEC.md`) renamed "Fixed" to "Locked" throughout the product and changed the card/conflict styling accordingly; §4.3 and §9 below have been updated to match.
 
 ---
 
@@ -150,26 +152,26 @@ Pinned filter row: 44 px, `--sel-tint` glass, `Showing **Photographer** · 2 of 
 - “More” dots: three 3.5 px dots, 2.5 px apart, 9 px from right, 7 px from bottom.
 - Glyphs after title: lock 15 px `--fixed` (solid), note 15 px `--faint`, `● Now` tag 20 px `--live-tint`/`--live`.
 - Tags: 26 px tall, 13 px radius, 13/550; stage tag uses phase tint with phase-coloured icon; people tags use `--fill`; `+N` uses `--fill-strong` and 650.
+- Grip: shown on any unlocked card whenever it can be dragged (not only when selected or hovered) — it is a persistent drag-to-time control, not a reorder-on-selection handle.
 
-**Desktop card:** columns `grip 22 | bar | time 132 | stage 138 | title & meta (1fr) | controls`. Row 1: time range (13 `--soft`) over duration (14/600), stage tag, title (16/600) with glyphs, lock and ⋯ (34 px buttons, `#9A9CA3`, locked `--fixed`). Row 2: location left, people right. Under 30 min: padding 7, people hidden, dots shown.
+**Desktop card:** columns `grip 22 | bar | time 132 | stage 138 | title & meta (1fr) | controls`. Row 1: time range (13 `--soft`) over duration (14/600), stage tag, title (16/600) with glyphs, lock and pencil/Edit (34 px buttons, `#9A9CA3`, locked `--fixed`). There is no ⋯ button on the card face — Duplicate and Delete live in the Edit dialog. Row 2: location left, people right. Under 30 min: padding 7, people hidden, dots shown.
 
 **States**
 
 | State | Treatment |
 |---|---|
 | Rest | Rest elevation |
-| Hover (desktop) | Hover elevation; controls `#5F6269`; resize bars 36×4 `--sel` at top (flexible) and bottom |
+| Hover (desktop) | Hover elevation; controls `#5F6269`; resize bars 36×4 `--sel` at top (unless locked) and bottom |
 | Pressed (touch) | Scale 0.99, 100 ms |
 | Focus | 2 px `--sel` ring offset 2 px |
-| Selected | 2 px `--sel` ring + `0 8px 22px rgba(10,108,255,.14)`; handles 40×5 `--sel` top (flexible) and bottom; reorder ≡ icon 20 px in a 44 px area at top-right; body right padding 44 px |
+| Selected | 2 px `--sel` ring + `0 8px 22px rgba(10,108,255,.14)`; handles 40×5 `--sel` top (unless locked) and bottom; grip (not a selection-only reorder icon — see above); body right padding 44 px |
 | Resizing | Selected + snap line/label + bubble (`--ink` background, white 13/600, 10 px radius) |
-| Dragging | Lifted elevation; slot `--sel-tint` with 1.5 px `--sel` border and 3 px `--sel` insertion line; `Lands at 1:50 PM` 12/650 `--sel` |
+| Dragging (move) | Lifted elevation; the card itself follows the pointer with a live snap line/label at its new time, same treatment as resizing; a group move (§5.6 of `FUNCTIONAL_SPEC.md`) animates the other selected, unlocked cards to their new positions on release |
 | Live | 1.5 px `--live` outline + soft green shadow; `● Now` tag; green progress |
 | Past (day-of) | Opacity 0.45 |
 | Filtered out | Opacity 0.32 |
-| Overrun | 1 px `rgba(208,52,44,.45)` outline; overlapping part hatched 135° red at 10 %/2 % |
-| Fixed in conflict | Same outline; `Fixed · 20 min overlap` warning |
-| Conflict columns | Overrun 55 % left, fixed 45 % right, 6 px gap; narrow cards wrap title and location, hide stage and people; red 3 px bar in the ruler over the overlap |
+| Overlapping | 1 px `rgba(208,52,44,.45)` outline on every card in the overlap, locked or not; only the exact overlapping sub-range is hatched 135° red at 10 %/2 % (not the whole card); `Overlaps N min with <title>` warning on each |
+| Overlap lanes | Equal-width lanes across however many activities overlap at once (interval-graph colouring; no fixed/overrunning asymmetry), 6 px gap; narrow cards wrap title and location, hide stage and people; red 3 px bar in the ruler over the overlap |
 
 ### 4.4 Open time block
 Dashed 1.5 px `#CFCFC8`, 12 px radius, `rgba(255,255,255,.35)` fill. Centered `35 min open` (16/600 `--ink-2`), `before Ceremony` (14 `--soft`), 30 px + button. Under 70 px tall: single left-aligned line, 13/600, no button. Active (tapped): `--sel` border, `--sel-tint` fill, `--sel` text.
@@ -252,8 +254,8 @@ Motion happens after release, never during. `prefers-reduced-motion: reduce` rem
 - Contrast ≥ 4.5:1 text, ≥ 3:1 icons/borders (checked in both themes). Unlocked lock icon on desktop uses `#8E9098` minimum.
 - Focus ring on every control: 2 px `--sel`, 2 px offset; never removed.
 - Icon-only buttons have labels (`Lock Getting-ready Portraits`).
-- Card accessible name: `Getting-ready Portraits, 12:45 to 1:15 PM, 30 minutes, Photography, fixed` (+ hidden details).
-- Colour is never the only signal: fixed has a lock, conflict has an icon and text, live has “Now”.
+- Card accessible name: `Getting-ready Portraits, 12:45 to 1:15 PM, 30 minutes, Photography, locked` (+ hidden details).
+- Colour is never the only signal: locked has a lock icon, overlap has an icon and text, live has “Now”.
 - Reduced motion and larger text (browser zoom to 200 %) keep the layout usable; card text wraps rather than overlaps.
 
 ---
@@ -262,8 +264,8 @@ Motion happens after release, never during. `prefers-reduced-motion: reduce` rem
 
 - Plain, short, sentence case. No exclamation marks.
 - Times: `2:45 PM`; ranges `12:45 – 1:15 PM` (drop the first AM/PM when both match); durations `30 min`, `1 hr`, `1 hr 30 min`.
-- Name things the way the couple would: “Fixed” (not “locked”), “Open time” (not “gap”), “Changed on another device”, “Not saved”.
-- Toasts say what happened and offer the fix: `Deleted Toast · Undo`, `2 activities shifted · +15 min`.
+- Name things the way the couple would: “Locked” (the current term — superseded the earlier “Fixed”, which no longer means the same thing since the timeline rewrite removed the flexible/fixed chain), “Open time” (not “gap”), “Changed on another device”, “Not saved”.
+- Toasts say what happened and offer the fix: `Deleted Toast · Undo`, `Locked <title> · Undo`. There is no “N activities shifted” toast any more — locking, unlocking, resizing and moving one activity never shift another.
 - Errors say what to do: “That password didn't work. Try again.”, “Name can't be empty.”
 
 ---
@@ -274,9 +276,9 @@ Motion happens after release, never during. `prefers-reduced-motion: reduce` rem
 |---|---|
 | Shrink content to fit true time | Give cards a minimum height that shifts them |
 | Show hidden details on selection | Show details on hover only |
-| Use blue for anything selected or tappable | Use blue for live or fixed |
+| Use blue for anything selected or tappable | Use blue for live or locked |
 | Keep red for problems and delete | Colour the lock red |
-| Put one insertion line where the card will land | Show a floating “Drop here” pill |
+| Show a live snap line/label at the time the card will land, exactly like a resize | Show a floating “Drop here” pill or a discrete insertion line by list position |
 | Show full names then `+N` | Show initials |
 | Use sheets on phone, dialogs on desktop | Use browser `confirm()` / `alert()` |
-| Animate after commit | Animate an edge behind the finger |
+| Animate after commit | Animate an edge or a dragged card behind the finger |

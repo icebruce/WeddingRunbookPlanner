@@ -1,10 +1,12 @@
 # Wedding Runbook Planner — Functional Specification
 
-**Status:** Source of truth for product behaviour · **Version:** 2.0 · **Date:** 2026-09-16
+**Status:** Source of truth for product behaviour · **Version:** 2.1 · **Date:** 2026-09-16
 **Replaces:** `WeddingRunbookPlanner_PRD_Functional_Spec.md` (v1, 2026-09-15)
 **Companions:** `TECHNICAL_SPEC.md`, `DESIGN_GUIDE.md`, `IMPLEMENTATION_PLAN.md`, mobile and desktop mockups
 
 When this document and the mockups disagree on behaviour, this document wins. When they disagree on look, the mockups and `DESIGN_GUIDE.md` win.
+
+> **Post-release update:** §2.1, §3.5, §4, §5.2, §5.3, §5.6, §5.9 and §5.19 below have been rewritten to match a post-release timeline-model rewrite (commit `2939550` onward) that replaced the original Flexible/Fixed propagation model with independent, absolute activity starts. See `IMPLEMENTATION_PLAN.md`/`RELEASE_CHECK.md` for what shipped before that rewrite.
 
 ---
 
@@ -48,25 +50,23 @@ Saturday, November 21, 2026 · Ceremony at St. Peter and Paul Orthodox Sobor, 2:
 
 | Term | Meaning |
 |---|---|
-| **Activity** | A block with title, duration, stage, location, people, notes. Start and end are 5-minute multiples. |
-| **Flexible** | Starts when the previous activity ends (plus any open time placed before it). Default. |
-| **Fixed** | Starts at a set clock time. Never moved by changes elsewhere. Shown with a solid dark lock. |
-| **Open time** | Unscheduled time between activities. Either before a fixed activity (automatic) or placed before a flexible activity by resizing its top edge (stored). |
-| **Conflict** | Earlier work runs past the start of a fixed activity. The fixed activity stays put; the overlap is shown. |
+| **Activity** | A block with title, duration, stage, location, people, notes, and its own absolute start. Start and end are 5-minute multiples. |
+| **Locked** | Exempts the activity from a group move (§5.6). It has no other effect: locking or unlocking never moves the activity or anything else. Shown with a solid dark lock. |
+| **Open time** | Unscheduled time between activities, derived from the gaps in the merged set of occupied minutes. Not stored on any activity. |
+| **Overlap** | Any two activities whose times intersect, locked or not. Both keep their true times, drawn side by side for the overlapping stretch. There is no fixed-vs-overrunning asymmetry. |
 | **Stage** | Category of an activity. 11 stages grouped into 6 phases; the phase sets the colour. |
 | **Plan status** | Draft, Working, Confirming, Final. Final switches on day-of view. |
 | **Day-of view** | Read-only running view with a live strip, time line and faded past activities. |
 
 ### 2.1 Scheduling rules
 
-- Activities are an ordered list. The first flexible activity starts at **First activity starts** (plan setting).
-- Flexible activity: `start = end of previous + stored open time before it`.
-- Fixed activity: `start = its fixed time`. If the previous work ends earlier, the difference is open time. If later, it is a conflict.
-- Times after midnight belong to the next day when they follow a late activity (e.g. a fixed 1:15 AM after an 11 PM activity).
-- Duration: 5 to 720 minutes, always a multiple of 5. Typed values round **up** (42 → 45, 3 → 5). No browser validation messages.
-- All typed clock times round up to the next 5 minutes.
-- Growing an activity pushes later flexible activities; it does not consume stored open time placed before a later activity, and never moves a fixed activity.
-- Shrinking an activity pulls later flexible activities earlier. Open time created before a fixed activity stays as open time until the user decides (§5.9).
+- Activities each carry their own absolute start; nothing here is a chain. Moving, resizing or deleting one activity never moves another.
+- Duration: 5 to 720 minutes, always a multiple of 5. Typed values round to the nearest 5. No browser validation messages.
+- All typed clock times round to the nearest 5 minutes.
+- Times after midnight belong to the next day when they follow a late activity (e.g. 1:15 AM after an 11 PM activity) — a plan's day can run past 1440 minutes.
+- Growing, shrinking or moving an activity never moves any other activity. Two activities are allowed to occupy the same minutes; that is drawn as an overlap (§3.5), not resolved or hidden.
+- The one deliberate way several activities move together is a **group move** (§5.6): select two or more, drag any of their grips, and every unlocked activity in the selection shifts by the same amount. A locked activity in the selection stays put.
+- Open time is never stored on an activity — it is always derived fresh from the current gaps between activities (§5.9).
 
 ---
 
@@ -126,7 +126,7 @@ At the approved scale this gives:
 
 **Stage colour:** a vertical bar on the card's left in the stage's phase colour, inset top and bottom, scaling with the card.
 
-**Desktop card:** one row with grip, bar, time and duration, stage tag, title with glyphs, lock and ⋯ buttons; second row with location left and people right. Cards under 30 minutes hide people and show the dots.
+**Desktop card:** one row with grip, bar, time and duration, stage tag, title with glyphs, lock and pencil (Edit) buttons; second row with location left and people right. Cards under 30 minutes hide people and show the dots. There is no ⋯ menu on the card face — Duplicate and Delete live in the activity editor (§5.2), reached via the pencil.
 
 ### 3.4 Open time block
 
@@ -134,9 +134,10 @@ Dashed, quiet block filling the open interval: `35 min open` / `before Ceremony`
 
 ### 3.5 Conflict layout
 
-When activities truly overlap in time, they are placed side by side in columns for the overlapping stretch (overrunning work left, fixed activity right). Both keep their true times. The overlapping part of the overrunning card is hatched red, and a red bar marks the overlap in the ruler. Messages:
-- On the overrunning card: `Runs 5 min into Ceremony` (short cards: `15 min over`).
-- On the fixed card: `Fixed · 20 min overlap`.
+Any two (or more) activities whose times truly overlap are placed in side-by-side lanes for the overlapping stretch — an equal-width split among however many activities overlap at once (interval-graph colouring, not a fixed-vs-overrunning pair). Locked and unlocked activities are treated identically; there is no asymmetric role. Both/all keep their true times. Only the exact overlapping sub-range of each card is hatched red (not the whole card), and a red bar marks the overlap in the ruler.
+
+Message on each overlapping card: `Overlaps N min with <other title>` (or, for three or more overlapping activities, `Overlaps N min with <count> activities`). There is no separate "Fixed · N min overlap" wording — the message is the same regardless of lock state.
+
 The summary line shows `20 min conflict ›`.
 
 ---
@@ -148,15 +149,15 @@ The summary line shows `20 min conflict ›`.
 | Gesture | Result |
 |---|---|
 | Swipe anywhere on a card or the timeline | Scrolls. Never resizes or moves. |
-| Tap card | Selects it (blue ring, handles, toolbar) |
+| Tap card | Selects it (blue ring, handles, grip, toolbar) |
 | Tap empty timeline / outside | Deselects |
 | Long-press card (~500 ms) | Opens the edit sheet. Cancelled if the finger moves >10 px or scrolling starts. Pressed feedback appears immediately. |
 | Drag top/bottom handle of selected card | Resizes (§5.5) |
-| Press and hold reorder handle (~150 ms), then drag | Moves the card (§5.6) |
+| Drag the card's grip | Moves the card to a new time (§5.6) |
 | Tap open time | Open-time actions |
 | Tap summary link | Scrolls to open time or conflict |
 
-**Selected card** shows: blue ring; reorder handle (≡) on its right; bottom handle; top handle only if flexible. Handles are small visible bars with large invisible touch areas. The add button is replaced by the **selection toolbar**:
+**Selected card** shows: blue ring; grip (always visible on any unlocked card, not only when selected); bottom handle; top handle unless locked. Handles are small visible bars with large invisible touch areas. The add button is replaced by the **selection toolbar**:
 
 - Context line: `Getting-ready Portraits · 12:45 – 1:15 PM`
 - Second line (only if the card hides anything): the hidden details, e.g. the full people list.
@@ -166,21 +167,22 @@ The summary line shows `20 min conflict ›`.
 
 | Action | Result |
 |---|---|
-| Hover card | Controls brighten; resize handles appear (top only if flexible) |
+| Hover card | Controls brighten; resize handles appear (top unless locked) |
 | Click card | Selects |
-| Click empty area | Deselects |
+| Ctrl/Cmd-click card | Adds it to a group selection (2+ cards), for a group move (§5.6) |
+| Click empty area | Deselects, clears group selection |
 | Double-click card | Edit dialog |
-| Drag grip | Moves the card |
+| Drag grip | Moves the card to a new time; with a group selection, drags every unlocked card in it together by the same amount |
 | Drag top/bottom edge | Resizes |
-| Click lock | Fix / unfix |
+| Click lock | Lock / unlock (exempts from group move; has no other effect) |
 | Click stage tag | Stage menu |
-| Click ⋯ | Edit, Duplicate, Delete |
+| Click pencil | Opens the Edit dialog (which also offers Duplicate and Delete) |
 | Click open time | Open-time menu beside it |
 
 ### 4.3 Keyboard (desktop)
 
 - Tab moves through controls in reading order; Enter/Space on a card selects it; Enter on a selected card opens Edit.
-- Alt + ↑/↓ moves the selected flexible card up/down.
+- Alt + ↑/↓ on a selected, unlocked card moves its start 5 min earlier/later (not a reorder — its time changes, its place in the list follows).
 - On a focused resize handle: ↓ moves the edge 5 min later, ↑ 5 min earlier.
 - Esc closes menus and dialogs, cancels a drag or resize in progress, then clears selection.
 - ⌘/Ctrl + Z undoes the last change (same as the Undo toast).
@@ -199,7 +201,7 @@ Phone: bottom sheet (Cancel · Edit activity · Done). Desktop: centered dialog,
 
 Fields in order:
 1. **Name** — required, trimmed, 1–120 characters.
-2. **Timing** block — Starts: `Flexible | Fixed`. Flexible shows “Follows the activity before it” and the calculated start. Fixed shows an editable time. Duration stepper (−/+ 5 min, typed value rounds up). Ends (calculated).
+2. **Timing** block — a single date+time field (picker, §8.5 of `TECHNICAL_SPEC.md`) sets the activity's absolute start directly; there is no separate Flexible/Fixed choice. Duration stepper (−/+ 5 min, typed value rounds to nearest 5). Ends (calculated). A **Locked** checkbox/toggle sets whether this activity is exempt from a group move (§5.6) — it does not change where the activity starts.
 3. **Location** — up to 140 characters, with suggestions from locations already used.
 4. **Stage** — chip grid, current one outlined.
 5. **People** — removable chips, `+ Add` field with suggestions from names already used, Enter adds, duplicates (case-insensitive) ignored, max 30 entries of 80 characters. **Text typed but not yet added is added on Done.**
@@ -208,41 +210,38 @@ Fields in order:
 
 Done validates and applies; errors appear inline under the field and keep the sheet open. Cancel discards. Swiping the sheet down equals Cancel; if there are unsaved changes, ask “Discard changes?”.
 
-### 5.3 Fixed times (lock)
-- Fixing a flexible activity fixes it at its current start.
-- Unfixing returns it to flexible; it moves to follow the previous activity. A toast reports the effect: `Ceremony now starts 2:10 PM · 3 activities shifted · Undo`.
-- Fixed activities cannot be moved and have no top resize handle. Their bottom edge can be resized.
+### 5.3 Locking
+- Locking or unlocking an activity never changes its start or duration, and never moves any other activity. Its only effect is whether the activity participates in a group move (§5.6).
+- Toast: `Locked <title> · Undo` / `Unlocked <title> · Undo`. There is no "N activities shifted" shift toast for locking — nothing shifts.
+- A locked activity cannot be resized or moved by any gesture (no grip, no resize handles) until unlocked.
 
 ### 5.4 Stage
 - Phone: toolbar → Stage → list sheet with current stage ticked. Desktop: click the stage tag → menu.
 - Applies immediately; card colour and tag update; Undo offered.
 
 ### 5.5 Resize
-Available on the selected card (phone) or hovered/selected card (desktop).
+Available on the selected card (phone) or hovered/selected card (desktop). Locked activities cannot be resized (no handles are shown).
 
-**Bottom edge:** start stays; end follows the pointer; later flexible activities move; fixed ones stay (and show a conflict if reached).
+**Bottom edge:** start stays; end follows the pointer. No other activity moves; if the new end now overlaps a following activity, that is shown as an overlap (§3.5), not prevented or auto-pushed.
 
-**Top edge (flexible only):** end stays; start follows the pointer.
-- Dragging down shortens the activity and creates open time before it (stored with the activity).
-- Dragging up first uses that stored open time; it stops at the previous activity's end (no overlap created).
-- The open time moves together with the activity when earlier activities change.
+**Top edge:** end stays; start follows the pointer, clamped so the activity keeps at least 5 minutes and its start never goes below 0. Dragging it does not create or consume any "stored open time" — open time is always just whatever gap is currently between activities (§5.9), never something attached to a particular activity.
 
 **Both edges:**
 - The edge follows the pointer exactly; no lag or easing during the drag.
 - The target 5-minute line and its label highlight in blue; a bubble shows `Ends 1:25 PM · 40 min` or `Starts 12:55 PM · 20 min`.
-- Later activities preview their new positions during the drag.
+- No other card's position previews or changes during the drag — only the one being resized.
 - Release commits; Esc or a cancelled touch restores everything exactly.
 - Minimum 5 minutes, maximum 12 hours.
 - Undo offered after commit.
 
-### 5.6 Reorder
-- Starts only from the grip (desktop) or reorder handle (phone, after a short hold). Fixed activities cannot be moved.
-- While dragging: the card lifts and follows the pointer; one insertion line and a slot at the **exact landing time** (`Lands at 1:50 PM`) appear; neighbours animate to their new times; the slot changes only after the pointer passes the midpoint of the next position (with a small buffer to prevent flicker).
-- Near the top/bottom of the screen the page scrolls automatically.
-- Release commits exactly what was shown. Esc or cancel restores the original order.
-- Dropping onto the same position changes nothing (no save).
-- If the result creates a conflict, it is shown in the preview.
-- Desktop keyboard alternative: Alt + ↑/↓.
+### 5.6 Move and group move
+- **Single card:** drag its grip anywhere on the timeline to set its start directly — a continuous drag-to-time, not a discrete reorder by position. The target 5-minute line and time highlight as the card is dragged, the same as a resize. Locked activities have no grip and cannot be dragged.
+- **Group move:** Ctrl/Cmd-click (desktop) or the equivalent multi-select gesture adds cards to a group selection (2+ cards); dragging any selected card's grip moves every *unlocked* card in the selection by the same amount of time. A locked card in the selection stays exactly where it is — this is the one deliberate way several activities move together, and it never happens as a side effect of any other change.
+- Near the top/bottom of the screen the page scrolls automatically while dragging.
+- Release commits exactly what was shown. Esc or cancel restores the original positions.
+- Dropping back on the same time changes nothing (no save).
+- If the result creates an overlap, it is shown in the preview, not prevented.
+- Desktop keyboard alternative for a single unlocked card: Alt + ↑/↓ moves it 5 min earlier/later (§4.3).
 
 ### 5.7 Duplicate
 Copies all fields except fixed time (copy is flexible), inserted directly after the original, selected.
@@ -251,10 +250,10 @@ Copies all fields except fixed time (copy is flexible), inserted directly after 
 No confirmation dialog. The activity is removed, the schedule updates, and a toast offers **Undo** for 6 seconds. Selection clears.
 
 ### 5.9 Open-time actions
-Opened by tapping open time (phone: action sheet; desktop: menu next to it). Header: `35 min open before Ceremony · 2:10 – 2:45 PM`.
-1. **Keep as buffer** — inserts a real Buffer activity for exactly that time (and clears any stored open time there).
-2. **Extend <previous activity>** — the previous activity's end moves to the end of the open time (allowed even if the previous activity is fixed).
-3. **Add activity here** — new flexible activity filling the open time.
+Opened by tapping open time (phone: action sheet; desktop: menu next to it). Header: `35 min open before Ceremony · 2:10 – 2:45 PM`. Open time is computed fresh each time from the current gaps between activities — it is never something stored on an activity that these actions "clear".
+1. **Keep as buffer** — inserts a real Buffer activity for exactly that time.
+2. **Extend <previous activity>** — the previous activity's end moves to the end of the open time (allowed regardless of that activity's lock state).
+3. **Add activity here** — new activity filling the open time.
 4. Cancel.
 Nothing changes until one is chosen. Each choice can be undone.
 
@@ -299,10 +298,9 @@ Sheet (phone) / dialog (desktop):
 ### 5.19 Plan settings
 Sheet / dialog, Done applies:
 - **Plan:** Planner name, Day title, Date.
-- **Schedule:** First activity starts; Sunset marker.
+- **Schedule:** Sunset marker. (There is no "First activity starts" setting — nothing schedules from a single anchor time; each activity's own start decides where the day begins.)
 - **Timeline view:** Shows from; Shows until (may be after midnight, shown as “next day”). Help: “Only changes what you see. The view always grows to fit every activity.”
-- **Appearance:** Theme `Light | Dark` (default Light). Stored on this device only.
-Validation inline. Changing the view range never moves activities.
+Validation inline. Changing the view range never moves activities. The dark/light appearance switch (§5.22) lives only in the main menu, not duplicated here.
 
 ### 5.20 Plan status
 Draft · Working · Confirming · Final. Phone: in the menu. Desktop: control in the top bar. Setting **Final** turns on day-of view on all devices (§6).
@@ -403,11 +401,11 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 
 **Cards:** no two cards visually overlap except in conflict columns; rows drop in the defined order; dots appear exactly when something is hidden; people show full names then `+N`; stage bar matches phase colour.
 
-**Phone gestures:** a swipe starting anywhere on a card scrolls and never changes data; long-press opens edit; scroll cancels long-press; handles appear only on the selected card; fixed cards have no top handle.
+**Phone gestures:** a swipe starting anywhere on a card scrolls and never changes data; long-press opens edit; scroll cancels long-press; handles and grip appear only on unlocked cards; locked cards have no handles or grip.
 
-**Resize:** edge follows pointer within 1 px; commits on 5-minute lines; top resize creates and consumes stored open time as defined; Esc restores; undo works.
+**Resize:** edge follows pointer within 1 px; commits on 5-minute lines; resizing one activity never moves another; Esc restores; undo works.
 
-**Reorder:** landing position shown equals committed position; cancel restores; fixed cards cannot move; autoscroll works; same-position drop does not save.
+**Move / group move:** dragged position shown equals committed position; cancel restores; locked cards cannot move on their own or as part of a group selection; autoscroll works; same-position drop does not save; a group move shifts every unlocked selected card by the same amount and leaves locked ones in place.
 
 **Open time and conflicts:** open time visible and actionable; three actions behave as defined; conflicts shown in columns with correct messages and summary.
 
@@ -423,7 +421,7 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 
 ## 10. QA scenarios (minimum)
 
-1. All-flexible plan · 2. Fixed activity with open time before it · 3. Conflict with fixed activity · 4. Shrink before a fixed activity · 5. Grow into open time · 6. Grow into a fixed activity · 7. 5-, 10-, 15-, 25-, 30-minute and 3-hour cards · 8. Top resize down then up · 9. Top resize after earlier activity grows · 10. Drag first→last, last→first, around a fixed activity, cancel · 11. Scroll starting on every part of a card (phone) · 12. Long-press edit, long-press cancelled by scroll · 13. Stage change, fix/unfix with shift toast · 14. Many people, long location, long title · 15. Plan crossing midnight, view range ending after midnight · 16. Activity outside the configured view range · 17. Offline edit → reload → reconnect · 18. Server 500 and 400 on save · 19. Session expiry mid-edit · 20. Two devices editing · 21. Version save/restore/delete · 22. Day-of before/during/open/conflict/after · 23. Edit on the day and auto-return · 24. Person filter + print · 25. Empty plan + template · 26. Dark appearance on all screens · 27. Keyboard-only desktop pass · 28. Screen reader pass on phone · 29. 320 px, 390 px, 430 px, 740 px, 1024 px, 1440 px widths, phone landscape · 30. iPad with touch (no hover).
+1. Plan with no overlaps · 2. Activity with open time before it · 3. Two activities overlapping · 4. Three-way overlap · 5. Shrink an activity so it no longer overlaps · 6. Grow an activity into a following one (creates an overlap, nothing is pushed) · 7. 5-, 10-, 15-, 25-, 30-minute and 3-hour cards · 8. Top resize, bottom resize, both in sequence · 9. Resize one activity with an overlapping neighbour unaffected · 10. Drag a card's grip to an earlier time, a later time, onto another activity's time, cancel · 10a. Group-select two+ cards (one locked), drag: locked one stays, others move by the same delta; cancel restores all · 11. Scroll starting on every part of a card (phone) · 12. Long-press edit, long-press cancelled by scroll · 13. Stage change, lock/unlock with no shift · 14. Many people, long location, long title · 15. Plan crossing midnight, view range ending after midnight · 16. Activity outside the configured view range · 17. Offline edit → reload → reconnect · 18. Server 500 and 400 on save · 19. Session expiry mid-edit · 20. Two devices editing · 21. Version save/restore/delete · 22. Day-of before/during/open/conflict/after · 23. Edit on the day and auto-return · 24. Person filter + print · 25. Empty plan + template · 26. Dark appearance on all screens · 27. Keyboard-only desktop pass · 28. Screen reader pass on phone · 29. 320 px, 390 px, 430 px, 740 px, 1024 px, 1440 px widths, phone landscape · 30. iPad with touch (no hover) · 31. Phone hardware/gesture back closes an open sheet, menu, or card selection instead of leaving the app.
 
 ---
 
@@ -435,7 +433,7 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 | D2 | Phone selection toolbar instead of per-card inline controls | Grip, stage chip, lock, ⋯ and resize strip on every card |
 | D3 | Solid dark lock for fixed; red only for conflict and delete | Red lock icon |
 | D4 | Stage colours by phase (6), icon identifies the stage | 11 near-duplicate pastels |
-| D5 | Top-edge resize for flexible activities, creating stored open time; none for fixed | Bottom-only resize; earlier “no top resize” |
+| D5 | Top-edge resize for any unlocked activity; open time is always derived, never stored on an activity (superseded by the post-release timeline rewrite, commit `2939550`) | Bottom-only resize; earlier “no top resize” |
 | D6 | “Keep as buffer” inserts a Buffer activity | Undefined “keep” with no persistent effect |
 | D7 | Undo toast instead of delete confirmation; toasts only for undo, shifts, errors | Browser confirm; toast after every change |
 | D8 | Time-true layout, 20 px per 5 min; rows drop by priority with dots indicator | 68 px minimum card height that pushed cards off their times; 2.6 px/min |
@@ -453,6 +451,10 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 | D20 | Device copy for offline reading and unsaved edits, cleared on sign-out | Nothing stored on device |
 | D21 | Dark appearance as an in-app switch, light default, not following the system | — |
 | D22 | Changing the password signs out all devices | Sessions survived password change |
-| D23 | Reorder on phone requires a short hold on the handle | Immediate drag |
+| D23 | *(superseded)* Reorder on phone required a short hold on the handle | Immediate drag |
 | D24 | Status control in the phone menu; stays in desktop top bar | Header pill on all sizes |
 | D25 | People tags: full names then `+N`, never initials | First five names, then initials |
+| D26 | Timeline model rewrite (commit `2939550`): every activity stores its own absolute `start`; nothing propagates or auto-pushes; `locked` only exempts an activity from a deliberate group move | Flexible/Fixed propagation chain with stored `gapBefore` and automatic conflict resolution |
+| D27 | Group move: Ctrl/Cmd-click selects multiple cards, dragging any selected grip moves every unlocked one by the same delta | No multi-activity move; reorder moved one activity by list position |
+| D28 | Single date+time picker (flatpickr, vendored) replaces the Flexible/Fixed radio and separate time field in the activity editor | Starts: Flexible \| Fixed radio |
+| D29 | Phone back-button/gesture closes the open sheet, menu, or card selection instead of leaving the app (a dummy history entry pushed while an overlay is open) | Back navigated away from the app with an overlay still open |
