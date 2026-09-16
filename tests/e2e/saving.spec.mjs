@@ -167,15 +167,48 @@ test('F12: "Keep my changes" saves the plan as it is now, not a stale snapshot',
   await renameFirstActivity(other, 'From the other device');
   await expect(other.locator('.save-indicator')).toHaveText('Saved');
 
-  await renameFirstActivity(page, 'Mine, typed first');
-  await expect(page.locator('#conflict-dialog')).toBeVisible();
+  // Hold the first save open long enough to type again while it is in flight.
+  // Those are the changes "Keep my changes" has to mean: the ones made after
+  // the save that is about to be refused was already on its way.
+  let held = false;
+  await page.route('**/api/plan', async (route, request) => {
+    if (request.method() === 'PUT' && !held) {
+      held = true;
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+    await route.fallback();
+  });
 
-  // Typed after the conflict appeared: this is what must survive.
-  await renameFirstActivity(page, 'Mine, typed after the banner');
+  await renameFirstActivity(page, 'Mine, typed first');
+  await page.waitForTimeout(900);
+  await renameFirstActivity(page, 'Mine, typed while saving');
+
+  await expect(page.locator('#conflict-dialog')).toBeVisible();
   await page.locator('[data-action="conflict"][data-choice="local"]').click();
 
   await expect(saveState(page)).toHaveText('Saved', { timeout: 10_000 });
-  expect((await server.read()).plan.activities[0].title).toBe('Mine, typed after the banner');
+  expect((await server.read()).plan.activities[0].title).toBe('Mine, typed while saving');
+});
+
+test('the conflict dialog blocks editing until it is answered', async ({ page, context }) => {
+  await signInAndWaitForPlan(page);
+
+  const other = await context.newPage();
+  await openPlanner(other);
+  await renameFirstActivity(other, 'Theirs');
+  await expect(other.locator('.save-indicator')).toHaveText('Saved');
+
+  await renameFirstActivity(page, 'Mine');
+  await expect(page.locator('#conflict-dialog')).toBeVisible();
+
+  // Nothing behind the dialog can be reached: the plan is not edited further
+  // until it is settled which copy the day carries on from. The control is
+  // still drawn — it is the modal dialog above it that makes it unreachable,
+  // so the test is whether it can be pressed, not whether it is painted.
+  const reachable = await page.locator('.card').first().locator('.card-menu-toggle')
+    .click({ timeout: 1500 }).then(() => true).catch(() => false);
+  expect(reachable).toBe(false);
+  await expect(page.locator('.card-menu')).toHaveCount(0);
 });
 
 test('F27: a session check that fails offers Retry, not the sign-in screen', async ({ page }) => {
