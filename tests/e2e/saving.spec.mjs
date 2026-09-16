@@ -167,21 +167,29 @@ test('F12: "Keep my changes" saves the plan as it is now, not a stale snapshot',
   await renameFirstActivity(other, 'From the other device');
   await expect(other.locator('.save-indicator')).toHaveText('Saved');
 
-  // Hold the first save open long enough to type again while it is in flight.
-  // Those are the changes "Keep my changes" has to mean: the ones made after
-  // the save that is about to be refused was already on its way.
-  let held = false;
+  // Hold the first save open until the second change has been typed. Those are
+  // the changes "Keep my changes" has to mean: the ones made after the save
+  // that is about to be refused was already on its way.
+  //
+  // Held until released rather than for a fixed time: how long a rename takes
+  // is a property of the engine, and a sleep long enough for one is short
+  // enough for another — the refusal used to arrive mid-rename on WebKit and
+  // the dialog swallowed the click.
+  let inFlight = false;
+  let release;
+  const heldUntil = new Promise(resolve => { release = resolve; });
   await page.route('**/api/plan', async (route, request) => {
-    if (request.method() === 'PUT' && !held) {
-      held = true;
-      await new Promise(resolve => setTimeout(resolve, 1500));
+    if (request.method() === 'PUT' && !inFlight) {
+      inFlight = true;
+      await heldUntil;
     }
     await route.fallback();
   });
 
   await renameFirstActivity(page, 'Mine, typed first');
-  await page.waitForTimeout(900);
+  await expect.poll(() => inFlight, { timeout: 10_000 }).toBe(true);
   await renameFirstActivity(page, 'Mine, typed while saving');
+  release();
 
   await expect(page.locator('#conflict-dialog')).toBeVisible();
   await page.locator('[data-action="conflict"][data-choice="local"]').click();

@@ -103,6 +103,81 @@
 
 .switch input:checked + span::after { transform: translateX(18px); }
 
+/*
+ * The People field.
+ *
+ * It had no stylesheet at all: the chips and the Add button were raw form
+ * controls, which look like whatever the browser feels like and, in a dark
+ * appearance in Safari, put grey text on a grey button at 1.82:1.
+ */
+.people-editor { display: flex; flex-direction: column; gap: 10px; }
+
+.people-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.person-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 34px;
+  padding: 0 4px 0 13px;
+  border-radius: 17px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.person-remove {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--faint);
+}
+.person-remove .icon { width: 13px; height: 13px; }
+
+.people-add-trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 17px;
+  background: none;
+  color: var(--sel-text);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+}
+.people-add-trigger .icon { width: 15px; height: 15px; }
+
+.people-add-row { display: flex; align-items: center; gap: 8px; }
+.people-add-row[hidden] { display: none; }
+.people-add-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--spine);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 10px 11px;
+  outline: 0;
+}
+.people-add-confirm { flex: none; }
+
 .danger-action { width: 100%; min-height: 44px; margin-top: 4px; border: 0; border-radius: 10px; background: var(--bad-tint); color: var(--bad-text); display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 650; }
 
 .version-create { display: grid; gap: 10px; padding-bottom: 20px; border-bottom: 1px solid var(--hair); }

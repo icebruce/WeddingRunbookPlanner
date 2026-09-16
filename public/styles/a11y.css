@@ -37,14 +37,18 @@ button, [role="button"], summary, .filter-chip, .stage-choice {
 .delete-version,
 .filter-clear,
 .stepper button,
-.icon-button {
+.icon-button,
+.person-remove,
+.people-add-trigger {
   position: relative;
 }
 .card-controls button::after,
 .delete-version::after,
 .filter-clear::after,
 .stepper button::after,
-.icon-button::after {
+.icon-button::after,
+.person-remove::after,
+.people-add-trigger::after {
   content: '';
   position: absolute;
   top: 50%;
@@ -55,7 +59,8 @@ button, [role="button"], summary, .filter-chip, .stage-choice {
 }
 /* Tags and chips inside a card are not controls and keep their own height. */
 .tag, .stage-tag:not(.stage-tag--button), .card-dots, .now-tag, .mode-pill { min-height: 0; }
-.card-controls button, .stepper button, .icon-button, .delete-version, .filter-clear { min-height: 0; }
+.card-controls button, .stepper button, .icon-button, .delete-version, .filter-clear,
+.person-remove, .people-add-trigger { min-height: 0; }
 
 /*
  * F25 — focus is never removed, and never relies on colour alone.

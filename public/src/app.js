@@ -890,7 +890,16 @@ const ACTION_HANDLERS = {
     }
     if (action === 'export') {
       store.setUi({ openMenu: null });
-      window.location.href = '/api/export';
+      // A download, not a navigation. Setting location.href asks the browser
+      // to go to the file and hope it comes back; Safari does not treat that
+      // as a download at all, and the app would be unloaded if it did not.
+      const link = document.createElement('a');
+      link.href = '/api/export';
+      link.download = `wedding-plan-${store.plan?.date || 'backup'}.json`;
+      link.rel = 'noopener';
+      document.body.append(link);
+      link.click();
+      link.remove();
       return;
     }
     if (action === 'status') {

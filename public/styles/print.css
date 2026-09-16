@@ -75,3 +75,9 @@
   .print-details p { margin: 2px 0 0; font-size: 11px; }
   .print-notes { font-style: italic; }
 }
+
+@media print {
+  .print-stage { margin: 2px 0 0; font-size: 11px; }
+  .print-people { margin: 2px 0 0; font-size: 11px; }
+  .print-empty { margin: 16px 0 0; font-size: 12px; }
+}
