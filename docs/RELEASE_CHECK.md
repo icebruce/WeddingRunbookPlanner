@@ -18,6 +18,21 @@ WebKit could not be downloaded in the development environment, so the
 `iphone-13` and `ipad` projects ran on Chromium with the iOS device
 descriptors. CI installs WebKit and runs them on the real engine.
 
+**That difference is not cosmetic.** Three defects passed every local run and
+failed on CI, and all three were real rather than engine quirks:
+
+- The People field in the editor had no stylesheet at all — raw form controls,
+  whose colours are whatever the browser chooses. Chromium's dark defaults
+  happened to clear the contrast floor and Safari's did not, at 1.82:1.
+- Export navigated to `/api/export` rather than downloading it. Safari does not
+  treat that as a download; and had it not been one, the app would have been
+  unloaded.
+- The conflict test held a save open for a fixed time and typed again after a
+  shorter one. How long a rename takes is a property of the engine.
+
+A green run on the fallback engine is not WebKit coverage, and the config says
+so on every run. Read CI before calling a change done.
+
 ## Decisions
 
 Every decision is named in the test that holds it, so this table can be

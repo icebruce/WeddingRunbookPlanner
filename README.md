@@ -67,6 +67,11 @@ Projects: `desktop-chrome` (1280 px), `iphone-13`, `pixel-7`, `ipad`.
 > Chromium with the same iOS device descriptor and prints a warning, so a green
 > local run is never mistaken for WebKit coverage. CI installs WebKit and runs
 > those projects on the real engine.
+>
+> This has already caught three real defects that every Chromium run passed: an
+> unstyled control whose contrast depended on the browser's own defaults, a
+> download that Safari treated as a navigation, and a test whose timing assumed
+> one engine's speed. **Read CI before calling a change done.**
 
 Playwright is pinned to an exact version because the browser build revision has
 to match the installed browsers.
