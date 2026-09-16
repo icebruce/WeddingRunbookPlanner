@@ -336,8 +336,21 @@ function showDiscardAlert() {
 // "close the top thing" instead. Closing that thing any other way (Cancel,
 // tapping the scrim, Escape) consumes the same entry with `history.back()`
 // so the phone's back stack never grows a trail of dead stops.
+//
+// `history.back()` is not immediate — its `popstate` lands on a later tick —
+// while `pushState` takes effect at once. Closing one sheet and opening the
+// next (the open-time sheet handing straight to the activity editor;
+// finishing that editor and landing back on the card it created selected)
+// happens in the same synchronous stretch of code, as two separate store
+// updates. Reacting to each update as it happens would call `back()` for
+// the close and then `pushState` for the reopen before that `back()` had
+// even landed, leaving the real history position one entry off from what
+// this module believes it is. Reacting once, on a microtask queued after
+// the synchronous stretch finishes, sees only the net change — nothing to
+// do at all when a close is immediately followed by an open.
 let overlayHistoryPushed = false;
 let ignoreNextPopstate = false;
+let overlaySyncQueued = false;
 
 function topOverlayOpen() {
   return Boolean(
@@ -349,15 +362,20 @@ function topOverlayOpen() {
 }
 
 function syncOverlayHistory() {
-  const open = topOverlayOpen();
-  if (open && !overlayHistoryPushed) {
-    overlayHistoryPushed = true;
-    history.pushState({ wrpOverlay: true }, '');
-  } else if (!open && overlayHistoryPushed) {
-    overlayHistoryPushed = false;
-    ignoreNextPopstate = true;
-    history.back();
-  }
+  if (overlaySyncQueued) return;
+  overlaySyncQueued = true;
+  queueMicrotask(() => {
+    overlaySyncQueued = false;
+    const open = topOverlayOpen();
+    if (open && !overlayHistoryPushed) {
+      overlayHistoryPushed = true;
+      history.pushState({ wrpOverlay: true }, '');
+    } else if (!open && overlayHistoryPushed) {
+      overlayHistoryPushed = false;
+      ignoreNextPopstate = true;
+      history.back();
+    }
+  });
 }
 
 window.addEventListener('popstate', () => {
