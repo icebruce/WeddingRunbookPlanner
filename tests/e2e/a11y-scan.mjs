@@ -1,11 +1,12 @@
 /**
  * A small accessibility scan, run inside the page.
  *
- * It is not a replacement for axe-core; it checks the three things this app
- * was actually failing, from the review that started the redesign:
- * controls without an accessible name, text below the contrast it needs, and
- * ARIA that says something untrue. Being small means it can run on every
- * screen in both themes on every project without slowing the suite down.
+ * It is not a replacement for axe-core; it checks the things this app has
+ * actually been caught failing: controls without an accessible name, text
+ * below the contrast it needs, icons below the (lower) contrast an icon
+ * needs, and ARIA that says something untrue. Being small means it can run
+ * on every screen in both themes on every project without slowing the suite
+ * down.
  */
 export const SCAN = `(() => {
   const luminance = rgb => {
@@ -119,7 +120,47 @@ export const SCAN = `(() => {
     if (size < 12) problems.push({ kind: 'tiny-text', where: where(node), size });
   }
 
-  // 3. No ARIA that says something untrue.
+  // 3. Icons meet the 3:1 floor for non-text UI (DESIGN_GUIDE §8), not the
+  // 4.5:1 text needs. Icons are drawn with \`stroke="currentColor"\` (or
+  // fill), so their colour is the element's own \`color\`, not text content —
+  // the text-contrast pass above never looks at them at all, which is
+  // exactly how the drag grip's failing contrast (F25 follow-up) passed
+  // every existing check.
+  const iconShown = node => {
+    const style = getComputedStyle(node);
+    if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) < 0.2) return false;
+    const rect = node.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  };
+  for (const node of document.querySelectorAll('svg.icon')) {
+    // Icons are always aria-hidden (decorative; the control they sit in
+    // carries the name), so this cannot reuse \`visible()\` above — that
+    // treats aria-hidden as invisible, which is right for the accessible-name
+    // and text checks but wrong here: an aria-hidden icon can still be the
+    // only thing on screen a sighted person reads. checkVisibility (where
+    // supported) also correctly follows an ancestor's opacity — a hover-only
+    // control's icon is not counted while nothing has revealed it.
+    const shown = typeof node.checkVisibility === 'function'
+      ? node.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })
+      : iconShown(node);
+    if (!shown) continue;
+
+    const colour = parse(getComputedStyle(node).color);
+    if (!colour || colour.alpha < 0.9) continue;
+
+    const measured = ratio(colour.rgb, backdrop(node));
+    if (measured + 0.05 < 3) {
+      const owner = node.closest('button, [role="button"], a, .card-grip, .tag, .stage-tag') || node.parentElement || node;
+      problems.push({
+        kind: 'icon-contrast',
+        where: where(owner),
+        ratio: Math.round(measured * 100) / 100,
+        needed: 3
+      });
+    }
+  }
+
+  // 4. No ARIA that says something untrue.
   for (const node of document.querySelectorAll('[aria-selected]')) {
     const role = node.getAttribute('role') || node.tagName.toLowerCase();
     const allowed = ['option', 'tab', 'row', 'gridcell', 'treeitem', 'columnheader', 'rowheader'];

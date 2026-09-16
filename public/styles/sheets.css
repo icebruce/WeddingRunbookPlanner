@@ -289,6 +289,7 @@
    activity opened with would keep showing that one as current even after a
    different chip was picked, alongside the newly-checked one. */
 .stage-choice:has(input:checked) { box-shadow: inset 0 0 0 1.5px var(--phase); font-weight: 650; }
+.stage-choice:hover:not(:has(input:checked)) { box-shadow: inset 0 0 0 1px var(--phase); }
 .stage-choice:focus-within { outline: 2px solid var(--sel); outline-offset: 2px; }
 
 /* ---- action sheets ------------------------------------------------------- */
