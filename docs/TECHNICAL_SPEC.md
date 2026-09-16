@@ -118,12 +118,19 @@ type Activity = {
   location: string;         // 0–140
   people: string[];         // max 30, each 1–80, unique case-insensitively
   notes: string;            // 0–1000
-  lockedStart: string | null;   // HH:MM, 5-min; null = flexible
-  gapBefore?: number;       // NEW. minutes, 0..720, multiple of 5; ignored when lockedStart set
+  start: number;            // absolute minutes from midnight on the plan's date
+  locked: boolean;          // true = fixed to `start`; false = follows the previous activity
 };
 ```
 
-Migration: none required. Missing optional fields default (`gapBefore` 0, `sunset` "16:19", view range derived). Unknown fields are dropped on save.
+> **Note (superseded design):** earlier drafts of this spec described a relative-cursor
+> scheduling model (`lockedStart: string | null` + `gapBefore` minutes, with `fix`/`unfix`
+> operations deriving positions from a running cursor). That model was never implemented.
+> The actual, shipped model — and the source of truth for tests — stores each activity's
+> `start` as an absolute minute offset plus a plain `locked` boolean; there is no `gapBefore`
+> field and no cursor concept anywhere in the code. See §5 below for the real model.
+
+Migration: none required. Missing optional fields default (`sunset` "16:19", view range derived). Unknown fields are dropped on save.
 
 ### 4.2 Storage envelope (Redis)
 
@@ -160,33 +167,38 @@ Colours per phase are in `DESIGN_GUIDE.md`. Stage ids are unchanged, so stored d
 
 ## 5. Scheduling (`schedule.js`, pure)
 
+There is no cursor and no relative-gap model. Every activity stores its own absolute
+`start` (minutes from the plan date's midnight); `buildSchedule(plan)` never moves an
+activity that wasn't explicitly asked to move — it is a calendar, not a chain. Two
+activities may occupy the same minutes; that is computed and returned as an overlap
+(`findOverlaps`), never silently prevented or resolved. `locked` means exactly one
+thing: this activity is excluded from a group move (`moveGroup` in operations.js) — it
+plays no role in scheduling itself.
+
 ```text
-cursor = dayStart
-for each activity in order:
-  if lockedStart:
-      start = normalize(lockedStart, relativeTo = cursor)   // next-day rule
-      if start > cursor: openTime(cursor → start, before = activity, kind = "fixed")
-      if start < cursor: conflict(activity, overlap = cursor - start)
-  else:
-      start = cursor + (gapBefore || 0)
-      if gapBefore: openTime(cursor → start, before = activity, kind = "stored")
-  end = start + duration
-  cursor = max(cursor, end)
+items = activities, each with duration normalized and end = start + duration
+items sorted by start (then id)
+overlaps = every pair of items whose [start, end) ranges intersect, with the exact
+           shared range
+blocks   = items merged into contiguous non-overlapping [start, end) runs
+openTimes = the gaps between consecutive blocks
+dayStart/dayEnd = first block's start / last block's end (or a default view start
+                  if the plan has no activities)
 ```
 
-Output: `{ items[{id,start,end,conflictMinutes}], openTimes[], conflicts[{fixedId, overrunIds[], minutes}], dayEnd, summary }`. All times are absolute minutes from the plan date's midnight.
+Output: `{ items[{...activity, start, end, startLabel, endLabel, rangeLabel, overlaps, overlapMinutes}], openTimes[{start,end,beforeId,beforeTitle}], overlaps[{aId,bId,start,end,minutes}], dayStart, dayEnd, summary }`. All times are absolute minutes from the plan date's midnight and may exceed 1440 for activities past midnight.
 
-Operations (pure, each returns a new plan):
-- `resizeBottom(plan, id, newEnd)`
-- `resizeTop(plan, id, newStart)` — flexible only; `newStart ∈ [cursorBefore, end − 5]`; sets `gapBefore = newStart − cursorBefore`, `duration = end − newStart`.
-- `move(plan, id, toIndex)` — rejects fixed.
-- `keepAsBuffer(plan, openTime)` — inserts Buffer activity of that length before `openTime.before`; clears its `gapBefore`.
-- `extendPrevious(plan, openTime)`, `addInOpenTime(plan, openTime)`
-- `fix(plan, id)` (sets `lockedStart` to current start, clears `gapBefore`), `unfix(plan, id)`
-- `insertAfter(plan, afterId|null, activity)`, `duplicate(plan, id)`, `remove(plan, id)`
-- `normalizeDuration(n)` = clamp(ceil(n/5)*5, 5, 720); `roundTime(hhmm)` = ceil to 5 min.
-
-Each operation also returns `shifted: { count, deltaMinutes }` for toasts.
+Operations (pure, in `operations.js`, each returns a new plan or `null` for a no-op):
+- `resizeBottom(plan, id, newEnd)`, `resizeTop(plan, id, newStart)` — sets `start`/`duration` directly; a locked activity has no handles.
+- `moveTo(plan, id, newStart)` — sets `start` directly, anywhere on the timeline; rejects locked.
+- `moveGroup(plan, ids, deltaMinutes)` — shifts every listed activity's `start` by the same delta, excluding any that are locked.
+- `toggleLock(plan, id)`, `setStage(plan, id, stage)`, `update(plan, activity)` — replace-in-place, move nothing else.
+- `keepAsBuffer(plan, openTime, newId)` — inserts a real Buffer activity spanning exactly that open time.
+- `extendPrevious(plan, openTime)` — stretches the previous activity's `duration` to the end of the open time.
+- `addInOpenTime(plan, openTime, activity)` — fills the open time (or less, if the activity is shorter).
+- `insertAfter(plan, afterId|null, activity)`, `duplicate(plan, id, newId)`, `remove(plan, id)`
+- `setSettings(plan, changes)` — applies plan-level settings (title, timeline range, sunset, status); never moves activities.
+- `normalizeDuration(n)` (in `validate.js`) = clamp(round-to-5, 5, 720).
 
 ---
 
@@ -360,7 +372,7 @@ Preview and production databases are already separate.
 ## 17. Testing
 
 ### 17.1 Unit (`node --test`)
-- schedule: ripple, fixed open time, conflict, midnight, `gapBefore`, every operation, `shifted` counts.
+- schedule: overlap detection, open-time gaps, midnight rollover, every operation.
 - layout: exact positions, range with next-day end, ticks hierarchy, lanes non-overlap.
 - validate: every field boundary; client/server copies identical.
 - save: debounce, single-flight, backoff sequence, no retry on 4xx, 401 keeps plan, 409 uses current plan, device copy lifecycle (fake timers + fake fetch).
