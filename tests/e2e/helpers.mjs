@@ -39,9 +39,20 @@ export async function openPlanner(page, password = TEST_PASSWORD) {
  * spec that needs the editor on every project goes through the card's own
  * pencil button. The phone's own gesture for this is a long press, which
  * arrives with the direct manipulation stage.
+ *
+ * The pencil only exists where there is room for it: on a phone width the
+ * card drops it and selecting the card raises the toolbar's own Edit button
+ * instead (same `data-action="edit"` handler either way), so this falls
+ * back to that when the pencil is not there to click.
  */
 export async function openActivityEditor(page, card) {
-  await card.locator('.card-edit').click();
+  const pencil = card.locator('.card-edit');
+  if (await pencil.count() && await pencil.isVisible()) {
+    await pencil.click();
+  } else {
+    await card.click();
+    await page.locator('.toolbar [data-action="edit"]').click();
+  }
   await expect(page.locator('#activity-dialog')).toBeVisible();
 }
 

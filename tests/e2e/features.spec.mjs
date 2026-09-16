@@ -1,5 +1,5 @@
 import { test, expect, activity, seedPlan } from './fixtures.mjs';
-import { isPhoneLayout, setPicker, signInAndWaitForPlan } from './helpers.mjs';
+import { isPhoneLayout, openActivityEditor, setPicker, signInAndWaitForPlan } from './helpers.mjs';
 
 const T = (h, m = 0) => h * 60 + m;
 
@@ -310,8 +310,7 @@ test('suggestions offer what the plan already uses', async ({ page, server }) =>
   await server.seed({ plan: crew() });
   await signInAndWaitForPlan(page);
 
-  await card(page, 'ready').locator('.card-edit').click();
-  await expect(page.locator('#activity-dialog')).toBeVisible();
+  await openActivityEditor(page, card(page, 'ready'));
 
   const places = await page.locator('#location-suggestions option').evaluateAll(nodes => nodes.map(node => node.value));
   const people = await page.locator('#people-suggestions option').evaluateAll(nodes => nodes.map(node => node.value));

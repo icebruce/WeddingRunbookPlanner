@@ -305,7 +305,10 @@
    over whatever the title row put in that corner. Dropping the pencil and
    reserving room for the one button that is left fixes both at once. */
 @media (max-width: 720px) {
-  .card-edit { display: none; }
+  /* `.card-controls .card-edit` matches the specificity of the rule in
+     card-controls above that sets `display: grid` — a bare `.card-edit`
+     here would lose to it and never actually hide anything. */
+  .card-controls .card-edit { display: none; }
   .card-body,
   .card--small .card-body { padding-right: 46px; }
   .card--line .card-body { padding-right: 42px; }

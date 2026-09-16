@@ -1,6 +1,6 @@
 import { test, expect, activity, seedPlan, TEST_PASSWORD } from './fixtures.mjs';
 import { SCAN } from './a11y-scan.mjs';
-import { isPhoneLayout, signIn, signInAndWaitForPlan } from './helpers.mjs';
+import { isPhoneLayout, openActivityEditor, signIn, signInAndWaitForPlan } from './helpers.mjs';
 
 const card = (page, id) => page.locator(`.card[data-activity-id="${id}"]`);
 
@@ -80,8 +80,7 @@ for (const theme of THEMES) {
       await signInAndWaitForPlan(page);
       await setTheme(page, theme);
 
-      await card(page, 'ready').locator('.card-edit').click();
-      await expect(page.locator('#activity-dialog')).toBeVisible();
+      await openActivityEditor(page, card(page, 'ready'));
       await page.waitForTimeout(250);
 
       const problems = await scan(page);

@@ -211,9 +211,13 @@ test('a card opens its editor and gets focus back when the sheet closes', async 
 
   await page.locator('#activity-dialog .sheet-close').click();
   await expect(page.locator('#activity-dialog')).toHaveCount(0);
-  // Focus returns to the control that was actually pressed — the card's own
-  // edit button — not to the card as a whole.
-  await expect(page.locator('.card').nth(1).locator('.card-edit')).toBeFocused();
+  // Focus returns to the control that was actually pressed — not to the card
+  // as a whole. On a phone that is the toolbar's Edit button, the card's own
+  // pencil having no room there; everywhere else it is the pencil itself.
+  const opener = await isPhoneLayout(page)
+    ? page.locator('.toolbar [data-action="edit"]')
+    : page.locator('.card').nth(1).locator('.card-edit');
+  await expect(opener).toBeFocused();
 });
 
 test('exactly one add control is offered, and the header one says where it lands', async ({ page }) => {
