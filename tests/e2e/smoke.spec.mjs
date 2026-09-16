@@ -1,6 +1,11 @@
 import { test, expect } from './fixtures.mjs';
 import { signInAndWaitForPlan } from './helpers.mjs';
 
+// A basic sign-in/route smoke check with no viewport-dependent assertion.
+test.beforeEach(({}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chrome', 'not viewport-dependent');
+});
+
 test('signs in and shows the seeded plan', async ({ page }) => {
   await signInAndWaitForPlan(page);
 

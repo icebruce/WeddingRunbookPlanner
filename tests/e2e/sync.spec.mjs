@@ -1,6 +1,12 @@
 import { test, expect, TEST_PASSWORD, activity, seedPlan } from './fixtures.mjs';
 import { openActivityEditor, openPlanner, signInAndWaitForPlan } from './helpers.mjs';
 
+// Save/sync/version-history logic (offline queueing, conflicts, multi-tab
+// sync) has no viewport-dependent assertion in this file.
+test.beforeEach(({}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chrome', 'not viewport-dependent');
+});
+
 const card = (page, id) => page.locator(`.card[data-activity-id="${id}"]`);
 const saved = page => expect(page.locator('.save-indicator')).toHaveText('Saved');
 
