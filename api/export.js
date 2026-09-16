@@ -13,7 +13,12 @@ export default async function handler(req, res) {
     if (!isAuthenticated(req)) return fail(res, 401, 'unauthenticated', 'Sign in to export the plan.');
 
     const data = await readData();
-    const filename = `wedding-plan-${data.plan.date}.json`;
+    // The date is validated to YYYY-MM-DD on every write, so this never
+    // actually fires — it exists so a header-injection point can't open up
+    // here later if that upstream rule is ever loosened without this file
+    // being touched at all.
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(data.plan.date) ? data.plan.date : 'backup';
+    const filename = `wedding-plan-${date}.json`;
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     return json(res, 200, data.plan);
   } catch (error) {

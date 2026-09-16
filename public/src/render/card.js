@@ -149,10 +149,13 @@ export function renderCard(card, { ui, filter = null, nowMinutes = null }) {
         data-action="edit" data-id="${id}" data-focus-key="edit:${id}"
         aria-label="Edit ${title}">${icon('pencil')}</button>
     </div>`}
-    <!-- Handles exist only on a selected, unlocked card: a locked one has
-         nothing here for a pointer to move. They are real buttons so the
-         arrow keys can move an edge without a pointer. -->
-    ${selected && draggable ? `<button type="button" class="handle handle--top" data-role="resize-top" data-id="${id}" data-focus-key="resize-top:${id}" aria-label="Move the start of ${title}"></button>
-      <button type="button" class="handle handle--bottom" data-role="resize" data-id="${id}" data-focus-key="resize:${id}" aria-label="Move the end of ${title}"></button>` : ''}
+    <!-- Handles are in the DOM on any unlocked, draggable card, so a mouse
+         can reveal them by hovering (CSS hides/shows them — see cards.css);
+         a locked card has nothing here for a pointer to move. They only join
+         the tab order once the card is selected, so an unselected card's
+         hidden handles do not clutter keyboard navigation. They are real
+         buttons so the arrow keys can move an edge without a pointer. -->
+    ${draggable ? `<button type="button" class="handle handle--top" data-role="resize-top" data-id="${id}" data-focus-key="resize-top:${id}" tabindex="${selected ? '0' : '-1'}" aria-label="Move the start of ${title}"></button>
+      <button type="button" class="handle handle--bottom" data-role="resize" data-id="${id}" data-focus-key="resize:${id}" tabindex="${selected ? '0' : '-1'}" aria-label="Move the end of ${title}"></button>` : ''}
   </article>`;
 }

@@ -390,19 +390,29 @@ test.describe('widths', () => {
     // Nothing a finger has to hit is under 44 px, counting the invisible part.
     const small = await page.evaluate(() => {
       // Several controls are drawn smaller than they are pressed: a 34 px
-      // button with a 44 px ::after over it takes the touch, and the glyph
-      // stays the size it should look. The pseudo-element counts.
+      // button with a 44 px ::after (or, for a resize handle, ::before) over
+      // it takes the touch, and the glyph stays the size it should look. The
+      // pseudo-element counts.
       const hit = node => {
         const own = node.getBoundingClientRect();
-        const after = getComputedStyle(node, '::after');
-        if (after.content === 'none' || after.position !== 'absolute') return { width: own.width, height: own.height };
-        return {
-          width: Math.max(own.width, parseFloat(after.width) || 0),
-          height: Math.max(own.height, parseFloat(after.height) || 0)
-        };
+        let width = own.width;
+        let height = own.height;
+        for (const pseudo of ['::after', '::before']) {
+          const style = getComputedStyle(node, pseudo);
+          if (style.content === 'none' || style.position !== 'absolute') continue;
+          width = Math.max(width, parseFloat(style.width) || 0);
+          height = Math.max(height, parseFloat(style.height) || 0);
+        }
+        return { width, height };
       };
       return [...document.querySelectorAll('button, [role="button"], select, summary')]
         .filter(node => node.offsetParent !== null || node.getClientRects().length)
+        // A card's resize handles are always in the DOM on an unlocked card
+        // (so a mouse can reveal them on hover), but hidden and inert —
+        // `pointer-events: none` — until the card is selected, hovered or
+        // focused. Nothing can land on them while they are inert, so they are
+        // not "something a finger has to hit" yet.
+        .filter(node => getComputedStyle(node).pointerEvents !== 'none')
         .map(node => ({ where: node.className || node.tagName, ...hit(node) }))
         .filter(box => box.width > 0 && (box.height < 44 || box.width < 44));
     });

@@ -163,10 +163,12 @@ body.is-reordering { user-select: none; cursor: grabbing; }
   white-space: nowrap;
 }
 
-.card.is-drag-source { opacity: .25; }
+/* The dragged card itself: lifted, not faded — it is still the thing being
+   directly manipulated, not left behind. */
 .card.is-lifted {
+  z-index: 30;
   box-shadow: var(--shadow-lifted), 0 0 0 1px var(--sel);
-  transform: rotate(-.6deg) scale(1.02);
+  transform: rotate(-.6deg) scale(1.02) translateY(var(--drag-y, 0));
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -228,24 +230,6 @@ body.is-reordering { user-select: none; cursor: grabbing; }
 /* While a card is selected the + is not offered: the toolbar has taken its place. */
 .toolbar ~ .mobile-add { display: none; }
 
-/* Where the card will land, and when. */
-.drop-slot {
-  position: absolute;
-  left: 0;
-  right: 0;
-  display: flex;
-  align-items: flex-start;
-  padding: 6px 10px;
-  border: 1.5px solid var(--sel);
-  border-radius: var(--radius);
-  background: var(--sel-tint);
-  color: var(--sel);
-  font-size: 12px;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-  pointer-events: none;
-}
-
 @keyframes toolbar-in { from { opacity: 0; transform: translateY(12px); } }
 
 /* Neighbours settle into place after the drop, never during it. */
@@ -253,8 +237,9 @@ body.is-reordering { user-select: none; cursor: grabbing; }
 .card.is-pressed { transform: scale(.99); transition: transform 100ms ease-out; }
 
 /* Nothing selects text or shows a callout while a gesture is running. */
-body.is-reordering, body.is-resizing { user-select: none; -webkit-user-select: none; }
+body.is-moving, body.is-resizing { user-select: none; -webkit-user-select: none; }
 body.is-resizing { cursor: ns-resize; }
+body.is-moving { cursor: grabbing; }
 
 @media (min-width: 721px) {
   .toolbar { display: none; }
@@ -385,6 +370,8 @@ body.is-resizing { cursor: ns-resize; }
   white-space: nowrap;
 }
 .filter-chip.is-on { background: var(--ink); border-color: var(--ink); color: var(--bg); font-weight: 600; }
+.filter-chip:hover { background: var(--surface-2); }
+.filter-chip.is-on:hover { background: color-mix(in srgb, var(--ink) 88%, var(--bg)); }
 
 .pinned-bar--filter {
   justify-content: space-between;
