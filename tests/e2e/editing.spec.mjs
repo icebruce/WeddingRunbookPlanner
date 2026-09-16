@@ -52,6 +52,23 @@ test('the editor asks for things in the order the spec gives', async ({ page, se
   await expect(editor(page).locator('#duplicate-activity')).toBeVisible();
 });
 
+test('a blocked flatpickr script leaves the timing field editable, not stuck', async ({ page, server }) => {
+  await server.seed({ plan: base() });
+  await page.route('**/vendor/flatpickr/flatpickr.min.js', route => route.abort());
+  await signInAndWaitForPlan(page);
+  await openActivityEditor(page, card(page, 'portraits'));
+
+  // With no flatpickr to take the field over, it has to stay a plain,
+  // editable text input rather than the permanently `readonly` one the
+  // markup starts with — or nothing, not even a screen reader, can reach it.
+  const start = editor(page).locator('input[name="start"]');
+  await expect(start).not.toHaveAttribute('readonly', '');
+  await start.fill('2026-11-21 13:05');
+  await editor(page).locator('.button--done').click();
+
+  await expect(card(page, 'portraits')).toContainText('1:05');
+});
+
 test('the timing block works out the end as you change the duration', async ({ page, server }) => {
   await server.seed({ plan: base() });
   await signInAndWaitForPlan(page);

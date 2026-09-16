@@ -41,7 +41,16 @@ export async function initPickers(root, { onChange } = {}) {
   if (!inputs.length) return [];
 
   const flatpickr = await loadFlatpickr().catch(() => null);
-  if (!flatpickr) return []; // Offline with nothing cached yet: the plain input still works.
+  if (!flatpickr) {
+    // Offline with nothing cached yet, or the script otherwise failed to
+    // load: every field here is marked `readonly` in the markup because
+    // flatpickr is normally what makes it editable (via its own popup and
+    // `allowInput`). With no flatpickr coming, that attribute has to go too,
+    // or the field is stuck — reachable by nothing, not even a screen reader
+    // — for the rest of the session.
+    for (const input of inputs) input.removeAttribute('readonly');
+    return [];
+  }
 
   return inputs.map(input => {
     const kind = input.dataset.picker;
