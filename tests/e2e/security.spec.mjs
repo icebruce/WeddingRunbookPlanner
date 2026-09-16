@@ -157,6 +157,24 @@ test('F8: the deploy is configured to serve only public/', async () => {
   expect(config.outputDirectory).toBe('public');
 });
 
+test('a malformed session cookie answers 401, not 500', async ({ request, baseURL }) => {
+  // Something other than this app can put a broken percent-escape in a cookie
+  // — a proxy, an extension, a truncated jar. decodeURIComponent throws on it,
+  // and the throw used to escape as an opaque 500 on every single request,
+  // which the app could not clear because the app could no longer load.
+  for (const value of ['%', 'abc%zz', '%E0%A4%A']) {
+    for (const route of ['/api/plan', '/api/versions', '/api/export', '/api/template']) {
+      const response = await request.get(`${baseURL}${route}`, {
+        headers: { cookie: `wedding_session=${value}` },
+        failOnStatusCode: false
+      });
+      expect(response.status(), `${route} with cookie ${value}`).toBe(401);
+      const body = await response.json();
+      expect(body.error.code).toBe('unauthenticated');
+    }
+  }
+});
+
 test('every unauthenticated route answers 401 in the documented shape', async ({ request }) => {
   for (const path of ['/api/plan', '/api/versions']) {
     const response = await request.get(path);

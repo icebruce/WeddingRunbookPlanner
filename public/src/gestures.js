@@ -56,7 +56,11 @@ export function createGestures({ root, store, commit, repaint, onLongPress }) {
   // ------------------------------------------------------------- selection
 
   function onCardPointerDown(event) {
-    if (active || event.button > 0) return;
+    // One finger at a time. A second press used to overwrite the first
+    // candidate while its long-press timer was still armed, and the timer read
+    // whatever `candidate` had become — so two fingers opened the editor for
+    // the wrong card and left the first one looking pressed for good.
+    if (active || candidate || event.button > 0) return;
     const card = event.target.closest('.card');
     if (!card) return;
     // Controls and handles run their own gestures.
@@ -80,9 +84,11 @@ export function createGestures({ root, store, commit, repaint, onLongPress }) {
     // scroll — which is why the pressed state appears at once but nothing is
     // committed until the timer fires.
     if (candidate.touch) {
-      candidate.longPress = setTimeout(() => {
-        if (!candidate) return;
-        const pressed = candidate;
+      // The press this timer belongs to, captured rather than read back: by
+      // the time it fires, `candidate` may be somebody else's.
+      const pressed = candidate;
+      pressed.longPress = setTimeout(() => {
+        if (candidate !== pressed) return;
         clearCandidate();
         suppressClickUntil = Date.now() + 700;
         onLongPress?.(pressed.id);

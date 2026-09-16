@@ -6,6 +6,7 @@ import {
   clearSessionCookie,
   createSessionToken,
   getCookie,
+  isAuthenticated,
   passwordFingerprint,
   passwordMatches,
   sessionCookie,
@@ -31,6 +32,25 @@ test('session tokens verify and reject tampering or expiry', () => {
   assert.equal(verifySessionToken(token, now + 31 * 24 * 60 * 60 * 1000), false);
   assert.equal(verifySessionToken('', now), false);
   assert.equal(verifySessionToken('a.b.c', now), false);
+});
+
+const COOKIE_NAME = 'wedding_session';
+
+test('a cookie with a broken escape is refused, not thrown out of', () => {
+  // decodeURIComponent throws URIError on a lone percent sign. The check ran
+  // outside the route's try, so one malformed cookie turned every request that
+  // browser made into an opaque 500 — with no way to clear it from inside the
+  // app, because the app could no longer load.
+  for (const value of ['%', '%E0%A4%A', 'abc%zz', '%%%']) {
+    const req = { headers: { cookie: `${COOKIE_NAME}=${value}` } };
+    assert.doesNotThrow(() => getCookie(req));
+    assert.equal(isAuthenticated(req), false, `${value} is not a token we signed`);
+  }
+});
+
+test('a cookie that is properly escaped still decodes', () => {
+  const req = { headers: { cookie: `${COOKIE_NAME}=one%20two` } };
+  assert.equal(getCookie(req), 'one two');
 });
 
 test('F28: changing the password signs every device out', () => {

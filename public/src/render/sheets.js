@@ -2,7 +2,6 @@ import { escapeHtml } from '../dom.js';
 import { icon } from '../icons.js';
 import { STAGES, phaseVars } from '../config.js';
 import { buildSchedule, formatDuration, formatTime, minutesToTime } from '../schedule.js';
-import { DEFAULT_SUNSET } from '../validate.js';
 
 /**
  * Sheets on a phone, dialogs on a laptop — the same content and the same
@@ -335,7 +334,7 @@ export function settingsSheet(plan, ui = {}) {
         <fieldset class="field-group settings-group">
           <legend class="field-label">Schedule</legend>
           <label class="group-row"><span>First activity starts</span><input name="dayStart" type="time" value="${escapeHtml(plan.dayStart)}"></label>
-          <label class="group-row"><span>Sunset marker</span><input name="sunset" type="time" value="${escapeHtml(plan.sunset ?? DEFAULT_SUNSET)}"></label>
+          <label class="group-row"><span>Sunset marker</span><input name="sunset" type="time" value="${escapeHtml(plan.sunset ?? '')}"></label>
         </fieldset>
 
         <fieldset class="field-group settings-group">

@@ -9,9 +9,9 @@ import { readData } from '../lib/server/storage.js';
  */
 export default async function handler(req, res) {
   if (req.method !== 'GET') return methodNotAllowed(res, ['GET']);
-  if (!isAuthenticated(req)) return fail(res, 401, 'unauthenticated', 'Sign in to export the plan.');
-
   try {
+    if (!isAuthenticated(req)) return fail(res, 401, 'unauthenticated', 'Sign in to export the plan.');
+
     const data = await readData();
     const filename = `wedding-plan-${data.plan.date}.json`;
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

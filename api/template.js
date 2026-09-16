@@ -10,9 +10,9 @@ import { SEED_PLAN } from '../lib/server/seed-template.js';
  */
 export default async function handler(req, res) {
   if (req.method !== 'GET') return methodNotAllowed(res, ['GET']);
-  if (!isAuthenticated(req)) return fail(res, 401, 'unauthenticated', 'Sign in to use the template.');
-
   try {
+    if (!isAuthenticated(req)) return fail(res, 401, 'unauthenticated', 'Sign in to use the template.');
+
     return json(res, 200, {
       activities: structuredClone(SEED_PLAN.activities).map(({ id, ...activity }) => activity)
     });

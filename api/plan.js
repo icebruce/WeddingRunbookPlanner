@@ -6,9 +6,9 @@ import { readData, savePlan } from '../lib/server/storage.js';
 const ROUTE = 'plan';
 
 export default async function handler(req, res) {
-  if (!isAuthenticated(req)) return fail(res, 401, 'unauthenticated', 'Sign in to open the plan.');
-
   try {
+    if (!isAuthenticated(req)) return fail(res, 401, 'unauthenticated', 'Sign in to open the plan.');
+
     if (req.method === 'GET') {
       const data = await readData();
       // `since` lets an idle tab ask "is there anything newer?" without

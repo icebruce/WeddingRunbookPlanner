@@ -116,6 +116,29 @@ async function touchSession(page) {
 }
 
 /**
+ * Two fingers, the second landing while the first is still down.
+ *
+ * The single-point helper cannot express this, and this is the shape of
+ * gesture that a phone held in two hands produces by accident.
+ */
+export async function touchTwo(page, first, second, { gapMs = 100, holdMs = 700 } = {}) {
+  const client = await page.context().newCDPSession(page);
+  const point = p => ({ x: Math.round(p.x), y: Math.round(p.y) });
+  try {
+    await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point(first)] });
+    await page.waitForTimeout(gapMs);
+    await client.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [point(first), point(second)]
+    });
+    await page.waitForTimeout(holdMs);
+    await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  } finally {
+    await client.detach().catch(() => {});
+  }
+}
+
+/**
  * Press at `from`, optionally hold, move to `to` over `steps`, then release.
  * `holdMs` makes it a long-press or a reorder hold; `release: false` leaves the
  * finger down so a test can assert mid-gesture state.

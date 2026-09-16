@@ -198,6 +198,37 @@ test('F12: "Keep my changes" saves the plan as it is now, not a stale snapshot',
   expect((await server.read()).plan.activities[0].title).toBe('Mine, typed while saving');
 });
 
+test('a conflict with no other version offers a retry, not two dead buttons', async ({ page, server }) => {
+  await signInAndWaitForPlan(page);
+
+  // The store answers 409 with nothing to compare against — what happens when
+  // the record is gone by the time the write lands. The dialog used to open
+  // anyway, and both of its buttons returned without doing anything.
+  let refuse = true;
+  await page.route('**/api/plan', async (route, request) => {
+    if (request.method() === 'PUT' && refuse) {
+      refuse = false;
+      return route.fulfill({
+        status: 409,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'revision_conflict', message: 'The plan store was empty.' } })
+      });
+    }
+    await route.fallback();
+  });
+
+  await renameFirstActivity(page, 'Typed into an empty store');
+
+  await expect(page.locator('#conflict-dialog')).toHaveCount(0);
+  await expect(saveState(page)).toHaveText('Not saved');
+
+  // The work is still here, and the retry is a real one.
+  await expect(page.locator('.card').first()).toContainText('Typed into an empty store');
+  await page.locator('[data-action="save-retry"]').click();
+  await expect(saveState(page)).toHaveText('Saved', { timeout: 10_000 });
+  expect((await server.read()).plan.activities[0].title).toBe('Typed into an empty store');
+});
+
 test('the conflict dialog blocks editing until it is answered', async ({ page, context }) => {
   await signInAndWaitForPlan(page);
 

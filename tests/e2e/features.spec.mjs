@@ -467,3 +467,27 @@ test('settings that change nothing are not a change', async ({ page, server }) =
   expect((await server.read()).revision, 'pressing Done without typing saves nothing').toBe(before);
   await expect(page.locator('.toast')).toHaveCount(0);
 });
+
+test('a sunset marker that is cleared stays cleared', async ({ page, server }) => {
+  await server.seed({ plan: seedPlan({ sunset: '16:19' }) });
+  await signInAndWaitForPlan(page);
+  await expect(page.locator('.sunset-line')).toHaveCount(1);
+
+  await menu(page);
+  await page.locator('[data-menu-action="settings"]').click();
+  await page.locator('#settings-dialog input[name="sunset"]').fill('');
+  await page.locator('#settings-dialog .button--done').click();
+  await expect(page.locator('.save-indicator')).toHaveText('Saved');
+  await expect(page.locator('.sunset-line')).toHaveCount(0);
+
+  // Reopening used to show the default again, and the next Done put the marker
+  // back without anyone asking for it.
+  await menu(page);
+  await page.locator('[data-menu-action="settings"]').click();
+  await expect(page.locator('#settings-dialog input[name="sunset"]')).toHaveValue('');
+  await page.locator('#settings-dialog .button--done').click();
+
+  await page.waitForTimeout(1000);
+  await expect(page.locator('.sunset-line')).toHaveCount(0);
+  expect((await server.read()).plan.sunset).toBe(null);
+});

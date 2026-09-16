@@ -58,7 +58,18 @@ const saver = createSavePipeline({
   onError: message => toast(message, { tone: 'error' }),
   // The local side of a conflict is read when the user chooses, not captured
   // here, so "Keep my changes" means the plan as it is now (F12).
-  onConflict: latest => store.setUi({ conflict: { latest }, dialog: { type: 'conflict', latest } }),
+  onConflict: latest => {
+    // A conflict with nothing to compare against. The store was empty when the
+    // write landed, so there is no other version — and a dialog asking which
+    // of two copies to keep, when one of them does not exist, is two buttons
+    // that do nothing. The header's "Not saved" and its retry are the honest
+    // offer; the plan on screen is the only copy there is.
+    if (!latest) {
+      toast('That did not save. Tap "Not saved" to try again.', { tone: 'error' });
+      return;
+    }
+    store.setUi({ conflict: { latest }, dialog: { type: 'conflict', latest } });
+  },
   onUnauthorized: () => store.setUi({ authenticated: false })
 });
 

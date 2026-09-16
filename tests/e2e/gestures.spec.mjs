@@ -1,5 +1,5 @@
 import { test, expect, activity, seedPlan } from './fixtures.mjs';
-import { boxInView, cardPoint, centreOf, isPhoneLayout, pairInView, signInAndWaitForPlan, supportsTouchDrag, touchDrag, touchTap } from './helpers.mjs';
+import { boxInView, cardPoint, centreOf, isPhoneLayout, pairInView, signInAndWaitForPlan, supportsTouchDrag, touchDrag, touchTap, touchTwo } from './helpers.mjs';
 
 const PX_PER_MIN = 4;
 
@@ -131,6 +131,28 @@ test.describe('long press', () => {
 
     await expect(page.locator('#activity-dialog')).toBeVisible();
     await expect(page.locator('#activity-dialog input[name="title"]')).toHaveValue('Getting Ready');
+  });
+
+  test('a second finger does not open somebody else\'s card', async ({ page, server, isMobile }) => {
+    test.skip(!isMobile, 'long press is a touch gesture');
+    await server.seed({ plan: dense() });
+    await signInAndWaitForPlan(page);
+
+    const first = await cardPoint(page, card(page, 'ready'));
+    const second = await cardPoint(page, card(page, 'portraits'));
+
+    // The second press used to overwrite the first while its timer was still
+    // armed, and the timer read whatever the candidate had become — so the
+    // editor opened for the card the first finger was not on.
+    await touchTwo(page, first, second);
+
+    const open = await page.locator('#activity-dialog').count();
+    if (open) {
+      await expect(page.locator('#activity-dialog input[name="title"]'), 'the first finger decides')
+        .toHaveValue('Getting Ready');
+    }
+    // And nothing is left looking pressed.
+    await expect(page.locator('.card.is-pressed')).toHaveCount(0);
   });
 
   test('is cancelled by a scroll', async ({ page, server, isMobile }) => {

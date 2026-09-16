@@ -9,9 +9,9 @@ const ROUTE = 'versions';
 const listed = versions => versions.map(({ plan, ...meta }) => meta);
 
 export default async function handler(req, res) {
-  if (!isAuthenticated(req)) return fail(res, 401, 'unauthenticated', 'Sign in to open version history.');
-
   try {
+    if (!isAuthenticated(req)) return fail(res, 401, 'unauthenticated', 'Sign in to open version history.');
+
     if (req.method === 'GET') {
       const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
       const id = url.searchParams.get('id');
