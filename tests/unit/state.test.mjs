@@ -1,0 +1,168 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import '../../public/src/actions.js';
+import { createStore, defineAction } from '../../public/src/state.js';
+
+const activity = (id, extra = {}) => ({
+  id,
+  title: id,
+  duration: 30,
+  stage: 'preparation',
+  location: '',
+  people: [],
+  notes: '',
+  lockedStart: null,
+  ...extra
+});
+
+const plan = (...activities) => ({
+  id: 'wedding-day',
+  title: 'Wedding Day',
+  coupleLabel: 'Our Wedding',
+  date: '2026-11-21',
+  dayStart: '11:30',
+  status: 'Working',
+  activities: activities.length ? activities : [activity('a'), activity('b'), activity('c')]
+});
+
+const store = (...activities) => createStore({ plan: plan(...activities), revision: 1 });
+
+test('an action never mutates the plan it was given', () => {
+  const s = store();
+  const before = s.plan;
+  s.dispatch('activity.stage', { id: 'a', stage: 'ceremony' });
+  assert.equal(before.activities[0].stage, 'preparation', 'the previous plan is untouched');
+  assert.equal(s.plan.activities[0].stage, 'ceremony');
+  assert.notEqual(s.plan, before);
+});
+
+test('every change records one undo step with a readable label', () => {
+  const s = store();
+  assert.equal(s.canUndo, false);
+
+  const result = s.dispatch('activity.remove', { id: 'b' });
+  assert.equal(result.label, 'Deleted b');
+  assert.equal(s.canUndo, true);
+  assert.equal(s.undoLabel, 'Deleted b');
+  assert.deepEqual(s.plan.activities.map(a => a.id), ['a', 'c']);
+
+  s.undo();
+  assert.deepEqual(s.plan.activities.map(a => a.id), ['a', 'b', 'c']);
+});
+
+test('the undo buffer holds one step, and undoing twice returns to where you were', () => {
+  const s = store();
+  s.dispatch('activity.remove', { id: 'a' });
+  s.dispatch('activity.remove', { id: 'b' });
+  assert.deepEqual(s.plan.activities.map(a => a.id), ['c']);
+
+  s.undo();
+  assert.deepEqual(s.plan.activities.map(a => a.id), ['b', 'c'], 'only the last change is undone');
+
+  s.undo();
+  assert.deepEqual(s.plan.activities.map(a => a.id), ['c'], 'undo is itself undoable');
+});
+
+test('an action that changes nothing records nothing', () => {
+  const s = store();
+  s.dispatch('activity.stage', { id: 'a', stage: 'ceremony' });
+  const noop = s.dispatch('activity.stage', { id: 'a', stage: 'ceremony' });
+
+  assert.equal(noop, null);
+  assert.equal(s.undoLabel, 'Changed stage of a', 'the earlier step is still the one on offer');
+});
+
+test('dropping a card where it already was is not a change', () => {
+  const s = store();
+  assert.equal(s.dispatch('activity.move', { id: 'b', toIndex: 1 }), null);
+  assert.equal(s.canUndo, false);
+});
+
+test('moving reorders and reports which activity moved', () => {
+  const s = store();
+  const result = s.dispatch('activity.move', { id: 'c', toIndex: 0 });
+  assert.deepEqual(s.plan.activities.map(a => a.id), ['c', 'a', 'b']);
+  assert.equal(result.label, 'Moved c');
+});
+
+test('fixing uses the start the activity actually had', () => {
+  const s = store();
+  s.dispatch('activity.fix', { id: 'b' });
+  assert.equal(s.plan.activities[1].lockedStart, '12:00', '11:30 plus the first 30-minute activity');
+
+  s.dispatch('activity.unfix', { id: 'b' });
+  assert.equal(s.plan.activities[1].lockedStart, null);
+});
+
+test('fixing clears any stored open time, which a fixed start makes meaningless', () => {
+  const s = store(activity('a'), activity('b', { gapBefore: 15 }));
+  s.dispatch('activity.fix', { id: 'b' });
+  assert.equal('gapBefore' in s.plan.activities[1], false);
+});
+
+test('durations are normalised by the action, not by the caller', () => {
+  const s = store();
+  s.dispatch('activity.duration', { id: 'a', duration: 42 });
+  assert.equal(s.plan.activities[0].duration, 45);
+  assert.equal(s.dispatch('activity.duration', { id: 'a', duration: 43 }), null, '43 also rounds to 45 — no change');
+});
+
+test('adding places the activity after the selected one, or at the end', () => {
+  const s = store();
+  s.dispatch('activity.add', { activity: activity('new'), afterId: 'a' });
+  assert.deepEqual(s.plan.activities.map(a => a.id), ['a', 'new', 'b', 'c']);
+
+  s.dispatch('activity.add', { activity: activity('last') });
+  assert.deepEqual(s.plan.activities.map(a => a.id), ['a', 'new', 'b', 'c', 'last']);
+});
+
+test('UI state is separate from the plan and is never part of a change', () => {
+  const s = store();
+  s.setUi({ selectedId: 'b', openMenu: 'stage:b' });
+
+  assert.equal(s.ui.selectedId, 'b');
+  assert.equal(s.canUndo, false, 'selecting something is not an undoable change');
+  assert.equal('selectedId' in s.plan, false);
+  assert.equal(JSON.stringify(s.plan).includes('openMenu'), false);
+});
+
+test('setUi reports whether anything actually changed', () => {
+  const s = store();
+  assert.equal(s.setUi({ selectedId: 'b' }), true);
+  assert.equal(s.setUi({ selectedId: 'b' }), false, 'setting the same value repaints nothing');
+});
+
+test('subscribers are told which regions to repaint and whether data changed', () => {
+  const s = store();
+  const seen = [];
+  s.subscribe(change => seen.push(change));
+
+  s.setUi({ selectedId: 'a' }, { regions: ['timeline', 'toolbar'] });
+  s.dispatch('activity.remove', { id: 'a' }, { regions: ['timeline', 'summary'] });
+
+  assert.deepEqual(seen[0], { regions: ['timeline', 'toolbar'], data: false });
+  assert.deepEqual(seen[1], { regions: ['timeline', 'summary'], data: true });
+});
+
+test('replacing the plan clears the undo buffer, because it belongs to the old plan', () => {
+  const s = store();
+  s.dispatch('activity.remove', { id: 'a' });
+  assert.equal(s.canUndo, true);
+
+  s.setPlan(plan(), { revision: 9 });
+  assert.equal(s.canUndo, false);
+  assert.equal(s.revision, 9);
+});
+
+test('an unknown action is a programming error, not a silent no-op', () => {
+  const s = store();
+  assert.throws(() => s.dispatch('activity.teleport', {}), /Unknown action/);
+});
+
+test('an action can report how far the rest of the day moved', () => {
+  defineAction('test.shift', p => ({ plan: p, shifted: { count: 3, deltaMinutes: 15 }, label: 'Shifted' }));
+  const s = store();
+  const result = s.dispatch('test.shift', {});
+  assert.deepEqual(result.shifted, { count: 3, deltaMinutes: 15 });
+});

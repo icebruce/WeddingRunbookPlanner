@@ -1,7 +1,7 @@
 import { createSessionToken, passwordMatches, sessionCookie } from '../lib/server/auth.js';
 import { fail, json, methodNotAllowed, readJson, requireSameOrigin } from '../lib/server/http.js';
 import { hashIp, log } from '../lib/server/log.js';
-import { clientAddress, recordLoginAttempt } from '../lib/server/ratelimit.js';
+import { clearLoginAttempts, clientAddress, recordLoginAttempt } from '../lib/server/ratelimit.js';
 import { respondWithError } from '../lib/server/respond.js';
 
 const ROUTE = 'login';
@@ -29,6 +29,8 @@ export default async function handler(req, res) {
       return fail(res, 401, 'bad_password', "That password didn't work. Try again.");
     }
 
+    // The password was right, so this address is not the one being guessed at.
+    await clearLoginAttempts(req);
     res.setHeader('Set-Cookie', sessionCookie(createSessionToken()));
     return json(res, 200, { ok: true });
   } catch (error) {

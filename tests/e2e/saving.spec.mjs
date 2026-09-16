@@ -1,11 +1,10 @@
 import { test, expect } from './fixtures.mjs';
-import { countRequests, failRequests, openPlanner, signInAndWaitForPlan, trackToasts } from './helpers.mjs';
+import { countRequests, failRequests, openActivityEditor, openPlanner, signInAndWaitForPlan, trackToasts } from './helpers.mjs';
 
 /** Rename the first activity — a small, always-valid change that triggers a save. */
 async function renameFirstActivity(page, title) {
-  await page.locator('.activity-row').first().locator('.activity-card').dblclick();
+  await openActivityEditor(page, page.locator('.activity-row').first());
   const dialog = page.locator('#activity-dialog');
-  await expect(dialog).toBeVisible();
   await dialog.locator('input[name="title"]').fill(title);
   await dialog.locator('button[type="submit"]').click();
   await expect(dialog).toHaveCount(0);
@@ -82,7 +81,7 @@ test('F2: an invalid change is blocked in the sheet and never reaches the server
   await signInAndWaitForPlan(page);
   const seen = await countRequests(page, { url: '**/api/plan', method: 'PUT' });
 
-  await page.locator('.activity-row').first().locator('.activity-card').dblclick();
+  await openActivityEditor(page, page.locator('.activity-row').first());
   const dialog = page.locator('#activity-dialog');
   await dialog.locator('input[name="title"]').fill('   ');
   await dialog.locator('button[type="submit"]').click();
@@ -173,7 +172,7 @@ test('F12: "Keep my changes" saves the plan as it is now, not a stale snapshot',
 
   // Typed after the conflict appeared: this is what must survive.
   await renameFirstActivity(page, 'Mine, typed after the banner');
-  await page.locator('[data-conflict="local"]').click();
+  await page.locator('[data-action="conflict"][data-choice="local"]').click();
 
   await expect(saveState(page)).toHaveText('Saved', { timeout: 10_000 });
   expect((await server.read()).plan.activities[0].title).toBe('Mine, typed after the banner');
@@ -187,7 +186,7 @@ test('F27: a session check that fails offers Retry, not the sign-in screen', asy
   await expect(page.locator('#login-form')).toHaveCount(0);
 
   await page.unroute('**/api/session');
-  await page.locator('#retry-load').click();
+  await page.locator('[data-action="retry-load"]').click();
   await expect(page.locator('#login-form')).toBeVisible();
 });
 

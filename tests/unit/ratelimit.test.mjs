@@ -5,6 +5,7 @@ import {
   GLOBAL_LIMIT,
   PER_IP_LIMIT,
   WINDOW_SECONDS,
+  clearLoginAttempts,
   clientAddress,
   recordLoginAttempt,
   resetMemoryLimiter
@@ -84,4 +85,36 @@ test('an expiry is only set when the counter starts a new window', async () => {
   };
   await recordLoginAttempt(requestFrom('203.0.113.12'), { client });
   assert.equal(sent.filter(command => command[0] === 'EXPIRE').length, 0);
+});
+
+test('the limit is on failures: a correct password clears the counter', async () => {
+  const req = requestFrom('203.0.113.40');
+  for (let attempt = 0; attempt < PER_IP_LIMIT - 1; attempt += 1) {
+    await recordLoginAttempt(req, { client: null });
+  }
+
+  // Getting it right on the last try must not leave the next sign-in one
+  // mistake away from a fifteen-minute wait.
+  await clearLoginAttempts(req, { client: null });
+
+  for (let attempt = 0; attempt < PER_IP_LIMIT; attempt += 1) {
+    assert.equal((await recordLoginAttempt(req, { client: null })).allowed, true, `attempt ${attempt} after a success`);
+  }
+});
+
+test('ordinary repeated sign-ins from one address are never refused', async () => {
+  const req = requestFrom('203.0.113.41');
+  for (let signIn = 0; signIn < PER_IP_LIMIT * 3; signIn += 1) {
+    const result = await recordLoginAttempt(req, { client: null });
+    assert.equal(result.allowed, true, `sign-in ${signIn}`);
+    await clearLoginAttempts(req, { client: null });
+  }
+});
+
+test('clearing goes through Upstash when it is configured', async () => {
+  const sent = [];
+  await clearLoginAttempts(requestFrom('203.0.113.42'), {
+    client: { write: async command => { sent.push(command); return 1; }, read: async () => 0 }
+  });
+  assert.deepEqual(sent, [['DEL', 'wedding-planner:rl:ip:203.0.113.42']]);
 });

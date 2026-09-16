@@ -1,0 +1,75 @@
+/* The time grid: ruler, plan column, row placement and the end marker. */
+
+.planner { width: min(1180px, 100%); margin: 0 auto; padding: 28px 12px 100px; }
+
+.planner-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; padding: 0 4px 22px; }
+
+.planner-heading h1 { margin: 0; font-size: clamp(32px, 8vw, 46px); line-height: .98; letter-spacing: -.045em; font-weight: 680; }
+
+.planner-date { margin: 10px 0 0; color: var(--text-soft); font-size: 14px; }
+
+.timeline { position: relative; }
+
+.timeline-labels { display: grid; grid-template-columns: 72px 1fr; gap: 12px; padding: 0 4px 10px; color: #777a82; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; }
+
+.timeline-canvas { position: relative; min-height: 320px; }
+
+.timeline-ruler { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+
+.timeline-ruler::before { content: ''; position: absolute; top: 0; bottom: 0; left: 72px; width: 1px; background: var(--line-strong); }
+
+.timeline-tick { position: absolute; left: 0; right: 0; height: 1px; color: #8a8d94; font-variant-numeric: tabular-nums; }
+
+.timeline-tick span { position: absolute; right: calc(100% - 62px); transform: translateY(-50%); white-space: nowrap; text-align: right; }
+
+.timeline-tick i { position: absolute; left: 66px; top: 0; height: 1px; background: var(--line-strong); }
+
+.timeline-tick--hour span { color: #50535a; font-size: 12px; font-weight: 680; letter-spacing: -.01em; }
+
+.timeline-tick--hour i { left: 64px; right: 0; background: #d9dad6; }
+
+.timeline-tick--half span { color: #6f727a; font-size: 11.25px; font-weight: 650; }
+
+.timeline-tick--half i { width: 25px; height: 1.5px; background: #d7d8d4; }
+
+.timeline-tick--quarter span { color: #90939a; font-size: 10px; font-weight: 540; }
+
+.timeline-tick--quarter i { width: 14px; background: #dfe0dc; }
+
+.timeline-plan { position: absolute; inset: 0 0 0 84px; z-index: 2; }
+
+.activity-row { position: absolute; top: var(--row-top); left: 0; right: 0; height: var(--row-height); min-width: 0; z-index: 2; padding: 3px 0; transition: top .18s ease, height .16s ease, transform .16s ease; }
+
+.activity-row--menu-open { z-index: 30; }
+
+.activity-row--conflict { z-index: 8; transform: translateX(8px); right: 8px; }
+
+.end-marker { position: absolute; z-index: 1; left: 84px; right: 0; transform: translateY(-50%); display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; color: #858890; font-size: 10px; pointer-events: none; }
+
+.end-marker i { height: 1px; background: #d9dad6; }
+
+.end-marker strong { font-weight: 620; white-space: nowrap; }
+
+.activity-row.is-drop-before .activity-card { transform: translateY(4px); box-shadow: 0 -3px 0 #1680ff, 0 5px 20px rgba(24,24,27,.07); }
+
+.activity-row.is-drop-after .activity-card { transform: translateY(-4px); box-shadow: 0 3px 0 #1680ff, 0 5px 20px rgba(24,24,27,.07); }
+
+@media (max-width: 720px) {
+  .planner { padding-left: 10px; padding-right: 10px; }
+  .timeline-labels { grid-template-columns: 58px 1fr; gap: 10px; padding-left: 1px; }
+  .timeline-ruler::before { left: 58px; }
+  .timeline-tick span { right: calc(100% - 50px); }
+  .timeline-tick--hour span { font-size: 11.5px; }
+  .timeline-tick--half span { font-size: 10.5px; }
+  .timeline-tick--quarter span { font-size: 9.5px; }
+  .timeline-tick i { left: 53px; }
+  .timeline-tick--hour i { left: 51px; }
+  .timeline-plan { left: 68px; }
+  .activity-row--conflict { transform: translateX(3px); right: 3px; }
+}
+
+@media (min-width: 760px) {
+  .planner { padding: 44px 28px 80px; }
+  .planner-heading { padding: 0 0 30px 82px; }
+  .planner-heading h1 { font-size: 48px; }
+}

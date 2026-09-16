@@ -35,6 +35,32 @@ test('F9: the eleventh wrong password from one address is refused', async ({ req
   expect(correct.status()).toBe(429);
 });
 
+test('the budget is spent by failures, not by signing in', async ({ request, baseURL }) => {
+  // Ten ordinary sign-ins from one address — a household, or a couple on the
+  // same Wi-Fi — must not lock anyone out.
+  const address = '203.0.113.32';
+  for (let signIn = 1; signIn <= 12; signIn += 1) {
+    const response = await request.post('/api/login', {
+      headers: headers(baseURL, address),
+      data: { password: TEST_PASSWORD }
+    });
+    expect(response.status(), `sign-in ${signIn}`).toBe(200);
+  }
+});
+
+test('a correct password resets the count after some wrong guesses', async ({ request, baseURL }) => {
+  const address = '203.0.113.33';
+  for (let attempt = 0; attempt < 9; attempt += 1) {
+    await request.post('/api/login', { headers: headers(baseURL, address), data: { password: 'wrong' } });
+  }
+  expect((await request.post('/api/login', { headers: headers(baseURL, address), data: { password: TEST_PASSWORD } })).status()).toBe(200);
+
+  for (let attempt = 0; attempt < 9; attempt += 1) {
+    const response = await request.post('/api/login', { headers: headers(baseURL, address), data: { password: 'wrong' } });
+    expect(response.status(), `attempt ${attempt} in the fresh window`).toBe(401);
+  }
+});
+
 test('rate limiting is per address', async ({ request, baseURL }) => {
   for (let attempt = 0; attempt < 11; attempt += 1) {
     await request.post('/api/login', { headers: headers(baseURL, '203.0.113.22'), data: { password: 'wrong' } });

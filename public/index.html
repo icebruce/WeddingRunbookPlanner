@@ -6,11 +6,18 @@
   <meta name="theme-color" content="#f7f7f4">
   <meta name="description" content="Private wedding day timeline planner">
   <title>Our Wedding · Day Planner</title>
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/styles/tokens.css">
+  <link rel="stylesheet" href="/styles/base.css">
+  <link rel="stylesheet" href="/styles/timeline.css">
+  <link rel="stylesheet" href="/styles/cards.css">
+  <link rel="stylesheet" href="/styles/sheets.css">
   <script type="module" src="/src/app.js"></script>
 </head>
 <body>
-  <div id="app" class="app-shell" aria-live="polite"></div>
-  <div id="toast-region" class="toast-region" aria-live="assertive" aria-atomic="true"></div>
+  <!-- No aria-live here. It used to re-announce the whole screen on every
+       change; only the toast region speaks. -->
+  <div id="app" class="app-shell"></div>
+  <div id="sheet-root"></div>
+  <div id="toast-region" class="toast-region" role="status" aria-atomic="false"></div>
 </body>
 </html>

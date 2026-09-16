@@ -37,7 +37,7 @@ test.describe('only public files are served', () => {
   }
 
   test('public assets keep their URLs', async ({ request }) => {
-    for (const pathname of ['/', '/styles.css', '/src/app.js', '/robots.txt']) {
+    for (const pathname of ['/', '/styles/tokens.css', '/styles/base.css', '/src/app.js', '/src/render/card.js', '/robots.txt']) {
       const response = await request.get(pathname);
       expect(response.status(), pathname).toBe(200);
     }

@@ -1,509 +1,218 @@
+/**
+ * Boot, screen routing and event wiring.
+ *
+ * Rendering is split into regions that repaint on their own. The old build
+ * rewrote the whole of #app on every change, which lost focus to <body>,
+ * re-created open dialogs, and — because #app carried aria-live — re-announced
+ * the entire screen to a screen reader every time anything happened (F14).
+ *
+ * Events are delegated from the document, so a repainted region does not need
+ * to be re-bound: a control says what it does with `data-action`.
+ */
+import './actions.js';
 import { api } from './api.js';
-import { PLAN_STATUSES, STAGES, deviceId } from './config.js';
-import { SAVE_STATES, createSavePipeline } from './save.js';
-import { buildSchedule, buildTimelineLayout, clampDuration, formatDuration, formatTime, minutesToTime, parseTime } from './schedule.js';
+import { STAGES, deviceId } from './config.js';
+import { escapeHtml, focusByKey, paint, uid } from './dom.js';
+import { createGestures } from './gestures.js';
 import { icon } from './icons.js';
+import { SAVE_STATES, createSavePipeline } from './save.js';
+import { buildSchedule } from './schedule.js';
+import { createStore } from './state.js';
+import { renderConflict, renderHeader } from './render/header.js';
+import { peopleChips, renderSheet } from './render/sheets.js';
+import { renderStrip } from './render/strip.js';
+import { renderHeading, renderTimeline } from './render/timeline.js';
+import { createToaster } from './render/toast.js';
+import { renderToolbar } from './render/toolbar.js';
 import { checkPlan, normalizeDuration, roundTimeUp, validateActivity } from './validate.js';
 
 const app = document.querySelector('#app');
-const toastRegion = document.querySelector('#toast-region');
+const sheetRoot = document.querySelector('#sheet-root');
+const toast = createToaster(document.querySelector('#toast-region'));
 
-const state = {
-  authenticated: null,
-  plan: null,
-  revision: null,
-  updatedAt: null,
-  versions: [],
-  saveState: SAVE_STATES.saved,
-  // Set when the plan could not be loaded at all, so the app can offer Retry
-  // instead of the sign-in screen (F27).
-  loadError: null,
-  conflict: null,
-  dialog: null,
-  menuOpen: false,
-  selectedActivityId: null,
-  stageMenuActivityId: null,
-  cardMenuActivityId: null,
-  drag: null,
-  resize: null
-};
-
+const store = createStore();
 const DEVICE_ID = deviceId();
 
-/**
- * Autosave lives in save.js; this only connects it to the screen. The pipeline
- * always asks for the plan as it is now, so nothing it sends can be stale.
- */
 const saver = createSavePipeline({
   save: (plan, revision, device) => api.save(plan, revision, device),
-  getPlan: () => state.plan,
+  getPlan: () => store.plan,
   deviceId: DEVICE_ID,
-  onStateChange: next => {
-    state.saveState = next;
-    updateSaveIndicator();
-  },
-  onSaved: ({ revision, updatedAt }) => {
-    state.revision = revision;
-    if (updatedAt) state.updatedAt = updatedAt;
-  },
+  onStateChange: next => store.setUi({ saveState: next }, { regions: ['header'] }),
+  onSaved: ({ revision, updatedAt }) => store.setRevision(revision, updatedAt),
   onError: message => toast(message, 'error'),
-  onConflict: latest => {
-    // The local side of the conflict is read when the user chooses, not
-    // captured here, so "Keep my changes" means the plan as it is now (F12).
-    state.conflict = { latest };
-    render();
-  },
-  onUnauthorized: () => {
-    // The plan and its unsaved changes stay in memory; only the screen changes.
-    state.authenticated = false;
-    render();
-  }
+  // The local side of a conflict is read when the user chooses, not captured
+  // here, so "Keep my changes" means the plan as it is now (F12).
+  onConflict: latest => store.setUi({ conflict: { latest } }, { regions: ['conflict'] }),
+  onUnauthorized: () => store.setUi({ authenticated: false })
 });
 
-const stageMap = new Map(STAGES.map(stage => [stage.id, stage]));
+// ---------------------------------------------------------------- screens
 
-function escapeHtml(value = '') {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
-}
+const SHELL = `
+  <header class="topbar" data-region="header"></header>
+  <div data-region="conflict"></div>
+  <div data-region="strip"></div>
+  <main id="main-plan" class="planner">
+    <section class="planner-heading" data-region="heading"></section>
+    <section class="timeline" aria-label="Wedding day timeline" data-region="timeline"></section>
+  </main>
+  <div data-region="toolbar"></div>`;
 
-function uid(prefix = 'activity') {
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function toast(message, tone = 'neutral') {
-  const node = document.createElement('div');
-  node.className = `toast toast--${tone}`;
-  node.textContent = message;
-  toastRegion.append(node);
-  requestAnimationFrame(() => node.classList.add('is-visible'));
-  setTimeout(() => {
-    node.classList.remove('is-visible');
-    setTimeout(() => node.remove(), 180);
-  }, 3200);
-}
-
-function formatPlanDate(value) {
-  const date = new Date(`${value}T12:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('en-CA', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(date);
-}
-
-function formatVersionDate(value) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return new Intl.DateTimeFormat('en-CA', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(date);
-}
-
-function getActivity(id) {
-  return state.plan?.activities.find(activity => activity.id === id) || null;
-}
-
-function getScheduledActivity(id) {
-  return buildSchedule(state.plan).items.find(activity => activity.id === id) || null;
-}
-
-const SAVE_LABELS = {
-  [SAVE_STATES.saved]: 'Saved',
-  [SAVE_STATES.saving]: 'Saving…',
-  [SAVE_STATES.offline]: 'Offline',
-  [SAVE_STATES.notSaved]: 'Not saved'
+const REGIONS = {
+  header: ({ plan, ui }) => renderHeader({ plan, ui }),
+  conflict: ({ ui }) => renderConflict({ ui }),
+  strip: () => renderStrip(),
+  heading: ({ plan }) => renderHeading({ plan }),
+  timeline: ({ plan, ui }) => renderTimeline({ plan, ui }),
+  toolbar: () => renderToolbar()
 };
 
-function saveIndicator() {
-  const label = SAVE_LABELS[state.saveState] || SAVE_LABELS[SAVE_STATES.saved];
-  // "Not saved" is the one state the user can act on, so it is a button.
-  if (state.saveState === SAVE_STATES.notSaved) {
-    return `<button type="button" class="save-indicator save-indicator--not-saved" id="save-retry" aria-label="Not saved. Tap to try again."><span class="save-dot"></span>${label}</button>`;
-  }
-  return `<span class="save-indicator save-indicator--${state.saveState}" role="status"><span class="save-dot"></span>${label}</span>`;
+let currentScreen = null;
+let currentDialogKey = null;
+// Focus is returned to whatever opened the sheet when it closes, so a dialog
+// never leaves the next Tab starting from the top of the page.
+let dialogOpener = null;
+
+function screenOf(ui) {
+  if (ui.loadError && !store.plan) return 'error';
+  if (ui.authenticated === null) return 'loading';
+  if (!ui.authenticated) return 'signin';
+  if (!store.plan) return 'loading';
+  return 'planner';
 }
 
-function loginTemplate() {
-  return `
-    <main class="login-view">
-      <section class="login-card" aria-labelledby="login-title">
-        <div class="brand brand--login">${icon('heart')}<span>Our Wedding</span></div>
-        <div class="login-copy">
-          <p class="eyebrow">Private planner</p>
-          <h1 id="login-title">Wedding Day</h1>
-          <p>Enter the shared password to open the day plan.</p>
-        </div>
-        <form id="login-form" class="form-stack" novalidate>
-          <label class="field">
-            <span>Password</span>
-            <input name="password" type="password" autocomplete="current-password" required autofocus>
-          </label>
-          <p id="login-error" class="form-error" role="alert" hidden></p>
-          <button class="button button--primary button--wide" type="submit">Continue</button>
-        </form>
-      </section>
-    </main>`;
-}
-
-function loadingTemplate() {
-  return `<main class="loading-view"><div class="loading-mark">${icon('heart')}</div><p>Opening your plan…</p></main>`;
-}
-
-function stagePill(stage, { interactive = false, expanded = false } = {}) {
-  const content = `${icon(stage.icon)}<span>${escapeHtml(stage.label)}</span>${interactive ? icon('chevron') : ''}`;
-  if (!interactive) {
-    return `<span class="stage-pill" style="--stage-color:${stage.color};--stage-tint:${stage.tint}">${content}</span>`;
-  }
-  return `<button class="stage-pill stage-pill--button stage-menu-toggle" type="button" style="--stage-color:${stage.color};--stage-tint:${stage.tint}" aria-haspopup="menu" aria-expanded="${expanded}">${content}</button>`;
-}
-
-function personInitials(value) {
-  const parts = String(value || '').trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-}
-
-function personTone(value) {
-  let total = 0;
-  for (const char of String(value || '')) total = (total + char.codePointAt(0)) % 4;
-  return total + 1;
-}
-
-function peopleSummary(people) {
-  const values = (people || []).filter(Boolean);
-  if (!values.length) return `<span class="people-empty">No people assigned</span>`;
-  const primary = values.slice(0, 5).map(person => `<span class="person-display-tag" title="${escapeHtml(person)}">${escapeHtml(person)}</span>`).join('');
-  const compact = values.slice(5).map(person => `<span class="person-display-tag person-display-tag--compact" title="${escapeHtml(person)}">${escapeHtml(personInitials(person))}</span>`).join('');
-  return `<span class="people-summary" title="${escapeHtml(values.join(', '))}">${primary}${compact}</span>`;
-}
-
-function peopleEditorTemplate(people) {
-  const values = (people || []).filter(Boolean);
-  return `<div class="people-editor" data-people='${escapeHtml(JSON.stringify(values))}'>
-    <div class="people-chip-list">
-      ${values.map(person => `<span class="person-chip"><span class="person-avatar person-avatar--${personTone(person)}">${escapeHtml(personInitials(person))}</span><span>${escapeHtml(person)}</span><button type="button" class="person-remove" data-person="${escapeHtml(person)}" aria-label="Remove ${escapeHtml(person)}">${icon('x')}</button></span>`).join('')}
-      <button class="people-add-trigger" type="button" aria-expanded="false">${icon('plus')}<span>Add</span></button>
-    </div>
-    <div class="people-add-row" hidden>
-      <input class="people-add-input" maxlength="80" placeholder="Name or group" autocomplete="off">
-      <button class="button button--quiet people-add-confirm" type="button">Add</button>
-    </div>
-  </div>`;
-}
-
-function getTimeScale(schedule) {
-  const configuredStart = parseTime(state.plan.dayStart) ?? schedule.items[0]?.start ?? 8 * 60;
-  const firstStart = schedule.items.length ? Math.min(...schedule.items.map(item => item.start)) : configuredStart;
-  const start = Math.floor(Math.min(configuredStart, firstStart) / 15) * 15;
-  const end = Math.ceil(Math.max(schedule.end, start + 60) / 15) * 15;
-  return { start, end, minutePx: 2.6, height: (end - start) * 2.6 + 24 };
-}
-
-function timeScaleTemplate(scale) {
-  const ticks = [];
-  for (let minute = scale.start; minute <= scale.end; minute += 15) {
-    const withinHour = ((minute % 60) + 60) % 60;
-    const kind = withinHour === 0 ? 'hour' : withinHour === 30 ? 'half' : 'quarter';
-    const label = kind === 'hour'
-      ? formatTime(minute)
-      : formatTime(minute).replace(/\s[AP]M$/, '');
-    ticks.push(`<div class="timeline-tick timeline-tick--${kind}" style="top:${((minute - scale.start) * scale.minutePx).toFixed(1)}px"><span>${escapeHtml(label)}</span><i></i></div>`);
-  }
-  return ticks.join('');
-}
-
-function stageMenuTemplate(item) {
-  if (state.stageMenuActivityId !== item.id) return '';
-  return `<div class="stage-menu" role="menu" aria-label="Change stage">
-    ${STAGES.map(stage => `<button type="button" role="menuitemradio" aria-checked="${stage.id === item.stage}" class="stage-menu-option ${stage.id === item.stage ? 'is-current' : ''}" data-stage-value="${stage.id}" style="--stage-color:${stage.color};--stage-tint:${stage.tint}">${icon(stage.icon)}<span>${escapeHtml(stage.label)}</span></button>`).join('')}
-  </div>`;
-}
-
-function cardMenuTemplate(item) {
-  if (state.cardMenuActivityId !== item.id) return '';
-  return `<div class="card-menu" role="menu">
-    <button type="button" role="menuitem" class="edit-activity">${icon('settings')}<span>Edit activity</span></button>
-    <button type="button" role="menuitem" class="delete-card-activity">${icon('trash')}<span>Delete</span></button>
-  </div>`;
-}
-
-function timelineActivity(item, index, scale, visual) {
-  const stage = stageMap.get(item.stage) || STAGES[0];
-  const conflict = item.conflictMinutes > 0;
-  const selected = state.selectedActivityId === item.id;
-  const stageOpen = state.stageMenuActivityId === item.id;
-  const menuOpen = state.cardMenuActivityId === item.id;
-  const shifted = visual.offset > 1;
-  return `
-    <div class="activity-row ${shifted ? 'activity-row--shifted' : ''} ${conflict ? 'activity-row--conflict' : ''} ${(stageOpen || menuOpen) ? 'activity-row--menu-open' : ''}" data-activity-id="${escapeHtml(item.id)}" data-index="${index}" data-anchor-top="${visual.anchorTop.toFixed(1)}" style="--row-top:${visual.top.toFixed(1)}px;--row-height:${visual.height.toFixed(1)}px;--stage-color:${stage.color};--stage-tint:${stage.tint}">
-      <article class="activity-card ${item.duration < 30 ? 'activity-card--compact' : ''} ${selected ? 'is-selected' : ''} ${conflict ? 'activity-card--conflict' : ''}" tabindex="0" aria-selected="${selected}" aria-label="${escapeHtml(item.title)}, ${escapeHtml(item.startLabel)} to ${escapeHtml(item.endLabel)}, ${escapeHtml(stage.label)}">
-        <button class="drag-handle" type="button" aria-label="Reorder ${escapeHtml(item.title)}" title="Drag to reorder. Alt + arrow keys also work." ${item.isLocked ? 'disabled' : ''}>
-          <span class="drag-dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
-        </button>
-        <span class="accent-rule" aria-hidden="true"></span>
-        <div class="card-time">
-          <span class="card-time-range">${escapeHtml(item.startLabel)} – ${escapeHtml(item.endLabel)}</span>
-          <strong>${escapeHtml(formatDuration(item.duration))}</strong>
-        </div>
-        <div class="card-stage stage-control">
-          ${stagePill(stage, { interactive: true, expanded: stageOpen })}
-          ${stageMenuTemplate(item)}
-        </div>
-        <div class="card-main">
-          <div class="card-heading">
-            <h2>${escapeHtml(item.title)}</h2>
-            <div class="card-actions">
-              <button class="lock-button ${item.isLocked ? 'is-locked' : ''}" type="button" aria-pressed="${item.isLocked}" aria-label="${item.isLocked ? `Unlock ${escapeHtml(item.title)} from ${escapeHtml(item.startLabel)}` : `Lock ${escapeHtml(item.title)} at ${escapeHtml(item.startLabel)}`}" title="${item.isLocked ? `Fixed at ${escapeHtml(item.startLabel)} — click to unlock` : `Lock at ${escapeHtml(item.startLabel)}`}">${icon('lock')}</button>
-              <div class="card-menu-wrap">
-                <button class="icon-button card-menu-toggle ${menuOpen ? 'is-active' : ''}" type="button" aria-label="More options for ${escapeHtml(item.title)}" aria-haspopup="menu" aria-expanded="${menuOpen}">${icon('more')}</button>
-                ${cardMenuTemplate(item)}
-              </div>
-            </div>
-          </div>
-          <div class="card-meta">
-            <span>${icon('pin')}${escapeHtml(item.location || 'Location not set')}</span>
-            <span class="card-people">${peopleSummary(item.people)}</span>
-          </div>
-        </div>
-        ${conflict ? `<div class="card-conflict-note">${icon('warning')}<span>${formatDuration(item.conflictMinutes)} overlap with previous activity</span></div>` : ''}
-        <button class="resize-handle" type="button" aria-label="Resize ${escapeHtml(item.title)} duration" title="Drag to change duration"><span></span></button>
-      </article>
-    </div>`;
-}
-
-function conflictBanner() {
-  if (!state.conflict) return '';
-  return `<div class="conflict-banner" role="alert">
-    <div>${icon('warning')}<span><strong>This plan changed on another device.</strong> Choose which copy to keep.</span></div>
-    <div class="conflict-actions">
-      <button class="button button--quiet" data-conflict="cloud" type="button">Use cloud copy</button>
-      <button class="button button--primary" data-conflict="local" type="button">Keep my changes</button>
-    </div>
-  </div>`;
-}
-
-function menuTemplate() {
-  return `<details class="app-menu" ${state.menuOpen ? 'open' : ''}>
-    <summary class="icon-button icon-button--outlined" aria-label="Open menu">${icon('menu')}</summary>
-    <div class="menu-popover">
-      <button type="button" data-menu-action="versions">${icon('history')}<span>Version history</span></button>
-      <button type="button" data-menu-action="settings">${icon('settings')}<span>Plan settings</span></button>
-      <div class="menu-divider"></div>
-      <button type="button" data-menu-action="logout">${icon('logout')}<span>Sign out</span></button>
-    </div>
-  </details>`;
-}
-
-function statusControl() {
-  return `<label class="status-control">
-    <span class="sr-only">Plan status</span>
-    <span class="status-dot" aria-hidden="true"></span>
-    <select id="plan-status" aria-label="Plan status">
-      ${PLAN_STATUSES.map(status => `<option ${status === state.plan.status ? 'selected' : ''}>${status}</option>`).join('')}
-    </select>
-    ${icon('chevron')}
-  </label>`;
-}
-
-function appTemplate() {
-  const schedule = buildSchedule(state.plan);
-  return `
-    <header class="topbar">
-      <a href="#main-plan" class="brand" aria-label="Our Wedding planner">${icon('heart')}<span>${escapeHtml(state.plan.coupleLabel || 'Our Wedding')}</span></a>
-      <div class="topbar-actions">
-        ${saveIndicator()}
-        ${statusControl()}
-        ${menuTemplate()}
+function signInScreen() {
+  return `<main class="login-view">
+    <section class="login-card" aria-labelledby="login-title">
+      <div class="brand brand--login">${icon('heart')}<span>Our Wedding</span></div>
+      <div class="login-copy">
+        <p class="eyebrow">Private planner</p>
+        <h1 id="login-title">Wedding Day</h1>
+        <p>Enter the shared password to open the day plan.</p>
       </div>
-    </header>
-    ${conflictBanner()}
-    <main id="main-plan" class="planner">
-      <section class="planner-heading">
-        <div>
-          <p class="eyebrow">One-day planner</p>
-          <h1>${escapeHtml(state.plan.title)}</h1>
-          <p class="planner-date">${escapeHtml(formatPlanDate(state.plan.date))}</p>
-        </div>
-        <button id="add-activity" class="button button--primary" type="button">${icon('plus')}<span>Add activity</span></button>
-      </section>
-      <section class="timeline" aria-label="Wedding day timeline">
-        <div class="timeline-labels" aria-hidden="true"><span>Time</span><span>Plan</span></div>
-        ${(() => {
-          const scale = getTimeScale(schedule);
-          const layout = buildTimelineLayout(schedule, { scaleStart: scale.start, minutePx: scale.minutePx });
-          const canvasHeight = Math.max(scale.height, layout.height);
-          return `<div id="activity-list" class="timeline-canvas" style="height:${canvasHeight.toFixed(1)}px">
-            <div class="timeline-ruler" aria-hidden="true">${timeScaleTemplate({ ...scale, height: canvasHeight })}</div>
-            <div class="timeline-plan">${layout.rows.map(visual => timelineActivity(visual.item, visual.index, scale, visual)).join('')}</div>
-            <div class="end-marker" style="top:${layout.endTop.toFixed(1)}px"><span>${escapeHtml(schedule.endLabel)}</span><i></i><strong>Day plan ends</strong></div>
-          </div>`;
-        })()}
-      </section>
-    </main>
-    <button id="mobile-add" class="mobile-add" type="button" aria-label="Add activity">${icon('plus')}</button>
-    ${dialogTemplate()}`;
-}
-
-function activityDialogTemplate(payload) {
-  const creating = payload.mode === 'create';
-  const item = payload.activity;
-  const scheduled = creating ? null : getScheduledActivity(item.id);
-  const lockTime = item.lockedStart || scheduled ? (item.lockedStart || minutesToTime(scheduled.start)) : state.plan.dayStart;
-  return `<dialog id="activity-dialog" class="sheet-dialog">
-    <form id="activity-form" class="sheet" method="dialog" novalidate>
-      <header class="sheet-header">
-        <button class="icon-button sheet-close" type="button" aria-label="Close">${icon('x')}</button>
-        <h2>${creating ? 'Add Activity' : 'Edit Activity'}</h2>
-        <button class="button button--text" type="submit">Done</button>
-      </header>
-      <div class="sheet-body form-stack">
-        <input type="hidden" name="id" value="${escapeHtml(item.id)}">
-        <label class="field"><span>Activity name</span><input name="title" required maxlength="100" value="${escapeHtml(item.title)}"></label>
-        <label class="field"><span>Stage</span><select name="stage">${STAGES.map(stage => `<option value="${stage.id}" ${stage.id === item.stage ? 'selected' : ''}>${escapeHtml(stage.label)}</option>`).join('')}</select></label>
-        <div class="field-grid">
-          <label class="field"><span>Start time</span><input value="${escapeHtml(scheduled?.startLabel || 'Calculated')}" readonly></label>
-          <label class="field"><span>Duration</span><div class="stepper"><button type="button" data-duration-step="-5" aria-label="Reduce duration by five minutes">−</button><input name="duration" type="number" inputmode="numeric" min="1" max="720" value="${Number(item.duration) || 30}" aria-describedby="duration-help"><button type="button" data-duration-step="5" aria-label="Increase duration by five minutes">+</button></div><small id="duration-help">Rounded up to the next 5 minutes when needed.</small></label>
-        </div>
-        <label class="field"><span>Location</span><input name="location" maxlength="140" value="${escapeHtml(item.location || '')}" placeholder="Add a location"></label>
-        <div class="field"><span>People</span>${peopleEditorTemplate(item.people)}<small>Add people or groups as individual tags.</small></div>
-        <label class="field"><span>Notes</span><textarea name="notes" maxlength="1000" rows="4" placeholder="Optional planning notes">${escapeHtml(item.notes || '')}</textarea></label>
-        <div class="lock-setting">
-          <div>${icon('lock')}<span><strong>Lock / fixed time</strong><small>Keeps this activity anchored while flexible activities ripple around it.</small></span></div>
-          <label class="switch"><input id="lock-toggle" name="locked" type="checkbox" ${item.lockedStart ? 'checked' : ''}><span></span></label>
-        </div>
-        <label id="fixed-time-field" class="field ${item.lockedStart ? '' : 'is-hidden'}"><span>Fixed start time</span><input name="lockedStart" type="time" step="300" value="${escapeHtml(lockTime)}"></label>
-        ${creating ? '' : `<button id="delete-activity" class="danger-action" type="button">${icon('trash')}<span>Delete activity</span></button>`}
-      </div>
-    </form>
-  </dialog>`;
-}
-
-function versionsDialogTemplate() {
-  return `<dialog id="versions-dialog" class="sheet-dialog sheet-dialog--wide">
-    <section class="sheet">
-      <header class="sheet-header">
-        <button class="icon-button sheet-close" type="button" aria-label="Close">${icon('x')}</button>
-        <h2>Version History</h2>
-        <span class="sheet-header-spacer"></span>
-      </header>
-      <div class="sheet-body">
-        <form id="version-form" class="version-create" novalidate>
-          <label class="field"><span>Save the current plan as a named version</span><input name="name" maxlength="80" placeholder="e.g. After photographer review" required></label>
-          <button class="button button--primary" type="submit">${icon('save')}<span>Save version</span></button>
-        </form>
-        <div class="version-list">
-          ${state.versions.length ? state.versions.map(version => `<article class="version-item"><div><strong>${escapeHtml(version.name)}</strong><span>${escapeHtml(formatVersionDate(version.createdAt))}</span></div><button class="button button--quiet restore-version" type="button" data-version-id="${escapeHtml(version.id)}">Restore</button></article>`).join('') : '<div class="empty-state">No named versions yet.</div>'}
-        </div>
-      </div>
+      <form id="login-form" class="form-stack" novalidate>
+        <label class="field"><span>Password</span><input name="password" type="password" autocomplete="current-password" autofocus></label>
+        <p id="login-error" class="form-error" role="alert" hidden></p>
+        <button class="button button--primary button--wide" type="submit">Continue</button>
+      </form>
     </section>
-  </dialog>`;
-}
-
-function settingsDialogTemplate() {
-  return `<dialog id="settings-dialog" class="sheet-dialog">
-    <form id="settings-form" class="sheet" method="dialog" novalidate>
-      <header class="sheet-header"><button class="icon-button sheet-close" type="button" aria-label="Close">${icon('x')}</button><h2>Plan Settings</h2><button class="button button--text" type="submit">Done</button></header>
-      <div class="sheet-body form-stack">
-        <label class="field"><span>Planner name</span><input name="coupleLabel" maxlength="60" required value="${escapeHtml(state.plan.coupleLabel || 'Our Wedding')}"></label>
-        <label class="field"><span>Day title</span><input name="title" maxlength="80" required value="${escapeHtml(state.plan.title)}"></label>
-        <label class="field"><span>Date</span><input name="date" type="date" required value="${escapeHtml(state.plan.date)}"></label>
-        <label class="field"><span>Planning day starts</span><input name="dayStart" type="time" step="300" required value="${escapeHtml(state.plan.dayStart)}"><small>Flexible activities ripple forward from this time until they meet a locked activity.</small></label>
-      </div>
-    </form>
-  </dialog>`;
-}
-
-function dialogTemplate() {
-  if (!state.dialog) return '';
-  if (state.dialog.type === 'activity') return activityDialogTemplate(state.dialog);
-  if (state.dialog.type === 'versions') return versionsDialogTemplate();
-  if (state.dialog.type === 'settings') return settingsDialogTemplate();
-  return '';
-}
-
-function loadErrorTemplate() {
-  return `<main class="fatal-view">
-    <div>${icon('warning')}</div>
-    <h1>Can't load the plan right now</h1>
-    <p>${escapeHtml(state.loadError)}</p>
-    <button id="retry-load" class="button button--primary" type="button">Retry</button>
   </main>`;
 }
 
-function render() {
-  // A failed load is never shown as an empty plan or as a sign-in prompt: both
-  // would suggest something that is not true.
-  if (state.loadError && !state.plan) app.innerHTML = loadErrorTemplate();
-  else if (state.authenticated === null) app.innerHTML = loadingTemplate();
-  else if (!state.authenticated) app.innerHTML = loginTemplate();
-  else if (!state.plan) app.innerHTML = loadingTemplate();
-  else app.innerHTML = appTemplate();
-
-  bindEvents();
-  if (state.dialog) requestAnimationFrame(() => app.querySelector('dialog')?.showModal());
+function loadingScreen() {
+  return `<main class="loading-view"><div class="loading-mark">${icon('heart')}</div><p>Opening your plan…</p></main>`;
 }
 
-function updatePlan(mutator, { save = true } = {}) {
-  const next = structuredClone(state.plan);
-  mutator(next);
-  state.plan = next;
-  if (save) saver.markDirty();
-  render();
+/** A failed load is never shown as an empty plan or as a sign-in prompt. */
+function errorScreen(message) {
+  return `<main class="fatal-view">
+    <div>${icon('warning')}</div>
+    <h1>Can't load the plan right now</h1>
+    <p>${escapeHtml(message || 'Please try again.')}</p>
+    <button class="button button--primary" type="button" data-action="retry-load">Retry</button>
+  </main>`;
 }
+
+function repaint(regions = ['all']) {
+  const ui = store.ui;
+  const screen = screenOf(ui);
+
+  if (screen !== currentScreen) {
+    currentScreen = screen;
+    if (screen === 'error') app.innerHTML = errorScreen(ui.loadError);
+    else if (screen === 'signin') app.innerHTML = signInScreen();
+    else if (screen === 'loading') app.innerHTML = loadingScreen();
+    else {
+      app.innerHTML = SHELL;
+      paintRegions(Object.keys(REGIONS));
+    }
+    syncSheet();
+    return;
+  }
+
+  if (screen === 'error') {
+    app.innerHTML = errorScreen(ui.loadError);
+    return;
+  }
+  if (screen !== 'planner') return;
+
+  paintRegions(regions.includes('all') ? Object.keys(REGIONS) : regions.filter(name => name in REGIONS));
+  syncSheet();
+}
+
+function paintRegions(names) {
+  const context = { plan: store.plan, ui: store.ui };
+  for (const name of names) {
+    paint(app.querySelector(`[data-region="${name}"]`), REGIONS[name](context));
+  }
+  if (names.includes('timeline')) gestures.bind();
+}
+
+// ------------------------------------------------------------------ sheets
 
 /**
- * Sends anything outstanding and reports whether the plan is safely stored.
- * Used before actions that read the server's copy (versions, sign-out).
+ * Identity of the open sheet. While it does not change, the sheet is left
+ * alone — that is what keeps a background save from rebuilding it. The version
+ * list is part of the identity because saving a version changes what the sheet
+ * should show.
  */
+function dialogKey(dialog) {
+  if (!dialog) return null;
+  if (dialog.type === 'activity') return `activity:${dialog.mode}:${dialog.activity.id}`;
+  if (dialog.type === 'versions') return `versions:${store.ui.versions.length}`;
+  return dialog.type;
+}
+
+function syncSheet() {
+  const key = dialogKey(store.ui.dialog);
+  if (key === currentDialogKey) return;
+  const closing = currentDialogKey && !key;
+  currentDialogKey = key;
+
+  const open = sheetRoot.querySelector('dialog');
+  if (open) open.close();
+  sheetRoot.innerHTML = key ? renderSheet(store.ui, store.plan) : '';
+
+  if (!key) {
+    if (closing && dialogOpener) focusByKey(app, dialogOpener);
+    dialogOpener = null;
+    return;
+  }
+
+  const dialog = sheetRoot.querySelector('dialog');
+  bindSheet(dialog);
+  dialog.showModal();
+}
+
+function closeSheet() {
+  store.setUi({ dialog: null }, { regions: [] });
+  syncSheet();
+}
+
+const gestures = createGestures({
+  root: app,
+  store,
+  commit: (action, payload) => commit(action, payload),
+  repaint
+});
+
+// ------------------------------------------------------------------ changes
+
+/** Apply an action and let the save pipeline know something changed. */
+function commit(action, payload, options) {
+  const result = store.dispatch(action, payload, options);
+  if (result) saver.markDirty();
+  return result;
+}
+
 async function flushSave() {
   await saver.flushNow();
   if (saver.hasPendingChanges || saver.isBlocked) throw new Error('Plan is not fully saved');
-  state.revision = saver.revision;
+  store.setRevision(saver.revision);
 }
 
-function updateSaveIndicator() {
-  const node = app.querySelector('.save-indicator');
-  if (!node) return;
-  const replacement = document.createElement('template');
-  replacement.innerHTML = saveIndicator();
-  const next = replacement.content.firstElementChild;
-  node.replaceWith(next);
-  if (next.id === 'save-retry') next.addEventListener('click', () => void saver.retry());
-}
+// -------------------------------------------------------------- validation
 
-function openActivityDialog(activity, mode = 'edit') {
-  state.dialog = { type: 'activity', mode, activity: structuredClone(activity) };
-  render();
-}
-
-async function openVersions() {
-  try {
-    await flushSave();
-    const result = await api.versions();
-    state.versions = result.versions;
-    state.revision = result.revision;
-    state.dialog = { type: 'versions' };
-    state.menuOpen = false;
-    render();
-  } catch (error) {
-    toast(error.message || 'Could not open versions.', 'error');
-  }
-}
-
-function closeDialog() {
-  state.dialog = null;
-  render();
-}
-
-/**
- * Inline field errors.
- *
- * Validation runs through the same module the server uses, so a message shown
- * here is exactly the reason the server would have given — and the sheet stays
- * open with the offending field focused instead of the change being applied
- * and then silently refused on save.
- */
 function clearFieldErrors(form) {
   form.querySelectorAll('.field-error').forEach(node => node.remove());
   form.querySelectorAll('[aria-invalid="true"]').forEach(node => {
@@ -512,13 +221,14 @@ function clearFieldErrors(form) {
   });
 }
 
-function fieldName(field) {
-  return String(field || '').split('.').pop();
-}
-
+/**
+ * Validation runs through the module the server uses, so the message shown here
+ * is the reason the server would have given — and the sheet stays open with the
+ * offending field focused instead of the change being applied and then refused.
+ */
 function showFieldError(form, field, message) {
-  const name = fieldName(field);
-  const control = form.querySelector(`[name="${CSS.escape(name)}"]`) || form.querySelector(`.${CSS.escape(name)}-editor`);
+  const name = String(field || '').split('.').pop();
+  const control = form.querySelector(`[name="${name}"]`);
   const note = document.createElement('p');
   note.className = 'field-error';
   note.id = `error-${name}`;
@@ -535,196 +245,43 @@ function showFieldError(form, field, message) {
   control.focus();
 }
 
-function bindEvents() {
-  app.querySelector('#retry-load')?.addEventListener('click', () => {
-    state.loadError = null;
-    render();
-    void (state.authenticated ? loadPlan() : init());
-  });
-  if (state.loadError && !state.plan) return;
+// ------------------------------------------------------------- people chips
 
-  if (!state.authenticated) {
-    const form = app.querySelector('#login-form');
-    form?.addEventListener('submit', handleLogin);
-    return;
-  }
-  if (!state.plan) return;
-
-  app.querySelector('#save-retry')?.addEventListener('click', () => void saver.retry());
-
-  app.querySelector('#plan-status')?.addEventListener('change', event => updatePlan(plan => { plan.status = event.target.value; }));
-  app.querySelector('#add-activity')?.addEventListener('click', handleAdd);
-  app.querySelector('#mobile-add')?.addEventListener('click', handleAdd);
-
-  app.querySelectorAll('.activity-card').forEach(card => {
-    card.addEventListener('click', event => {
-      if (event.target.closest('button, .stage-menu, .card-menu')) return;
-      selectActivity(card.closest('.activity-row').dataset.activityId);
-    });
-    card.addEventListener('dblclick', event => {
-      if (event.target.closest('button, .stage-menu, .card-menu')) return;
-      openActivityDialog(getActivity(card.closest('.activity-row').dataset.activityId));
-    });
-    card.addEventListener('keydown', event => {
-      if (!['Enter', ' '].includes(event.key) || event.target !== card) return;
-      event.preventDefault();
-      selectActivity(card.closest('.activity-row').dataset.activityId);
-    });
-  });
-
-  app.querySelectorAll('.card-menu-toggle').forEach(button => button.addEventListener('click', event => {
-    event.stopPropagation();
-    const id = button.closest('.activity-row').dataset.activityId;
-    state.cardMenuActivityId = state.cardMenuActivityId === id ? null : id;
-    state.stageMenuActivityId = null;
-    state.selectedActivityId = id;
-    render();
-  }));
-  app.querySelectorAll('.edit-activity').forEach(button => button.addEventListener('click', event => {
-    event.stopPropagation();
-    const row = button.closest('.activity-row');
-    openActivityDialog(getActivity(row.dataset.activityId));
-  }));
-  app.querySelectorAll('.delete-card-activity').forEach(button => button.addEventListener('click', event => {
-    event.stopPropagation();
-    const row = button.closest('.activity-row');
-    const activity = getActivity(row.dataset.activityId);
-    if (!activity || !window.confirm(`Delete ${activity.title || 'this activity'}?`)) return;
-    updatePlan(plan => { plan.activities = plan.activities.filter(item => item.id !== activity.id); });
-    state.cardMenuActivityId = null;
-    if (state.selectedActivityId === activity.id) state.selectedActivityId = null;
-    toast('Activity deleted.');
-  }));
-
-  app.querySelectorAll('.stage-menu-toggle').forEach(button => button.addEventListener('click', event => {
-    event.stopPropagation();
-    const id = button.closest('.activity-row').dataset.activityId;
-    state.stageMenuActivityId = state.stageMenuActivityId === id ? null : id;
-    state.cardMenuActivityId = null;
-    state.selectedActivityId = id;
-    render();
-  }));
-  app.querySelectorAll('[data-stage-value]').forEach(button => button.addEventListener('click', event => {
-    event.stopPropagation();
-    const row = button.closest('.activity-row');
-    const id = row.dataset.activityId;
-    const stage = button.dataset.stageValue;
-    updatePlan(plan => { plan.activities.find(activity => activity.id === id).stage = stage; });
-    state.stageMenuActivityId = null;
-    state.selectedActivityId = id;
-    toast('Stage updated.', 'success');
-  }));
-
-  app.querySelectorAll('.lock-button').forEach(button => button.addEventListener('click', event => {
-    event.stopPropagation();
-    const row = button.closest('.activity-row');
-    const id = row.dataset.activityId;
-    const scheduled = getScheduledActivity(id);
-    updatePlan(plan => {
-      const activity = plan.activities.find(item => item.id === id);
-      activity.lockedStart = activity.lockedStart ? null : minutesToTime(scheduled.start);
-    });
-    state.selectedActivityId = id;
-    state.stageMenuActivityId = null;
-    state.cardMenuActivityId = null;
-    toast(button.classList.contains('is-locked') ? 'Fixed time removed.' : `Locked at ${scheduled.startLabel}.`, 'success');
-  }));
-
-  app.querySelectorAll('.drag-handle').forEach(handle => {
-    handle.addEventListener('pointerdown', startDrag);
-    handle.addEventListener('keydown', handleKeyboardReorder);
-  });
-  app.querySelectorAll('.resize-handle').forEach(handle => {
-    handle.addEventListener('pointerdown', startResize);
-    handle.addEventListener('keydown', handleKeyboardResize);
-  });
-  app.querySelectorAll('[data-conflict]').forEach(button => button.addEventListener('click', resolveConflict));
-  app.querySelectorAll('[data-menu-action]').forEach(button => button.addEventListener('click', handleMenuAction));
-
-  const planner = app.querySelector('.planner');
-  planner?.addEventListener('click', event => {
-    if (event.target.closest('.activity-card, button, a, input, select, textarea, summary, dialog')) return;
-    if (state.selectedActivityId || state.stageMenuActivityId || state.cardMenuActivityId) {
-      state.selectedActivityId = null;
-      state.stageMenuActivityId = null;
-      state.cardMenuActivityId = null;
-      render();
-    }
-  });
-
-  const details = app.querySelector('.app-menu');
-  details?.addEventListener('toggle', () => { state.menuOpen = details.open; });
-
-  bindDialogEvents();
-}
-
-function selectActivity(id) {
-  const changed = state.selectedActivityId !== id || state.stageMenuActivityId || state.cardMenuActivityId;
-  state.selectedActivityId = id;
-  state.stageMenuActivityId = null;
-  state.cardMenuActivityId = null;
-  if (changed) render();
-}
-
-function bindDialogEvents() {
-  const dialog = app.querySelector('dialog');
-  if (!dialog) return;
-  dialog.addEventListener('cancel', event => { event.preventDefault(); closeDialog(); });
-  dialog.querySelectorAll('.sheet-close').forEach(button => button.addEventListener('click', closeDialog));
-  dialog.addEventListener('click', event => {
-    if (event.target === dialog) closeDialog();
-  });
-
-  if (dialog.id === 'activity-dialog') {
-    dialog.querySelector('#activity-form')?.addEventListener('submit', handleActivitySubmit);
-    dialog.querySelector('#delete-activity')?.addEventListener('click', handleDeleteActivity);
-    dialog.querySelector('#lock-toggle')?.addEventListener('change', event => {
-      dialog.querySelector('#fixed-time-field')?.classList.toggle('is-hidden', !event.target.checked);
-    });
-    dialog.querySelectorAll('[data-duration-step]').forEach(button => button.addEventListener('click', () => {
-      const input = dialog.querySelector('input[name="duration"]');
-      input.value = clampDuration(Number(input.value) + Number(button.dataset.durationStep));
-    }));
-    const durationInput = dialog.querySelector('input[name="duration"]');
-    durationInput?.addEventListener('blur', () => { durationInput.value = clampDuration(Number(durationInput.value)); });
-    bindPeopleEditor(dialog);
-  }
-
-  if (dialog.id === 'versions-dialog') {
-    dialog.querySelector('#version-form')?.addEventListener('submit', handleCreateVersion);
-    dialog.querySelectorAll('.restore-version').forEach(button => button.addEventListener('click', handleRestoreVersion));
-  }
-
-  if (dialog.id === 'settings-dialog') dialog.querySelector('#settings-form')?.addEventListener('submit', handleSettingsSubmit);
-}
-
-function getPeopleEditorValues(root) {
-  const editor = root.matches?.('.people-editor') ? root : root.querySelector('.people-editor');
+function peopleValues(root) {
+  const editor = root.querySelector('.people-editor');
   if (!editor) return [];
   try {
-    const values = JSON.parse(editor.dataset.people || '[]');
-    return Array.isArray(values) ? values.map(value => String(value).trim()).filter(Boolean) : [];
+    const stored = JSON.parse(editor.dataset.people || '[]');
+    const values = Array.isArray(stored) ? stored.map(value => String(value).trim()).filter(Boolean) : [];
+    // Text typed but not confirmed with Enter used to be dropped on Done (F20).
+    const pending = editor.querySelector('.people-add-input')?.value.trim();
+    if (pending && !values.some(person => person.toLowerCase() === pending.toLowerCase())) values.push(pending);
+    return values;
   } catch {
     return [];
   }
 }
 
-function setPeopleEditorValues(editor, values) {
-  const unique = [...new Set(values.map(value => String(value).trim()).filter(Boolean))].slice(0, 30);
-  editor.dataset.people = JSON.stringify(unique);
-  const list = editor.querySelector('.people-chip-list');
-  const addButton = `<button class="people-add-trigger" type="button" aria-expanded="false">${icon('plus')}<span>Add</span></button>`;
-  list.innerHTML = `${unique.map(person => `<span class="person-chip"><span class="person-avatar person-avatar--${personTone(person)}">${escapeHtml(personInitials(person))}</span><span>${escapeHtml(person)}</span><button type="button" class="person-remove" data-person="${escapeHtml(person)}" aria-label="Remove ${escapeHtml(person)}">${icon('x')}</button></span>`).join('')}${addButton}`;
+function setPeopleValues(editor, values) {
+  const unique = [];
+  const seen = new Set();
+  for (const value of values.map(entry => String(entry).trim()).filter(Boolean)) {
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(value);
+  }
+  const capped = unique.slice(0, 30);
+  editor.dataset.people = JSON.stringify(capped);
+  editor.querySelector('.people-chip-list').innerHTML = peopleChips(capped);
 }
 
-function addPeopleEditorValue(editor) {
+function addPendingPerson(editor) {
   const input = editor.querySelector('.people-add-input');
   const value = input?.value.trim();
   if (!value) return;
-  const values = getPeopleEditorValues(editor);
-  if (!values.some(person => person.toLowerCase() === value.toLowerCase())) values.push(value);
-  if (input) input.value = '';
-  setPeopleEditorValues(editor, values);
+  setPeopleValues(editor, [...JSON.parse(editor.dataset.people || '[]'), value]);
+  input.value = '';
   editor.querySelector('.people-add-row').hidden = false;
   editor.querySelector('.people-add-input')?.focus();
 }
@@ -732,67 +289,82 @@ function addPeopleEditorValue(editor) {
 function bindPeopleEditor(dialog) {
   const editor = dialog.querySelector('.people-editor');
   if (!editor) return;
+
   editor.addEventListener('click', event => {
-    const addTrigger = event.target.closest('.people-add-trigger');
-    if (addTrigger) {
-      const addRow = editor.querySelector('.people-add-row');
-      addRow.hidden = false;
-      addTrigger.setAttribute('aria-expanded', 'true');
+    const trigger = event.target.closest('.people-add-trigger');
+    if (trigger) {
+      editor.querySelector('.people-add-row').hidden = false;
+      trigger.setAttribute('aria-expanded', 'true');
       editor.querySelector('.people-add-input')?.focus();
       return;
     }
     const remove = event.target.closest('.person-remove');
     if (remove) {
       const person = remove.dataset.person;
-      setPeopleEditorValues(editor, getPeopleEditorValues(editor).filter(value => value !== person));
+      setPeopleValues(editor, JSON.parse(editor.dataset.people || '[]').filter(value => value !== person));
       return;
     }
-    if (event.target.closest('.people-add-confirm')) addPeopleEditorValue(editor);
+    if (event.target.closest('.people-add-confirm')) addPendingPerson(editor);
   });
+
   editor.querySelector('.people-add-input')?.addEventListener('keydown', event => {
-    if (event.key === 'Enter') { event.preventDefault(); addPeopleEditorValue(editor); }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      addPendingPerson(editor);
+    }
     if (event.key === 'Escape') {
+      event.stopPropagation();
       editor.querySelector('.people-add-row').hidden = true;
       editor.querySelector('.people-add-trigger')?.focus();
     }
   });
 }
 
-async function handleLogin(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const errorNode = form.querySelector('#login-error');
-  const button = form.querySelector('button[type="submit"]');
-  button.disabled = true;
-  errorNode.hidden = true;
-  try {
-    await api.login(new FormData(form).get('password'));
-    state.authenticated = true;
+// ------------------------------------------------------------ sheet wiring
 
-    // Signing in again in the middle of an edit must not cost that edit. When
-    // changes are still pending, the plan on screen is kept and only the
-    // revision is refreshed, so the save can be retried (or turn into a
-    // conflict). Loading here would replace the plan and lose the work (F10).
-    if (state.plan && saver.hasPendingChanges) {
-      render();
-      const current = await api.load().catch(() => null);
-      await saver.resume({ revision: current?.revision ?? state.revision });
-      return;
-    }
+function bindSheet(dialog) {
+  dialog.addEventListener('cancel', event => {
+    event.preventDefault();
+    closeSheet();
+  });
+  dialog.querySelectorAll('.sheet-close').forEach(button => button.addEventListener('click', closeSheet));
+  dialog.addEventListener('click', event => {
+    if (event.target === dialog) closeSheet();
+  });
 
-    await loadPlan();
-  } catch (error) {
-    errorNode.textContent = error.message || 'Unable to sign in';
-    errorNode.hidden = false;
-    button.disabled = false;
+  if (dialog.id === 'activity-dialog') {
+    dialog.querySelector('#activity-form').addEventListener('submit', submitActivity);
+    dialog.querySelector('#delete-activity')?.addEventListener('click', () => {
+      const id = store.ui.dialog.activity.id;
+      closeSheet();
+      commit('activity.remove', { id });
+      store.setUi({ selectedId: null }, { regions: ['timeline'] });
+    });
+    dialog.querySelector('#lock-toggle')?.addEventListener('change', event => {
+      dialog.querySelector('#fixed-time-field')?.classList.toggle('is-hidden', !event.target.checked);
+    });
+    dialog.querySelectorAll('[data-duration-step]').forEach(button => button.addEventListener('click', () => {
+      const input = dialog.querySelector('input[name="duration"]');
+      input.value = normalizeDuration(Number(input.value) + Number(button.dataset.durationStep));
+    }));
+    const duration = dialog.querySelector('input[name="duration"]');
+    duration?.addEventListener('blur', () => { duration.value = normalizeDuration(Number(duration.value)); });
+    bindPeopleEditor(dialog);
+    return;
+  }
+
+  if (dialog.id === 'versions-dialog') {
+    dialog.querySelector('#version-form').addEventListener('submit', createVersion);
+    dialog.querySelectorAll('.restore-version').forEach(button => button.addEventListener('click', () => restoreVersion(button.dataset.versionId)));
+    return;
+  }
+
+  if (dialog.id === 'settings-dialog') {
+    dialog.querySelector('#settings-form').addEventListener('submit', submitSettings);
   }
 }
 
-function handleAdd() {
-  openActivityDialog({ id: uid(), title: '', duration: 30, stage: 'preparation', location: '', people: [], notes: '', lockedStart: null }, 'create');
-}
-
-function handleActivitySubmit(event) {
+function submitActivity(event) {
   event.preventDefault();
   const form = event.currentTarget;
   clearFieldErrors(form);
@@ -805,10 +377,10 @@ function handleActivitySubmit(event) {
     duration: normalizeDuration(Number(data.get('duration'))),
     stage: String(data.get('stage')),
     location: String(data.get('location')).trim(),
-    people: getPeopleEditorValues(form).slice(0, 30),
+    people: peopleValues(form),
     notes: String(data.get('notes')).trim(),
-    // Typed times round up to the next 5 minutes rather than being refused.
-    lockedStart: locked ? (roundTimeUp(String(data.get('lockedStart') || '')) || state.plan.dayStart) : null
+    // A typed time rounds up to the next 5 minutes instead of being refused.
+    lockedStart: locked ? (roundTimeUp(String(data.get('lockedStart') || '')) || store.plan.dayStart) : null
   };
 
   let activity;
@@ -819,389 +391,334 @@ function handleActivitySubmit(event) {
     return;
   }
 
-  const creating = state.dialog.mode === 'create';
-  updatePlan(plan => {
-    if (creating) plan.activities.push(activity);
-    else {
-      const index = plan.activities.findIndex(item => item.id === activity.id);
-      if (index >= 0) plan.activities[index] = activity;
-    }
-  });
-  state.dialog = null;
-  render();
+  const creating = store.ui.dialog.mode === 'create';
+  closeSheet();
+  if (creating) commit('activity.add', { activity, afterId: store.ui.selectedId });
+  else commit('activity.update', { activity });
 }
 
-function handleDeleteActivity() {
-  const id = state.dialog.activity.id;
-  const title = state.dialog.activity.title || 'this activity';
-  if (!window.confirm(`Delete ${title}?`)) return;
-  updatePlan(plan => { plan.activities = plan.activities.filter(activity => activity.id !== id); });
-  state.dialog = null;
-  toast('Activity deleted.');
-  render();
-}
-
-function handleSettingsSubmit(event) {
+function submitSettings(event) {
   event.preventDefault();
   const form = event.currentTarget;
   clearFieldErrors(form);
 
   const data = new FormData(form);
-  const candidate = {
-    ...structuredClone(state.plan),
+  const changes = {
     coupleLabel: String(data.get('coupleLabel')).trim(),
     title: String(data.get('title')).trim(),
     date: String(data.get('date')),
     dayStart: roundTimeUp(String(data.get('dayStart') || '')) || ''
   };
 
-  const result = checkPlan(candidate);
+  const result = checkPlan({ ...structuredClone(store.plan), ...changes });
   if (!result.ok) {
     showFieldError(form, result.error.field, result.error.message);
     return;
   }
 
-  updatePlan(plan => {
-    plan.coupleLabel = result.plan.coupleLabel;
-    plan.title = result.plan.title;
-    plan.date = result.plan.date;
-    plan.dayStart = result.plan.dayStart;
-  });
-  state.dialog = null;
-  render();
+  closeSheet();
+  commit('plan.settings', { changes: { coupleLabel: result.plan.coupleLabel, title: result.plan.title, date: result.plan.date, dayStart: result.plan.dayStart } });
 }
 
-async function handleCreateVersion(event) {
+async function createVersion(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const button = form.querySelector('button');
+  clearFieldErrors(form);
   button.disabled = true;
   try {
     await flushSave();
-    const result = await api.createVersion(new FormData(form).get('name'), state.revision);
-    state.versions = result.versions;
+    const result = await api.createVersion(new FormData(form).get('name'), store.revision);
     saver.markClean(result.revision);
-    state.revision = result.revision;
-    state.dialog = { type: 'versions' };
-    toast('Version saved.', 'success');
-    render();
+    store.setRevision(result.revision);
+    // The sheet stays open; its identity changes with the list, so it repaints.
+    store.setUi({ versions: result.versions }, { regions: [] });
+    syncSheet();
   } catch (error) {
-    toast(error.message || 'Could not save version.', 'error');
+    if (error.field) showFieldError(form, error.field, error.message);
+    else toast(error.message || 'Could not save that version.', 'error');
     button.disabled = false;
   }
 }
 
-async function handleRestoreVersion(event) {
-  const id = event.currentTarget.dataset.versionId;
-  const version = state.versions.find(item => item.id === id);
-  if (!version || !window.confirm(`Restore “${version.name}”? The current plan will be replaced.`)) return;
+async function restoreVersion(id) {
+  const version = store.ui.versions.find(item => item.id === id);
+  if (!version) return;
   try {
-    const result = await api.restoreVersion(id, state.revision);
-    state.plan = result.plan;
-    state.versions = result.versions;
-    state.revision = result.revision;
-    state.updatedAt = result.updatedAt;
+    const result = await api.restoreVersion(id, store.revision);
     saver.markClean(result.revision);
-    state.dialog = null;
-    toast('Version restored.', 'success');
-    render();
+    store.setUi({ versions: result.versions, dialog: null }, { regions: [] });
+    store.setPlan(result.plan, { revision: result.revision, updatedAt: result.updatedAt });
   } catch (error) {
-    toast(error.message || 'Could not restore version.', 'error');
+    toast(error.message || 'Could not restore that version.', 'error');
   }
 }
 
-async function handleMenuAction(event) {
-  const action = event.currentTarget.dataset.menuAction;
-  if (action === 'versions') return openVersions();
-  if (action === 'settings') {
-    state.dialog = { type: 'settings' };
-    state.menuOpen = false;
-    return render();
-  }
-  if (action === 'logout') {
-    try { await flushSave(); } catch {}
-    await api.logout().catch(() => {});
-    state.authenticated = false;
-    state.plan = null;
-    state.revision = null;
-    state.dialog = null;
-    render();
+async function openVersions() {
+  rememberOpener('menu-app');
+  try {
+    await flushSave();
+    const result = await api.versions();
+    store.setRevision(result.revision);
+    store.setUi({ versions: result.versions, openMenu: null, dialog: { type: 'versions' } });
+  } catch (error) {
+    toast(error.message || 'Could not open version history.', 'error');
   }
 }
 
-function resolveConflict(event) {
-  const choice = event.currentTarget.dataset.conflict;
-  const latest = state.conflict.latest;
-  state.conflict = null;
+// ------------------------------------------------------------ interactions
 
-  if (choice === 'cloud') {
-    state.plan = latest.plan;
-    state.revision = latest.revision;
-    state.updatedAt = latest.updatedAt;
+/**
+ * Remember the control that opened a sheet, so focus can go back to it.
+ * Menu items live inside a popover that is torn down with the menu, so they
+ * pass the button that opened the menu as the fallback.
+ */
+function rememberOpener(fallback = null) {
+  dialogOpener = document.activeElement?.closest?.('[data-focus-key]')?.getAttribute('data-focus-key') ?? fallback;
+}
+
+function openEditor(id) {
+  const activity = store.plan.activities.find(item => item.id === id);
+  if (!activity) return;
+  rememberOpener();
+  if (!dialogOpener) dialogOpener = `card:${id}`;
+  store.setUi({ dialog: { type: 'activity', mode: 'edit', activity: structuredClone(activity) }, openMenu: null });
+}
+
+function addActivity() {
+  rememberOpener();
+  const activity = {
+    id: uid(),
+    title: '',
+    duration: 30,
+    stage: STAGES[0].id,
+    location: '',
+    people: [],
+    notes: '',
+    lockedStart: null
+  };
+  store.setUi({ dialog: { type: 'activity', mode: 'create', activity }, openMenu: null });
+}
+
+const ACTION_HANDLERS = {
+  select(_, element) {
+    store.setUi({ selectedId: element.dataset.id, openMenu: null }, { regions: ['timeline'] });
+  },
+  edit(_, element) {
+    openEditor(element.dataset.id);
+  },
+  add: addActivity,
+  delete(_, element) {
+    const id = element.dataset.id;
+    commit('activity.remove', { id });
+    store.setUi({ selectedId: null, openMenu: null }, { regions: ['timeline'] });
+  },
+  lock(_, element) {
+    const id = element.dataset.id;
+    const activity = store.plan.activities.find(item => item.id === id);
+    const action = activity?.lockedStart ? 'activity.unfix' : 'activity.fix';
+    // The menu closes before the plan changes: closing it afterwards would be
+    // undone by the repaint the change triggers.
+    store.setUi({ selectedId: id, openMenu: null }, { regions: [] });
+    commit(action, { id, scheduleBefore: buildSchedule(store.plan) }, { regions: ['timeline'] });
+  },
+  'set-stage'(_, element) {
+    const id = element.dataset.id;
+    store.setUi({ selectedId: id, openMenu: null }, { regions: [] });
+    commit('activity.stage', { id, stage: element.dataset.stage }, { regions: ['timeline'] });
+  },
+  menu(_, element) {
+    const name = element.dataset.menu;
+    store.setUi({ openMenu: store.ui.openMenu === name ? null : name });
+  },
+  'menu-action'(_, element) {
+    const action = element.dataset.menuAction;
+    if (action === 'versions') return void openVersions();
+    if (action === 'settings') {
+      rememberOpener('menu-app');
+      return store.setUi({ openMenu: null, dialog: { type: 'settings' } });
+    }
+    if (action === 'logout') return void signOut();
+  },
+  conflict(_, element) {
+    resolveConflict(element.dataset.choice);
+  },
+  'save-retry'() {
+    void saver.retry();
+  },
+  'retry-load'() {
+    store.setUi({ loadError: null });
+    void (store.ui.authenticated ? loadPlan() : init());
+  }
+};
+
+function resolveConflict(choice) {
+  const latest = store.ui.conflict?.latest;
+  if (!latest) return;
+  store.setUi({ conflict: null }, { regions: ['conflict'] });
+
+  if (choice === 'remote') {
     saver.markClean(latest.revision);
-    render();
+    store.setPlan(latest.plan, { revision: latest.revision, updatedAt: latest.updatedAt });
     return;
   }
-
-  // "Keep my changes" saves the plan as it stands right now, on top of the
-  // revision the server reported. The old code restored a snapshot taken when
-  // the banner appeared, discarding anything typed since (F12).
-  state.revision = latest.revision;
-  render();
+  store.setRevision(latest.revision);
   void saver.resume({ revision: latest.revision });
 }
 
-function handleKeyboardReorder(event) {
-  if (!event.altKey || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+async function signOut() {
+  try { await flushSave(); } catch { /* the sign-out still happens; the copy stays on the device */ }
+  await api.logout().catch(() => {});
+  saver.markClean(null);
+  store.resetUi();
+  store.setPlan(null, { revision: null });
+  store.setUi({ authenticated: false });
+}
+
+async function handleLogin(event, form) {
   event.preventDefault();
-  const row = event.currentTarget.closest('.activity-row');
-  const index = Number(row.dataset.index);
-  const direction = event.key === 'ArrowUp' ? -1 : 1;
-  const target = index + direction;
-  if (target < 0 || target >= state.plan.activities.length) return;
-  updatePlan(plan => {
-    const [moved] = plan.activities.splice(index, 1);
-    plan.activities.splice(target, 0, moved);
-  });
-  requestAnimationFrame(() => app.querySelector(`.activity-row[data-index="${target}"] .drag-handle`)?.focus());
-}
+  const errorNode = form.querySelector('#login-error');
+  const button = form.querySelector('button[type="submit"]');
+  button.disabled = true;
+  errorNode.hidden = true;
 
-function handleKeyboardResize(event) {
-  if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
-  event.preventDefault();
-  const row = event.currentTarget.closest('.activity-row');
-  const id = row.dataset.activityId;
-  const delta = ['ArrowUp', 'ArrowRight'].includes(event.key) ? 5 : -5;
-  updatePlan(plan => {
-    const item = plan.activities.find(activity => activity.id === id);
-    item.duration = clampDuration(item.duration + delta);
-  });
-  requestAnimationFrame(() => app.querySelector(`.activity-row[data-activity-id="${CSS.escape(id)}"] .resize-handle`)?.focus());
-}
-
-function startDrag(event) {
-  if (event.button !== 0 || event.currentTarget.disabled) return;
-  event.preventDefault();
-  const row = event.currentTarget.closest('.activity-row');
-  const card = row.querySelector('.activity-card');
-  const fromIndex = Number(row.dataset.index);
-  state.selectedActivityId = row.dataset.activityId;
-  state.stageMenuActivityId = null;
-  state.cardMenuActivityId = null;
-  const rect = card.getBoundingClientRect();
-  const clone = card.cloneNode(true);
-  clone.classList.add('drag-floating');
-  clone.style.width = `${rect.width}px`;
-  clone.style.height = `${rect.height}px`;
-  clone.style.left = `${rect.left}px`;
-  clone.style.top = `${rect.top}px`;
-  clone.setAttribute('aria-hidden', 'true');
-  clone.querySelectorAll('button').forEach(button => button.tabIndex = -1);
-  document.body.append(clone);
-
-  row.classList.add('is-drag-source');
-  const placeholder = document.createElement('div');
-  placeholder.className = 'drop-placeholder';
-  placeholder.innerHTML = '<span>Drop here</span>';
-
-  state.drag = { pointerId: event.pointerId, row, card, clone, placeholder, fromIndex, offsetY: event.clientY - rect.top, slot: fromIndex, started: false };
-  event.currentTarget.setPointerCapture(event.pointerId);
-  event.currentTarget.addEventListener('pointermove', moveDrag);
-  event.currentTarget.addEventListener('pointerup', endDrag, { once: true });
-  event.currentTarget.addEventListener('pointercancel', cancelDrag, { once: true });
-  document.body.classList.add('is-reordering');
-}
-
-function moveDrag(event) {
-  const drag = state.drag;
-  if (!drag || drag.pointerId !== event.pointerId) return;
-  drag.started = true;
-  drag.clone.style.top = `${event.clientY - drag.offsetY}px`;
-  drag.clone.style.left = `${drag.card.getBoundingClientRect().left}px`;
-  const list = app.querySelector('#activity-list');
-  const rows = [...list.querySelectorAll('.activity-row')].filter(row => row !== drag.row);
-  rows.forEach(row => row.classList.remove('is-drop-before', 'is-drop-after'));
-  let slot = rows.length;
-  for (let i = 0; i < rows.length; i += 1) {
-    const rect = rows[i].getBoundingClientRect();
-    if (event.clientY < rect.top + rect.height / 2) {
-      slot = i;
-      break;
-    }
-  }
-  drag.slot = slot;
-  if (!drag.placeholder.isConnected) list.append(drag.placeholder);
-  const listRect = list.getBoundingClientRect();
-  if (rows.length === 0) {
-    drag.placeholder.style.top = '0px';
-    drag.dropTargetRow = null;
-  } else if (slot < rows.length) {
-    const target = rows[slot];
-    target.classList.add('is-drop-before');
-    drag.dropTargetRow = target;
-    drag.placeholder.style.top = `${Math.max(0, target.getBoundingClientRect().top - listRect.top - 8)}px`;
-  } else {
-    const target = rows[rows.length - 1];
-    target.classList.add('is-drop-after');
-    drag.dropTargetRow = target;
-    drag.placeholder.style.top = `${Math.max(0, target.getBoundingClientRect().bottom - listRect.top + 2)}px`;
-  }
-}
-
-function cleanupDrag() {
-  const drag = state.drag;
-  if (!drag) return;
-  app.querySelectorAll('.activity-row.is-drop-before, .activity-row.is-drop-after').forEach(row => row.classList.remove('is-drop-before', 'is-drop-after'));
-  drag.clone.remove();
-  drag.placeholder.remove();
-  drag.row.classList.remove('is-drag-source');
-  document.body.classList.remove('is-reordering');
-  state.drag = null;
-}
-
-function endDrag(event) {
-  const drag = state.drag;
-  event.currentTarget.removeEventListener('pointermove', moveDrag);
-  if (!drag) return;
-  const { fromIndex, slot, started } = drag;
-  cleanupDrag();
-  if (!started) return;
-  updatePlan(plan => {
-    const [moved] = plan.activities.splice(fromIndex, 1);
-    plan.activities.splice(Math.max(0, Math.min(slot, plan.activities.length)), 0, moved);
-  });
-}
-
-function cancelDrag(event) {
-  event.currentTarget.removeEventListener('pointermove', moveDrag);
-  cleanupDrag();
-}
-
-function startResize(event) {
-  if (event.button !== 0) return;
-  event.preventDefault();
-  event.stopPropagation();
-  const row = event.currentTarget.closest('.activity-row');
-  const card = row.querySelector('.activity-card');
-  const id = row.dataset.activityId;
-  const activity = getActivity(id);
-  const tooltip = document.createElement('div');
-  tooltip.className = 'resize-tooltip';
-  tooltip.textContent = formatDuration(activity.duration);
-  document.body.append(tooltip);
-  const rect = card.getBoundingClientRect();
-  tooltip.style.left = `${rect.right - 70}px`;
-  tooltip.style.top = `${rect.bottom - 8}px`;
-  card.classList.add('is-resizing');
-  state.resize = { pointerId: event.pointerId, id, card, handle: event.currentTarget, startY: event.clientY, startDuration: activity.duration, nextDuration: activity.duration, tooltip };
-  event.currentTarget.setPointerCapture(event.pointerId);
-  event.currentTarget.addEventListener('pointermove', moveResize);
-  event.currentTarget.addEventListener('pointerup', endResize, { once: true });
-  event.currentTarget.addEventListener('pointercancel', cancelResize, { once: true });
-}
-
-function moveResize(event) {
-  const resize = state.resize;
-  if (!resize || resize.pointerId !== event.pointerId) return;
-  const deltaMinutes = Math.round((event.clientY - resize.startY) / 8) * 5;
-  resize.nextDuration = clampDuration(resize.startDuration + deltaMinutes);
-
-  const previewPlan = structuredClone(state.plan);
-  const previewActivity = previewPlan.activities.find(activity => activity.id === resize.id);
-  previewActivity.duration = resize.nextDuration;
-  const previewSchedule = buildSchedule(previewPlan);
-  const scale = getTimeScale(previewSchedule);
-  const layout = buildTimelineLayout(previewSchedule, { scaleStart: scale.start, minutePx: scale.minutePx });
-  const canvas = app.querySelector('#activity-list');
-  if (canvas) canvas.style.height = `${Math.max(scale.height, layout.height).toFixed(1)}px`;
-
-  layout.rows.forEach(visual => {
-    const row = app.querySelector(`.activity-row[data-activity-id="${CSS.escape(visual.item.id)}"]`);
-    if (!row) return;
-    row.style.setProperty('--row-top', `${visual.top.toFixed(1)}px`);
-    row.style.setProperty('--row-height', `${visual.height.toFixed(1)}px`);
-    row.dataset.anchorTop = visual.anchorTop.toFixed(1);
-    row.classList.toggle('activity-row--shifted', visual.offset > 1);
-    const card = row.querySelector('.activity-card');
-    card?.classList.toggle('activity-card--compact', visual.item.duration < 30);
-    const rangeNode = row.querySelector('.card-time-range');
-    const durationNode = row.querySelector('.card-time strong');
-    if (rangeNode) rangeNode.textContent = `${visual.item.startLabel} – ${visual.item.endLabel}`;
-    if (durationNode) durationNode.textContent = formatDuration(visual.item.duration);
-  });
-
-  const endMarker = app.querySelector('.end-marker');
-  if (endMarker) endMarker.style.top = `${layout.endTop.toFixed(1)}px`;
-  resize.tooltip.textContent = formatDuration(resize.nextDuration);
-  const rect = resize.card.getBoundingClientRect();
-  resize.tooltip.style.left = `${rect.right - 70}px`;
-  resize.tooltip.style.top = `${rect.bottom - 10}px`;
-}
-
-function cleanupResize() {
-  if (!state.resize) return;
-  state.resize.card.classList.remove('is-resizing');
-  state.resize.tooltip.remove();
-  state.resize = null;
-}
-
-function endResize(event) {
-  const resize = state.resize;
-  event.currentTarget.removeEventListener('pointermove', moveResize);
-  if (!resize) return;
-  const { id, nextDuration, startDuration } = resize;
-  cleanupResize();
-  if (nextDuration !== startDuration) updatePlan(plan => {
-    plan.activities.find(activity => activity.id === id).duration = nextDuration;
-  });
-}
-
-function cancelResize(event) {
-  event.currentTarget.removeEventListener('pointermove', moveResize);
-  cleanupResize();
-  render();
-}
-
-async function loadPlan() {
-  state.loadError = null;
   try {
-    const result = await api.load();
-    state.plan = result.plan;
-    state.revision = result.revision;
-    state.updatedAt = result.updatedAt;
-    saver.markClean(result.revision);
-    render();
-  } catch (error) {
-    if (error.status === 401) {
-      state.authenticated = false;
-      render();
+    await api.login(new FormData(form).get('password'));
+
+    // Signing in again mid-edit must not cost the edit: the plan on screen is
+    // kept and only the revision is refreshed, so the save can be retried
+    // (or turn into a conflict). Loading here would overwrite the work (F10).
+    if (store.plan && saver.hasPendingChanges) {
+      store.setUi({ authenticated: true });
+      const current = await api.load().catch(() => null);
+      await saver.resume({ revision: current?.revision ?? store.revision });
       return;
     }
-    state.loadError = error.message || 'Please try again.';
-    render();
+
+    store.setUi({ authenticated: true });
+    await loadPlan();
+  } catch (error) {
+    errorNode.textContent = error.message || 'Unable to sign in.';
+    errorNode.hidden = false;
+    button.disabled = false;
+  }
+}
+
+// --------------------------------------------------------------- listeners
+
+document.addEventListener('click', event => {
+  const control = event.target.closest('[data-action]');
+  if (control) {
+    // `closest` finds the innermost control, so a button inside a card wins
+    // over the card's own select action.
+    const handler = ACTION_HANDLERS[control.dataset.action];
+    if (handler) {
+      handler(event, control);
+      return;
+    }
+  }
+
+  // Anything else closes an open menu (F26) and, outside the timeline, clears
+  // the selection.
+  if (store.ui.openMenu && !event.target.closest('.menu-popover, .stage-menu, .card-menu')) {
+    store.setUi({ openMenu: null });
+    return;
+  }
+  if (store.ui.selectedId && !event.target.closest('.activity-card, dialog, .topbar')) {
+    store.setUi({ selectedId: null }, { regions: ['timeline'] });
+  }
+});
+
+document.addEventListener('dblclick', event => {
+  const card = event.target.closest('.activity-card');
+  if (!card || event.target.closest('button')) return;
+  openEditor(card.dataset.id);
+});
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    if (gestures.active) {
+      gestures.cancel();
+      return;
+    }
+    if (store.ui.openMenu) {
+      const opener = store.ui.openMenu;
+      store.setUi({ openMenu: null });
+      focusByKey(app, opener === 'app' ? 'menu-app' : opener);
+      return;
+    }
+    if (store.ui.selectedId && !sheetRoot.querySelector('dialog')) {
+      store.setUi({ selectedId: null }, { regions: ['timeline'] });
+    }
+    return;
+  }
+
+  const card = event.target.closest?.('.activity-card');
+  if (card && (event.key === 'Enter' || event.key === ' ') && event.target === card) {
+    event.preventDefault();
+    store.setUi({ selectedId: card.dataset.id, openMenu: null }, { regions: ['timeline'] });
+  }
+
+  if (card && event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+    event.preventDefault();
+    const index = Number(card.closest('.activity-row').dataset.index);
+    commit('activity.move', { id: card.dataset.id, toIndex: index + (event.key === 'ArrowUp' ? -1 : 1) }, { regions: ['timeline'] });
+    focusByKey(app, `card:${card.dataset.id}`);
+  }
+});
+
+document.addEventListener('submit', event => {
+  // Delegated, so the form comes from the target rather than currentTarget —
+  // currentTarget here is the document.
+  if (event.target.id === 'login-form') void handleLogin(event, event.target);
+});
+
+document.addEventListener('change', event => {
+  if (event.target.dataset?.action === 'status') {
+    commit('plan.status', { status: event.target.value }, { regions: ['header'] });
+  }
+});
+
+window.addEventListener('online', () => void saver.handleOnline());
+window.addEventListener('offline', () => repaint(['header']));
+
+store.subscribe(change => repaint(change.regions));
+
+// -------------------------------------------------------------------- boot
+
+async function loadPlan() {
+  store.setUi({ loadError: null }, { regions: [] });
+  try {
+    const result = await api.load();
+    saver.markClean(result.revision);
+    store.setPlan(result.plan, { revision: result.revision, updatedAt: result.updatedAt });
+  } catch (error) {
+    if (error.status === 401) {
+      store.setUi({ authenticated: false });
+      return;
+    }
+    store.setUi({ loadError: error.message || 'Please try again.' });
   }
 }
 
 async function init() {
-  render();
+  repaint();
   try {
     const session = await api.session();
-    state.authenticated = Boolean(session.authenticated);
-    render();
-    if (state.authenticated) await loadPlan();
+    store.setUi({ authenticated: Boolean(session.authenticated) });
+    if (session.authenticated) await loadPlan();
   } catch (error) {
-    // F27: a session check that could not be answered says nothing about
-    // whether this device is signed in. Showing the sign-in screen here asks
-    // the user to re-enter the password over a connection that is down, so a
-    // load error with Retry is shown instead.
-    state.loadError = error.code === 'network' || error.code === 'timeout'
-      ? "Can't reach the planner right now."
-      : (error.message || 'Please try again.');
-    render();
+    // A session check that could not be answered says nothing about whether
+    // this device is signed in. Showing the sign-in screen would ask for the
+    // password over a connection that is down (F27).
+    store.setUi({
+      loadError: error.code === 'network' || error.code === 'timeout'
+        ? "Can't reach the planner right now."
+        : (error.message || 'Please try again.')
+    });
   }
 }
 
-window.addEventListener('online', () => void saver.handleOnline());
-window.addEventListener('offline', () => updateSaveIndicator());
-
 void init();
+
+export { store, saver, SAVE_STATES };

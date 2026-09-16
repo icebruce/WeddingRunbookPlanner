@@ -31,6 +31,20 @@ export async function openPlanner(page, password = TEST_PASSWORD) {
 }
 
 /**
+ * Open an activity's editor.
+ *
+ * Double-click is a desktop gesture and does not fire on a touch device, so a
+ * spec that needs the editor on every project goes through the card's ⋯ menu.
+ * The phone's own gesture for this is a long press, which arrives with the
+ * direct manipulation stage.
+ */
+export async function openActivityEditor(page, row) {
+  await row.locator('.card-menu-toggle').click();
+  await row.locator('[data-action="edit"]').click();
+  await expect(page.locator('#activity-dialog')).toBeVisible();
+}
+
+/**
  * Counts toasts as they are created. Toasts hide themselves after a few
  * seconds, so counting the elements still on screen at the end of a long wait
  * would report zero whether one was shown or a hundred were.
