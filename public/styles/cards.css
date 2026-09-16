@@ -228,7 +228,7 @@
   pointer-events: none;
   transition: opacity 140ms ease-out;
 }
-.handle::after { content: ''; width: 28px; height: 12px; border-radius: 6px; background: var(--surface); border: 2px solid var(--sel); }
+.handle::after { content: ''; width: 34px; height: 9px; border-radius: 4.5px; background: var(--surface); border: 2px solid var(--sel); }
 .handle--top { top: -8px; }
 .handle--bottom { bottom: -8px; }
 .card.is-selected .handle { opacity: 1; pointer-events: auto; }

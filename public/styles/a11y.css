@@ -39,10 +39,14 @@ button, [role="button"], summary, .filter-chip, .stage-choice {
 .stepper button,
 .icon-button,
 .person-remove,
-.people-add-trigger,
-.handle {
+.people-add-trigger {
   position: relative;
 }
+/* .handle is already `position: absolute` (cards.css), anchored to the
+   card's own edges — forcing it to `relative` here would resolve its
+   top/bottom offsets against its in-flow position instead of the card edge
+   it's meant to straddle. Its ::before below still works: any positioned
+   ancestor is a valid containing block. */
 .card-controls button::after,
 .delete-version::after,
 .filter-clear::after,
@@ -62,7 +66,7 @@ button, [role="button"], summary, .filter-chip, .stage-choice {
 /* Tags and chips inside a card are not controls and keep their own height. */
 .tag, .stage-tag:not(.stage-tag--button), .now-tag, .mode-pill { min-height: 0; }
 .card-controls button, .stepper button, .icon-button, .delete-version, .filter-clear,
-.person-remove, .people-add-trigger { min-height: 0; }
+.person-remove, .people-add-trigger, .handle { min-height: 0; }
 
 /*
  * F25 — focus is never removed, and never relies on colour alone.
