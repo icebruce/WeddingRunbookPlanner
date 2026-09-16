@@ -122,6 +122,43 @@ test('the time line is where the time is', async ({ page, server }) => {
     .toBeLessThanOrEqual(2);
 });
 
+test('the time line keeps moving through a long activity', async ({ page, server }) => {
+  // It used to be repainted only when one activity handed over to the next, so
+  // through a two-hour reception it stood still while the strip counted down
+  // beside it.
+  await openAt(page, server, at(15, 0), day({
+    activities: [
+      activity('ready', 45, { title: 'Getting Ready' }),
+      activity('party', 180, { title: 'Dancing & Party', lockedStart: '14:45' })
+    ]
+  }));
+
+  const read = () => page.evaluate(() => {
+    const grid = document.querySelector('.timeline-grid').getBoundingClientRect();
+    const line = document.querySelector('.now-line').getBoundingClientRect();
+    const bar = document.querySelector('.card.is-live .card-progress i');
+    return {
+      top: Math.round(line.top - grid.top),
+      pill: document.querySelector('.now-pill').textContent.trim(),
+      progress: bar ? bar.style.width : null
+    };
+  });
+
+  const before = await read();
+  expect(before.pill).toBe('3:00');
+
+  // Half an hour later, still inside the same activity. fastForward runs the
+  // timers on the way, which is what setFixedTime does not do — and is why no
+  // test had ever seen the clock tick.
+  await page.clock.fastForward('30:00');
+  await expect.poll(async () => (await read()).pill, { timeout: 30_000 }).toBe('3:30');
+
+  const after = await read();
+  // Thirty minutes at four pixels a minute.
+  expect(after.top - before.top).toBeCloseTo(120, -1);
+  expect(after.progress, 'and the bar across the activity moved with it').not.toBe(before.progress);
+});
+
 test('the view opens near the current time rather than at the top', async ({ page, server }) => {
   await openAt(page, server, at(16, 0), day({
     dayStart: '08:00',

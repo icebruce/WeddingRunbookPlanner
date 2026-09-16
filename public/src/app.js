@@ -16,6 +16,7 @@ import { clearDeviceCopy, readDeviceCopy, writeDeviceCopy } from './device.js';
 import { cssEscape, escapeHtml, focusByKey, paint, uid } from './dom.js';
 import { AUTO_VIEW_ONLY_MS, cardStateAt, clearOverride, createClock, minutesNow, readOverride, shouldBeOn, stripState, writeOverride } from './dayof.js';
 import { createGestures } from './gestures.js';
+import { PX_PER_MIN } from './layout.js';
 import { icon } from './icons.js';
 import { SAVE_STATES, createSavePipeline } from './save.js';
 import { createStore } from './state.js';
@@ -1226,6 +1227,12 @@ const clock = createClock(now => {
   const currentChanged = store.ui.strip?.current?.id !== changes.strip?.current?.id
     || store.ui.dayOf !== on;
   store.setUi(changes, { regions: currentChanged ? ['header', 'heading', 'strip', 'timeline', 'toolbar'] : ['strip'] });
+  // The time line and the live progress bar move on every tick, not only when
+  // one activity hands over to the next — without this they stood still for
+  // the whole of a two-hour reception while the strip counted down beside
+  // them. They are moved in place: repainting the timeline twice a minute
+  // would fight whatever is being dragged or read.
+  advanceNow(changes.nowMinutes ?? null);
 });
 
 /**
@@ -1239,6 +1246,37 @@ let leftAt = null;
 function returnToViewOnly() {
   if (!store.ui.editingOnDay) return;
   store.setUi({ editingOnDay: false, selectedId: null, openMenu: null }, { regions: ['header', 'heading', 'timeline', 'toolbar'] });
+}
+
+/**
+ * Moves what the clock owns, without a repaint: the time line, its pill, and
+ * the bar across the activity happening now.
+ */
+function advanceNow(nowMinutes) {
+  const grid = app.querySelector('.timeline-grid');
+  if (!grid) return;
+
+  const line = grid.querySelector('.now-line');
+  const pill = grid.querySelector('.now-pill');
+  const from = Number(grid.dataset.from);
+
+  if (line && pill && nowMinutes !== null && Number.isFinite(from)) {
+    const top = (nowMinutes - from) * PX_PER_MIN;
+    line.style.top = `${top}px`;
+    pill.style.top = `${top - 11}px`;
+    pill.textContent = formatTime(nowMinutes, { meridiem: false });
+  }
+
+  const bar = grid.querySelector('.card.is-live .card-progress i');
+  const live = bar?.closest('.card');
+  if (bar && live && nowMinutes !== null) {
+    const start = Number(live.dataset.start);
+    const duration = Number(live.dataset.duration);
+    if (duration > 0) {
+      const done = Math.max(0, Math.min(1, (nowMinutes - start) / duration));
+      bar.style.width = `${Math.round(done * 100)}%`;
+    }
+  }
 }
 
 /**

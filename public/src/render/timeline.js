@@ -76,7 +76,10 @@ export function renderTimeline({ plan, ui }) {
   const layout = buildLayout(plan, schedule);
   const nowMinutes = ui.dayOf ? (ui.nowMinutes ?? null) : null;
 
-  return `<div class="timeline-grid ${ui.dayOf ? 'is-day-of' : ''}" style="height:${layout.height + 48}px">
+  // `data-from` is the minute the grid starts at. The clock moves the now-line
+  // and the live progress bar in place from it, twice a minute, rather than
+  // repainting every card to shift one line two pixels.
+  return `<div class="timeline-grid ${ui.dayOf ? 'is-day-of' : ''}" data-from="${layout.from}" style="height:${layout.height + 48}px">
     <div class="timeline-ruler" aria-hidden="true">${ruler(layout)}${nowLine(layout, nowMinutes)}</div>
     <div class="timeline-plan">
       ${layout.openTimes.map(gap => openTimeBlock(gap, Boolean(ui.dayOf && !ui.editingOnDay))).join('')}
