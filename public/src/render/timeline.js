@@ -114,15 +114,18 @@ export function renderSummary({ plan, ui }) {
   </p>`;
 }
 
-export function renderHeading({ plan }) {
+export function renderHeading({ plan, ui }) {
+  // Adding is editing, so on the day this is not offered until Edit has been
+  // pressed — the same rule the + on a phone follows.
+  const viewOnly = Boolean(ui?.dayOf && !ui?.editingOnDay);
   return `<div>
       <h1>${escapeHtml(plan.title)}</h1>
       <p class="planner-date">${escapeHtml(formatPlanDate(plan.date))}</p>
     </div>
-    <div class="planner-add-wrap">
+    ${viewOnly ? '' : `<div class="planner-add-wrap">
       <button class="button button--primary planner-add" type="button" data-action="add" data-focus-key="add">${icon('plus')}<span>Add activity</span></button>
       <p class="add-hint">Adds after the selected activity</p>
-    </div>`;
+    </div>`}`;
 }
 
 export function formatPlanDate(value) {

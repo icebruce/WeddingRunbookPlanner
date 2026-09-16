@@ -189,6 +189,48 @@ test.describe('view only', () => {
     await expect(page.locator('.handle')).toHaveCount(0);
   });
 
+  test('there is no way to add an activity until Edit has been pressed', async ({ page, server }) => {
+    await openAt(page, server, at(11, 45));
+
+    // Neither the phone's floating + nor the desktop's Add activity.
+    await expect(page.locator('.mobile-add')).toHaveCount(0);
+    await expect(page.locator('.planner-add')).toHaveCount(0);
+
+    await page.locator('[data-action="day-of-edit"]').click();
+    const add = isPhoneLayout(page) ? page.locator('.mobile-add') : page.locator('.planner-add');
+    await expect(add, 'and it comes back once editing is on').toBeVisible();
+  });
+
+  test('selecting a card in view only offers the way in, and nothing else', async ({ page, server }) => {
+    test.skip(!isPhoneLayout(page), 'the toolbar is the narrow layout');
+    await openAt(page, server, at(11, 45));
+
+    await card(page, 'ready').click({ position: { x: 40, y: 10 } });
+    await expect(page.locator('.toolbar')).toBeVisible();
+    await expect(page.locator('.toolbar-context')).toContainText('Getting Ready');
+
+    const buttons = await page.locator('.toolbar-buttons button').allTextContents();
+    expect(buttons.map(text => text.trim())).toEqual(['Edit']);
+
+    await page.locator('.toolbar-buttons button').click();
+    await expect(page.locator('.mode-pill--editing')).toBeVisible();
+    await expect(page.locator('.toolbar-buttons button')).toHaveCount(5);
+  });
+
+  test('the live strip stays under the top bar when the day is scrolled', async ({ page, server }) => {
+    await openAt(page, server, at(13, 20));
+    await page.evaluate(() => window.scrollTo(0, 600));
+    await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBeGreaterThan(400);
+
+    const gap = await page.evaluate(() => {
+      const bar = document.querySelector('.topbar').getBoundingClientRect();
+      const live = document.querySelector('.live-strip').getBoundingClientRect();
+      return Math.round(live.top - bar.bottom);
+    });
+    // Directly under it, give or take the bar's own hairline.
+    expect(Math.abs(gap)).toBeLessThanOrEqual(2);
+  });
+
   test('five minutes away and editing lapses', async ({ page, server }) => {
     await openAt(page, server, at(11, 45));
     await page.locator('[data-action="day-of-edit"]').click();

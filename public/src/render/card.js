@@ -1,6 +1,6 @@
 import { escapeHtml } from '../dom.js';
 import { icon } from '../icons.js';
-import { STAGES } from '../config.js';
+import { STAGES, phaseVars } from '../config.js';
 import { formatDuration, formatTime } from '../schedule.js';
 import { laneStyle } from '../layout.js';
 
@@ -13,9 +13,9 @@ export function stageOf(id) {
 export function stagePill(stage, { interactive = false, expanded = false, id = '' } = {}) {
   const content = `${icon(stage.icon)}<span>${escapeHtml(stage.label)}</span>`;
   if (!interactive) {
-    return `<span class="stage-tag" style="--phase:${stage.color}">${content}</span>`;
+    return `<span class="stage-tag" style="${phaseVars(stage)}">${content}</span>`;
   }
-  return `<button class="stage-tag stage-tag--button" type="button" style="--phase:${stage.color}"
+  return `<button class="stage-tag stage-tag--button" type="button" style="${phaseVars(stage)}"
     data-action="menu" data-menu="stage:${escapeHtml(id)}" data-focus-key="stage:${escapeHtml(id)}"
     aria-haspopup="menu" aria-expanded="${expanded}" aria-label="Change stage">${content}${icon('chevron')}</button>`;
 }
@@ -47,7 +47,7 @@ function stageMenu(item) {
     ${STAGES.map(stage => `<button type="button" role="menuitemradio" aria-checked="${stage.id === item.stage}"
       class="stage-menu-option ${stage.id === item.stage ? 'is-current' : ''}"
       data-action="set-stage" data-id="${escapeHtml(item.id)}" data-stage="${stage.id}"
-      style="--phase:${stage.color}">${icon(stage.icon)}<span>${escapeHtml(stage.label)}</span></button>`).join('')}
+      style="${phaseVars(stage)}">${icon(stage.icon)}<span>${escapeHtml(stage.label)}</span></button>`).join('')}
   </div>`;
 }
 
@@ -130,6 +130,15 @@ export function renderCard(card, { ui, filter = null, nowMinutes = null }) {
     (stageOpen || menuOpen) && 'is-menu-open'
   ].filter(Boolean).join(' ');
 
+  // A row with nothing in it is not a row. An activity with no location used
+  // to draw a lone map pin, and an activity with nobody on it used to spend one
+  // of the card's rows on an empty line.
+  //
+  // Location and people are wrapped together because a desktop card puts them
+  // on one line, at opposite ends of it. On a phone the wrapper is
+  // `display: contents`, so the two rows stack as they always did.
+  const people = narrow ? '' : peopleTags(item.people);
+
   // A five- or ten-minute card is 20–40 px tall. Anything but one line would
   // not fit, so it is built as one line rather than measured down to one.
   const body = card.density === 'line'
@@ -138,13 +147,15 @@ export function renderCard(card, { ui, filter = null, nowMinutes = null }) {
        <div class="card-row card-time" data-drop="4"><span>${escapeHtml(narrow ? formatTime(item.start) : item.rangeLabel)}</span><strong>${escapeHtml(formatDuration(item.duration))}</strong></div>
        ${warning(item)}
        ${live ? `<div class="card-row card-progress" data-drop="3" aria-hidden="true"><i style="width:${Math.round(progress * 100)}%"></i></div>` : ''}
-       <div class="card-row card-location" data-drop="2">${icon('pin')}<span>${escapeHtml(item.location || '')}</span></div>
        ${narrow ? '' : `<div class="card-row card-stage" data-drop="1">${stagePill(stage, { interactive: true, expanded: stageOpen, id: item.id })}</div>`}
-       ${narrow ? '' : `<div class="card-row card-people" data-drop="0">${peopleTags(item.people)}</div>`}`;
+       <div class="card-meta">
+         ${item.location ? `<div class="card-row card-location" data-drop="2">${icon('pin')}<span>${escapeHtml(item.location)}</span></div>` : ''}
+         ${people ? `<div class="card-row card-people" data-drop="0">${people}</div>` : ''}
+       </div>`;
 
   return `<article class="${classes}" data-activity-id="${id}" data-index="${item.index}"
     data-start="${item.start}" data-end="${item.end}" data-duration="${item.duration}"
-    style="top:${card.top}px;height:${card.height}px;--phase:${stage.color};--phase-tint:${stage.tint};${laneStyle(card.lane)}${card.overrunHeight ? `--overrun-height:${card.overrunHeight}px;` : ''}"
+    style="top:${card.top}px;height:${card.height}px;${phaseVars(stage)}${laneStyle(card.lane)}${card.overrunHeight ? `--overrun-height:${card.overrunHeight}px;` : ''}"
     tabindex="0" data-action="select" data-id="${id}" data-focus-key="card:${id}"
     aria-label="${escapeHtml(accessibleName(item, stage))}">
     <span class="card-rule" aria-hidden="true"></span>

@@ -23,14 +23,15 @@ svg.icon { width: 1.05em; height: 1.05em; fill: none; stroke: currentColor; stro
   position: sticky;
   top: 0;
   z-index: 40;
-  min-height: 64px;
-  padding: 10px 16px;
+  min-height: var(--topbar-height);
+  padding: 4px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   background: color-mix(in srgb, var(--bg) 92%, transparent);
-  backdrop-filter: saturate(1.4) blur(18px);
+  -webkit-backdrop-filter: saturate(1.4) blur(20px);
+  backdrop-filter: saturate(1.4) blur(20px);
   border-bottom: 1px solid var(--hair);
 }
 
@@ -138,14 +139,10 @@ body.is-reordering { user-select: none; cursor: grabbing; }
 .fatal-view p { max-width: 420px; color: var(--soft); font-size: 13px; line-height: 1.5; }
 
 @media (min-width: 721px) {
-  .topbar { padding: 12px 28px; min-height: 62px; }
+  .topbar { padding: 9px 28px; }
   .planner-add { display: inline-flex; }
   .planner-add-wrap { display: block; text-align: right; }
   .mobile-add { display: none; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
 
 /* The desktop add button says where the new activity will land, because
@@ -199,6 +196,8 @@ body.is-reordering { user-select: none; cursor: grabbing; }
   bottom: calc(18px + var(--safe-bottom));
   padding: 10px 12px 12px;
   border-radius: 24px;
+  /* It arrives from below, as the + it replaces did. */
+  animation: toolbar-in 180ms ease-out;
   background: color-mix(in srgb, var(--surface) 94%, transparent);
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
@@ -215,6 +214,8 @@ body.is-reordering { user-select: none; cursor: grabbing; }
   text-overflow: ellipsis;
 }
 .toolbar-buttons { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; }
+/* One button, one column. */
+.toolbar--view-only .toolbar-buttons { grid-template-columns: 1fr; }
 .toolbar-button {
   display: flex;
   flex-direction: column;
@@ -255,6 +256,8 @@ body.is-reordering { user-select: none; cursor: grabbing; }
   pointer-events: none;
 }
 
+@keyframes toolbar-in { from { opacity: 0; transform: translateY(12px); } }
+
 /* Neighbours settle into place after the drop, never during it. */
 .card.is-settling { transition: transform 180ms ease-out; }
 .card.is-pressed { transform: scale(.99); transition: transform 100ms ease-out; }
@@ -267,15 +270,21 @@ body.is-resizing { cursor: ns-resize; }
   .toolbar { display: none; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .card.is-settling, .card.is-pressed { transition: none; }
-}
+/*
+ * The bars that stick under the top bar are each painted into a region of
+ * their own, and a region is a <div> exactly as tall as the bar inside it — so
+ * `position: sticky` had nowhere to stick and they scrolled away with the page.
+ * The wrappers are not boxes; they are places to paint into.
+ */
+[data-region="strip"],
+[data-region="offline"],
+[data-region="filterbar"] { display: contents; }
 
 /* Pinned bars sit under the top bar and stay there: the offline one, and the
    filter one. They are statements of fact, not alerts. */
 .pinned-bar {
   position: sticky;
-  top: 52px;
+  top: var(--topbar-height);
   z-index: 34;
   display: flex;
   align-items: center;
@@ -296,7 +305,7 @@ body.is-resizing { cursor: ns-resize; }
 
 .live-strip {
   position: sticky;
-  top: 52px;
+  top: var(--topbar-height);
   z-index: 35;
   padding: 8px 18px 10px;
   background: color-mix(in srgb, var(--live-tint) 94%, transparent);
@@ -345,15 +354,21 @@ body.is-resizing { cursor: ns-resize; }
 .menu-switch.is-off::after { right: auto; left: 2px; }
 
 /* One line on a wide screen: there is room for what is next beside what is now. */
+/*
+ * The global reduced-motion rule shortens every animation to nothing, which is
+ * the right blanket answer but leaves the pulse still named and still running.
+ * The pulse is called out by name in the design guide, so it is turned off by
+ * name here.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .live-dot { animation: none; }
+}
+
 @media (min-width: 721px) {
   .live-strip { display: flex; align-items: center; gap: 18px; padding: 10px 28px; }
   .live-line { flex: 1.25; }
   .live-second { flex: 1; margin: 0; text-align: right; }
   .live-progress { position: absolute; left: 0; right: 0; bottom: 0; margin: 0; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .live-dot { animation: none; }
 }
 
 /* ---- the person filter --------------------------------------------------- */

@@ -1,6 +1,6 @@
 import { escapeHtml } from '../dom.js';
 import { icon } from '../icons.js';
-import { STAGES } from '../config.js';
+import { STAGES, phaseVars } from '../config.js';
 import { buildSchedule, formatDuration, formatTime, minutesToTime } from '../schedule.js';
 import { DEFAULT_SUNSET } from '../validate.js';
 
@@ -42,7 +42,7 @@ function suggestionsFrom(plan) {
 
 function stageGrid(current) {
   return `<div class="stage-grid" role="radiogroup" aria-label="Stage">
-    ${STAGES.map(stage => `<label class="stage-choice ${stage.id === current ? 'is-current' : ''}" style="--phase:${stage.color}">
+    ${STAGES.map(stage => `<label class="stage-choice ${stage.id === current ? 'is-current' : ''}" style="${phaseVars(stage)}">
       <input type="radio" name="stage" value="${stage.id}" ${stage.id === current ? 'checked' : ''}>
       ${icon(stage.icon)}<span>${escapeHtml(stage.label)}</span>
     </label>`).join('')}
@@ -193,7 +193,7 @@ export function stageSheet(item) {
         <div class="action-header"><strong>Stage</strong><small>${escapeHtml(item.title)}</small></div>
         ${STAGES.map(stage => `<button type="button" class="action-option action-option--row ${stage.id === item.stage ? 'is-current' : ''}"
           data-action="set-stage" data-id="${escapeHtml(item.id)}" data-stage="${stage.id}"
-          style="--phase:${stage.color}">
+          style="${phaseVars(stage)}">
           ${icon(stage.icon)}<b>${escapeHtml(stage.label)}</b>${stage.id === item.stage ? icon('check') : ''}
         </button>`).join('')}
       </div>

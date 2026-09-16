@@ -94,7 +94,7 @@ const REGIONS = {
   header: ({ plan, ui }) => renderHeader({ plan, ui }),
   offline: ({ ui }) => renderOfflineBar({ ui }),
   strip: ({ ui }) => renderStrip({ ui, strip: ui.strip }),
-  heading: ({ plan }) => renderHeading({ plan }),
+  heading: ({ plan, ui }) => renderHeading({ plan, ui }),
   summary: ({ plan, ui }) => renderSummary({ plan, ui }),
   filters: ({ plan, ui }) => renderFilters({ plan, ui }),
   filterbar: ({ plan, ui }) => renderFilterBar({ plan, ui }),
@@ -960,7 +960,7 @@ const ACTION_HANDLERS = {
     setTimeout(() => target.classList.remove('is-highlighted'), 1600);
   },
   'day-of-edit'() {
-    store.setUi({ editingOnDay: true }, { regions: ['header', 'timeline', 'toolbar'] });
+    store.setUi({ editingOnDay: true }, { regions: ['header', 'heading', 'timeline', 'toolbar'] });
   },
   'day-of-done'() {
     returnToViewOnly();
@@ -1197,7 +1197,7 @@ const clock = createClock(now => {
   // timeline; the countdown alone only changes the strip.
   const currentChanged = store.ui.strip?.current?.id !== changes.strip?.current?.id
     || store.ui.dayOf !== on;
-  store.setUi(changes, { regions: currentChanged ? ['header', 'strip', 'timeline'] : ['strip'] });
+  store.setUi(changes, { regions: currentChanged ? ['header', 'heading', 'strip', 'timeline', 'toolbar'] : ['strip'] });
 });
 
 /**
@@ -1210,7 +1210,7 @@ let leftAt = null;
 
 function returnToViewOnly() {
   if (!store.ui.editingOnDay) return;
-  store.setUi({ editingOnDay: false, selectedId: null, openMenu: null }, { regions: ['header', 'timeline', 'toolbar'] });
+  store.setUi({ editingOnDay: false, selectedId: null, openMenu: null }, { regions: ['header', 'heading', 'timeline', 'toolbar'] });
 }
 
 /**
@@ -1271,9 +1271,12 @@ function watchCollapsedTitle() {
     const topbar = app.querySelector('.topbar');
     if (!heading || !topbar) return;
 
+    // The margin is the bar's own height, so the title hands over exactly as it
+    // goes under it — 52 px on a phone, 62 px on a desktop.
+    const barHeight = Math.round(topbar.getBoundingClientRect().height);
     observer = new IntersectionObserver(([entry]) => {
       topbar.classList.toggle('is-collapsed', !entry.isIntersecting);
-    }, { rootMargin: '-56px 0px 0px 0px', threshold: 0 });
+    }, { rootMargin: `-${barHeight}px 0px 0px 0px`, threshold: 0 });
     observer.observe(heading);
   };
 }

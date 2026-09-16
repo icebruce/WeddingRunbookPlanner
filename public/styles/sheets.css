@@ -14,7 +14,7 @@
 
 .menu-divider { height: 1px; margin: 6px 4px; background: var(--hair); }
 
-.conflict-banner { position: sticky; top: 64px; z-index: 32; margin: 0; padding: 10px 14px; display: flex; flex-direction: column; gap: 10px; background: var(--amber-tint); border-bottom: 1px solid var(--amber); color: var(--amber); }
+.conflict-banner { position: sticky; top: var(--topbar-height); z-index: 32; margin: 0; padding: 10px 14px; display: flex; flex-direction: column; gap: 10px; background: var(--amber-tint); border-bottom: 1px solid var(--amber); color: var(--amber); }
 
 .conflict-banner > div:first-child { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; line-height: 1.45; }
 
@@ -22,17 +22,50 @@
 
 .sheet-dialog { width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; }
 
-.sheet-dialog::backdrop { background: rgba(0, 0, 0, .3); backdrop-filter: blur(5px); }
+.sheet-dialog::backdrop { background: rgba(0, 0, 0, .3); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
 
-.sheet { position: absolute; inset: auto 0 0; max-height: 92dvh; overflow: hidden; border-radius: 20px 20px 0 0; background: var(--surface); box-shadow: var(--shadow-float); display: flex; flex-direction: column; padding-bottom: var(--safe-bottom); }
+/*
+ * A sheet rises from the bottom of a phone and a dialog settles in the middle
+ * of a desktop; the scrim fades with either.
+ *
+ * Only the way in is animated. A <dialog> leaves the top layer the moment it
+ * closes, so animating the way out means keeping a closed sheet on the page
+ * for another fifth of a second, over the thing the person has just gone back
+ * to. That is a worse answer than closing at once.
+ */
+@keyframes sheet-in { from { transform: translateY(100%); } }
+@keyframes scrim-in { from { opacity: 0; } }
+.sheet-dialog[open] .sheet { animation: sheet-in 240ms cubic-bezier(.2, .8, .2, 1); }
+.sheet-dialog[open]::backdrop { animation: scrim-in 240ms cubic-bezier(.2, .8, .2, 1); }
 
-.sheet-header { height: 58px; padding: 0 12px; border-bottom: 1px solid var(--hair); display: grid; grid-template-columns: 64px 1fr 64px; align-items: center; flex: 0 0 auto; }
+.sheet { position: absolute; inset: auto 0 0; max-height: 92dvh; overflow: hidden; border-radius: 16px 16px 0 0; background: var(--surface); box-shadow: var(--shadow-float); display: flex; flex-direction: column; padding-top: 16px; padding-bottom: var(--safe-bottom); }
+
+.sheet-header { height: 52px; padding: 0 12px; border-bottom: 1px solid var(--hair); display: grid; grid-template-columns: 64px 1fr 64px; align-items: center; flex: 0 0 auto; }
 
 .sheet-header .sheet-close { justify-self: start; }
 
-.sheet-header h2 { margin: 0; text-align: center; font-size: 14px; font-weight: 700; letter-spacing: -.01em; }
+.sheet-header h2 { margin: 0; text-align: center; font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
 
 .sheet-header .button, .sheet-header-spacer { justify-self: end; }
+
+/* Cancel and Done are the sheet's two words; they are read at arm's length. */
+.sheet-header .button--text { font-size: 17px; }
+
+/*
+ * The grabber. A sheet that rises from the bottom of a phone says so with a
+ * bar at the top, and drawing it here keeps it out of six pieces of markup.
+ */
+.sheet::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: 36px;
+  height: 5px;
+  margin-left: -18px;
+  border-radius: 3px;
+  background: var(--fill-strong);
+}
 
 .sheet-body { overflow-y: auto; overscroll-behavior: contain; padding: 20px 16px 26px; }
 
@@ -111,12 +144,18 @@
 
 
 @media (min-width: 721px) {
-  .conflict-banner { top: 70px; padding: 10px 24px; flex-direction: row; align-items: center; justify-content: space-between; }
+  .conflict-banner { padding: 10px 24px; flex-direction: row; align-items: center; justify-content: space-between; }
   .sheet-dialog { padding: 24px; display: none; }
   .sheet-dialog[open] { display: block; }
-  .sheet { inset: 50% auto auto 50%; transform: translate(-50%, -50%); width: min(520px, calc(100vw - 48px)); max-height: min(760px, calc(100dvh - 48px)); border-radius: 18px; padding-bottom: 0; }
+  .sheet { inset: 50% auto auto 50%; transform: translate(-50%, -50%); width: min(580px, calc(100vw - 48px)); max-height: min(760px, calc(100dvh - 48px)); border-radius: 16px; padding-bottom: 0; }
   .sheet-dialog--wide .sheet { width: min(640px, calc(100vw - 48px)); }
-  .sheet-header { border-radius: 18px 18px 0 0; }
+  .sheet { padding-top: 0; }
+  @keyframes dialog-in { from { opacity: 0; transform: translate(-50%, -48%) scale(.98); } }
+  .sheet-dialog[open] .sheet { animation: dialog-in 240ms cubic-bezier(.2, .8, .2, 1); }
+  .sheet::before { display: none; }
+  .sheet-header { border-radius: 16px 16px 0 0; }
+  .sheet-header h2 { font-size: 16px; }
+  .sheet-header .button--text { font-size: 15px; }
   .sheet-body { padding: 24px; }
   .version-create { grid-template-columns: 1fr auto; align-items: end; }
   .version-create .button { margin-bottom: 0; }
@@ -185,13 +224,14 @@
   height: 34px;
   padding: 0 12px;
   border-radius: 17px;
-  background: color-mix(in srgb, var(--phase) var(--phase-mix), var(--surface));
-  color: var(--ink);
+  background: var(--phase-tint);
+  color: var(--ink-2);
   font-size: 14px;
   font-weight: 550;
   cursor: pointer;
 }
 .stage-choice .icon { width: 16px; height: 16px; color: var(--phase); }
+:root[data-theme="dark"] .stage-choice { background: color-mix(in srgb, var(--phase) 22%, var(--surface)); }
 :root[data-theme="dark"] .stage-choice .icon { color: color-mix(in srgb, var(--phase) 70%, #fff); }
 .stage-choice input { position: absolute; opacity: 0; pointer-events: none; }
 .stage-choice.is-current { box-shadow: inset 0 0 0 1.5px var(--phase); font-weight: 650; }

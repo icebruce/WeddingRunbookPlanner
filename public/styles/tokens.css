@@ -85,6 +85,10 @@
   --shadow-lifted: 0 22px 50px rgba(0,0,0,.2);
   --shadow-float: 0 12px 36px rgba(0,0,0,.16);
 
+  /* The top bar's height, so that everything that sticks under it has one
+     number to stick to rather than four that drift apart. */
+  --topbar-height: 52px;
+
   --radius: 12px;
   --radius-lg: 16px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -142,11 +146,6 @@
   --shadow-float: 0 12px 36px rgba(0,0,0,.5), 0 0 0 .5px rgba(255,255,255,.07);
 }
 
-/*
- * How much of the phase colour goes into a tag's background. The mix itself
- * has to happen on the element that carries --phase, because a custom
- * property is resolved where it is declared: a --phase-tint defined here
- * would only ever see the fallback.
- */
-:root { --phase-mix: 12%; }
-:root[data-theme="dark"] { --phase-mix: 24%; }
+@media (min-width: 721px) {
+  :root { --topbar-height: 62px; }
+}

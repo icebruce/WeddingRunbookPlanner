@@ -59,7 +59,12 @@ function fitCard(card) {
   }
 
   const peopleRow = body.querySelector('.card-people');
-  if (peopleRow) fitPeople(peopleRow);
+  // A desktop card under half an hour drops its people in the stylesheet
+  // rather than by measurement (there is no room at that height, whatever the
+  // names are). That is still something hidden, so it still gets the dots.
+  const peopleDropped = peopleRow && getComputedStyle(peopleRow).display === 'none';
+  if (peopleDropped) card.classList.add(CLIPPED);
+  else if (peopleRow) fitPeople(peopleRow);
 
   const hidden = [];
   for (const row of rows.sort((a, b) => Number(a.dataset.drop) - Number(b.dataset.drop))) {
@@ -91,7 +96,8 @@ export function hiddenDetails(card) {
   const people = body.querySelector('.card-people');
   if (people) {
     const names = [...people.querySelectorAll('.tag:not(.tag--count)')];
-    const missing = people.hidden ? names : names.filter(tag => tag.hidden);
+    const gone = people.hidden || getComputedStyle(people).display === 'none';
+    const missing = gone ? names : names.filter(tag => tag.hidden);
     if (missing.length) parts.push(missing.map(tag => tag.textContent.trim()).join(', '));
   }
 

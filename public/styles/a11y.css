@@ -123,4 +123,8 @@ button, [role="button"], summary, .filter-chip, .stage-choice {
     padding-left: max(28px, env(safe-area-inset-left));
     padding-right: max(28px, env(safe-area-inset-right));
   }
+  /* A day is read down, not across: past about eleven hundred pixels the cards
+     get wider without getting more useful, and the eye has further to travel
+     from a time to its activity. The glass bars stay full width. */
+  .planner { max-width: calc(1100px + 56px); margin-inline: auto; }
 }

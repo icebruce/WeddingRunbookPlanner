@@ -18,18 +18,10 @@ const BUTTONS = [
   { action: 'delete', label: 'Delete', glyph: 'trash', danger: true }
 ];
 
-export function renderToolbar({ plan, ui, hiddenDetails = '' }) {
-  if (!ui.selectedId) {
-    return `<button class="mobile-add" type="button" data-action="add" data-focus-key="add-mobile" aria-label="Add activity">${icon('plus')}</button>`;
-  }
+const addButton = `<button class="mobile-add" type="button" data-action="add" data-focus-key="add-mobile" aria-label="Add activity">${icon('plus')}</button>`;
 
-  const item = buildSchedule(plan).items.find(entry => entry.id === ui.selectedId);
-  if (!item) {
-    return `<button class="mobile-add" type="button" data-action="add" data-focus-key="add-mobile" aria-label="Add activity">${icon('plus')}</button>`;
-  }
-
-  const id = escapeHtml(item.id);
-  const buttons = BUTTONS.map(button => {
+function editingButtons(item, id) {
+  return BUTTONS.map(button => {
     if (button.action === 'lock') {
       return `<button type="button" class="toolbar-button" data-action="lock" data-id="${id}" data-focus-key="toolbar-lock">
         ${icon(item.isFixed ? 'lock' : 'lock-open')}<span>${item.isFixed ? 'Unlock' : 'Lock'}</span></button>`;
@@ -42,12 +34,29 @@ export function renderToolbar({ plan, ui, hiddenDetails = '' }) {
       data-action="${button.action}" data-id="${id}" data-focus-key="toolbar-${button.action}">
       ${icon(button.glyph)}<span>${button.label}</span></button>`;
   }).join('');
+}
 
-  return `<div class="toolbar" role="group" aria-label="Selected activity">
+/**
+ * On the day, until Edit is pressed, the only thing a selected card offers is
+ * the way into editing — and the + is not offered at all, because adding an
+ * activity is as much an edit as moving one.
+ */
+function viewOnlyButton() {
+  return `<button type="button" class="toolbar-button" data-action="day-of-edit" data-focus-key="toolbar-edit">
+    ${icon('settings')}<span>Edit</span></button>`;
+}
+
+export function renderToolbar({ plan, ui, hiddenDetails = '' }) {
+  const viewOnly = Boolean(ui.dayOf && !ui.editingOnDay);
+  const item = ui.selectedId ? buildSchedule(plan).items.find(entry => entry.id === ui.selectedId) : null;
+  if (!item) return viewOnly ? '' : addButton;
+
+  const id = escapeHtml(item.id);
+  return `<div class="toolbar ${viewOnly ? 'toolbar--view-only' : ''}" role="group" aria-label="Selected activity">
     <div class="toolbar-context">
       <span><strong>${escapeHtml(item.title)}</strong> · ${escapeHtml(item.rangeLabel)}</span>
       ${hiddenDetails ? `<span class="toolbar-hidden">${escapeHtml(hiddenDetails)}</span>` : ''}
     </div>
-    <div class="toolbar-buttons">${buttons}</div>
+    <div class="toolbar-buttons">${viewOnly ? viewOnlyButton() : editingButtons(item, id)}</div>
   </div>`;
 }

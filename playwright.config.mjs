@@ -43,7 +43,11 @@ export default defineConfig({
   workers: process.env.CI ? 2 : undefined,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : [['list']],
   timeout: 30_000,
-  expect: { timeout: 7_000, toHaveScreenshot: { maxDiffPixelRatio: 0.01 } },
+  // One per cent of a full-page screenshot is twenty-six thousand pixels — a
+  // whole card can move and still be inside it, which is not a comparison at
+  // all. This is tight enough to catch a layout change and loose enough to
+  // ignore the handful of pixels antialiasing moves between runs.
+  expect: { timeout: 7_000, toHaveScreenshot: { maxDiffPixelRatio: 0.0005 } },
   use: {
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
