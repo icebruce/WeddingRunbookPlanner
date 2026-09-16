@@ -334,14 +334,14 @@ test.describe('open time', () => {
     await signInAndWaitForPlan(page);
 
     const gap = page.locator('.open-time');
-    // The next activity (ceremony) is locked, so only the top handle — the
-    // previous, unlocked activity's own bottom edge — is offered.
-    await expect(gap.locator('.handle')).toHaveCount(1);
+    // Both are offered even though the next activity (ceremony) is locked —
+    // dragging that one just won't do anything (see gestures.spec.mjs).
+    await expect(gap.locator('.handle')).toHaveCount(2);
     await gap.locator('strong').click();
     await expect(page.locator('#open-time-dialog')).toHaveCount(0);
     await expect(gap).toHaveClass(/is-selected/);
     await expect(gap.locator('.handle--top')).toBeVisible();
-    await expect(gap.locator('.handle--bottom')).toHaveCount(0);
+    await expect(gap.locator('.handle--bottom')).toBeVisible();
 
     // Tapping it again clears the selection.
     await gap.locator('strong').click();

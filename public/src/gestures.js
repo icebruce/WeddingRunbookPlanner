@@ -245,13 +245,24 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
 
   function onResizeEnd() {
     if (active?.kind !== 'resize') return;
-    const { edge, id, value, item } = active;
+    const { edge, id, value, item, handle } = active;
     const unchanged = edge === 'bottom' ? value === item.end : value === item.start;
+    // Dragged from an open-time block's own handle rather than the
+    // resized activity's: its selection (which is only what revealed the
+    // handle in the first place) has done its job and would otherwise sit
+    // highlighted, with a handle still showing, on a gap that has since
+    // moved or closed under it.
+    const fromOpenTime = Boolean(handle.closest('.open-time'));
     finishGesture();
 
-    if (unchanged) return repaint(['timeline']);
+    if (unchanged) {
+      if (fromOpenTime) store.setUi({ selectedOpenTime: null }, { regions: ['timeline'] });
+      else repaint(['timeline']);
+      return;
+    }
     commit(edge === 'bottom' ? 'activity.resizeBottom' : 'activity.resizeTop',
       edge === 'bottom' ? { id, newEnd: value } : { id, newStart: value });
+    if (fromOpenTime) store.setUi({ selectedOpenTime: null }, { regions: ['timeline'] });
   }
 
   // ------------------------------------------------------------------ move
@@ -452,6 +463,19 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
 
     const end = root.querySelector('.timeline-end');
     if (end) end.style.top = `${layout.endTop + 10}px`;
+
+    // An open-time block's own top/bottom edges move with whichever
+    // neighbour is being resized — otherwise it (and the handle riding on
+    // it) sits frozen at its pre-drag position while the card beside it
+    // visibly grows or shrinks, coming loose from the edge it's dragging.
+    for (const gap of layout.openTimes) {
+      const block = root.querySelector(`.open-time[data-before="${cssEscape(gap.beforeId)}"]`);
+      if (!block) continue;
+      block.style.top = `${gap.top}px`;
+      block.style.height = `${gap.height}px`;
+      const strong = block.querySelector('strong');
+      if (strong) strong.textContent = `${formatDuration(gap.minutes)} open`;
+    }
     return layout;
   }
 

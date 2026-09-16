@@ -335,6 +335,60 @@ test.describe('resize', () => {
       await expect(page.locator('.open-time')).toContainText('20 min open');
     });
 
+    test('the block itself follows the drag live, not just on release', async ({ page, server, isMobile }) => {
+      test.skip(Boolean(isMobile), 'measured with a mouse');
+      await server.seed({ plan: gapPlan() });
+      await signInAndWaitForPlan(page);
+
+      const gap = page.locator('.open-time');
+      await gap.locator('strong').click();
+      const before = await gap.boundingBox();
+
+      const handle = await gap.locator('.handle--top').boundingBox();
+      await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2 + 10 * PX_PER_MIN, { steps: 8 });
+
+      // Mid-drag, before release: the block's own top edge — and the handle
+      // riding on it — has moved down by roughly the same 10 minutes, not
+      // stayed at its pre-drag position.
+      const during = await gap.boundingBox();
+      expect(during.y - before.y).toBeGreaterThan(30);
+      expect(during.height).toBeLessThan(before.height);
+      await expect(gap).toContainText('20 min open');
+
+      await page.mouse.up();
+    });
+
+    test('selecting a block to drag its handle clears the selection once the drag commits', async ({ page, server, isMobile }) => {
+      test.skip(Boolean(isMobile), 'measured with a mouse');
+      await server.seed({ plan: gapPlan() });
+      await signInAndWaitForPlan(page);
+
+      const gap = page.locator('.open-time');
+      await gap.locator('strong').click();
+      await expect(gap).toHaveClass(/is-selected/);
+
+      const handle = await gap.locator('.handle--top').boundingBox();
+      await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2 + 10 * PX_PER_MIN, { steps: 8 });
+      await page.mouse.up();
+      // Off the block entirely, so the desktop hover-reveal isn't what's
+      // keeping the handle visible in the assertion below.
+      await page.mouse.move(10, 10);
+
+      await expect(page.locator('.save-indicator')).toHaveText('Saved');
+      // The gap that was selected has shrunk, not vanished, so the same
+      // element is still there to check — it just should not still look
+      // selected, with its handle still showing, on a boundary that moved.
+      await expect(page.locator('.open-time')).not.toHaveClass(/is-selected/);
+      // Opacity 0 still counts as "visible" to Playwright (no display:none,
+      // no visibility:hidden), so the reveal state is read off the style
+      // directly rather than via toBeVisible().
+      await expect(page.locator('.open-time .handle').first()).toHaveCSS('opacity', '0');
+    });
+
     test('dragging the bottom handle grows the next activity, shrinking the gap', async ({ page, server, isMobile }) => {
       test.skip(Boolean(isMobile), 'measured with a mouse');
       await server.seed({ plan: gapPlan() });
@@ -356,7 +410,7 @@ test.describe('resize', () => {
       expect(stored.find(a => a.id === 'arrive').duration).toBe(30, 'the previous activity did not move');
     });
 
-    test('a locked neighbour has no handle on that side of the gap', async ({ page, server, isMobile }) => {
+    test('a locked neighbour still shows its side\'s handle, but dragging it does nothing', async ({ page, server, isMobile }) => {
       test.skip(Boolean(isMobile), 'measured with a mouse');
       await server.seed({ plan: seedPlan({
         activities: [
@@ -368,8 +422,17 @@ test.describe('resize', () => {
 
       const gap = page.locator('.open-time');
       await gap.locator('strong').click();
-      await expect(gap.locator('.handle--top')).toHaveCount(0);
-      await expect(gap.locator('.handle--bottom')).toHaveCount(1);
+      await expect(gap.locator('.handle--top')).toBeVisible();
+
+      const handle = await gap.locator('.handle--top').boundingBox();
+      await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2 + 10 * PX_PER_MIN, { steps: 8 });
+      await page.mouse.up();
+
+      await expect(page.locator('.save-indicator')).not.toHaveText('Saving…');
+      const stored = (await server.read()).plan.activities;
+      expect(stored.find(a => a.id === 'arrive').duration).toBe(30, 'the locked activity did not resize');
     });
   });
 });

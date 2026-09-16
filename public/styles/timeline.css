@@ -179,12 +179,21 @@
   outline: none;
 }
 /* Its resize handles follow the same reveal rule as a card's: hidden until
-   selected, or — where there's a mouse — hovered or focused too. */
-.open-time.is-selected .handle { opacity: 1; pointer-events: auto; }
+   selected, or — where there's a mouse — hovered or focused too. A thin
+   block has no "selected" state (its tap opens the actions sheet, same as
+   ever — see render/timeline.js), so its handles are just always visible;
+   the smaller touch target below is what keeps that from swallowing the
+   tap meant for the sheet. */
+.open-time.is-selected .handle,
+.open-time--thin .handle { opacity: 1; pointer-events: auto; }
 @media (hover: hover) and (pointer: fine) {
   .open-time:hover .handle,
   .open-time:focus-within .handle { opacity: 1; pointer-events: auto; }
 }
+/* Smaller than the usual 44px (a11y.css) — full-size touch targets on both
+   edges of a short block would overlap each other and cover the whole
+   thing, leaving nothing for the tap the block itself still needs to take. */
+.open-time .handle::before { width: max(100%, 32px); height: max(100%, 32px); }
 
 .summary {
   display: flex;
