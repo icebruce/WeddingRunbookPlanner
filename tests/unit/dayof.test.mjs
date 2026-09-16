@@ -5,10 +5,13 @@ import {
   AUTO_VIEW_ONLY_MS,
   TICK_MS,
   cardStateAt,
+  clearOverride,
   createClock,
   minutesNow,
+  readOverride,
   shouldBeOn,
-  stripState
+  stripState,
+  writeOverride
 } from '../../public/src/dayof.js';
 
 const DATE = '2026-11-21';
@@ -163,4 +166,83 @@ test('the clock ticks once immediately and then every half minute', () => {
 
 test('five minutes away is the point at which editing lapses', () => {
   assert.equal(AUTO_VIEW_ONLY_MS, 5 * 60_000);
+});
+
+// ------------------------------------------------------------- the override
+
+/** A minimal in-memory stand-in for the browser's localStorage. */
+function fakeLocalStorage() {
+  const backing = new Map();
+  return {
+    getItem: key => (backing.has(key) ? backing.get(key) : null),
+    setItem: (key, value) => backing.set(key, String(value)),
+    removeItem: key => backing.delete(key)
+  };
+}
+
+/** Runs `fn` with a fresh fake localStorage in place, then restores whatever was there. */
+function withStorage(storage, fn) {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true, writable: true });
+  try {
+    fn();
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'localStorage', original);
+    else delete globalThis.localStorage;
+  }
+}
+
+test('writing an override persists it, and reading it back for that date returns it', () => {
+  withStorage(fakeLocalStorage(), () => {
+    assert.equal(readOverride(DATE), null, 'nothing stored yet');
+    writeOverride(DATE, true);
+    assert.equal(readOverride(DATE), true);
+
+    writeOverride(DATE, false);
+    assert.equal(readOverride(DATE), false, 'the latest write wins');
+  });
+});
+
+test('clearOverride removes the stored override', () => {
+  withStorage(fakeLocalStorage(), () => {
+    writeOverride(DATE, true);
+    assert.equal(readOverride(DATE), true);
+
+    clearOverride();
+    assert.equal(readOverride(DATE), null);
+  });
+});
+
+test('an override written for one date does not affect another date', () => {
+  withStorage(fakeLocalStorage(), () => {
+    writeOverride(DATE, false);
+    assert.equal(readOverride('2026-12-25'), null, 'a different date sees no override');
+    assert.equal(readOverride(DATE), false, 'the date it was written for still sees it');
+  });
+});
+
+test('without storage available, reading, writing and clearing all fail quietly', () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  delete globalThis.localStorage;
+  try {
+    assert.equal(readOverride(DATE), null, 'no override to read without storage');
+    assert.doesNotThrow(() => writeOverride(DATE, true));
+    assert.doesNotThrow(() => clearOverride());
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'localStorage', original);
+    else delete globalThis.localStorage;
+  }
+});
+
+test('a storage that throws on access is treated the same as no storage at all', () => {
+  const angry = {
+    getItem() { throw new Error('blocked'); },
+    setItem() { throw new Error('blocked'); },
+    removeItem() { throw new Error('blocked'); }
+  };
+  withStorage(angry, () => {
+    assert.equal(readOverride(DATE), null);
+    assert.doesNotThrow(() => writeOverride(DATE, true));
+    assert.doesNotThrow(() => clearOverride());
+  });
 });
