@@ -39,7 +39,8 @@ button, [role="button"], summary, .filter-chip, .stage-choice {
 .stepper button,
 .icon-button,
 .person-remove,
-.people-add-trigger {
+.people-add-trigger,
+.handle {
   position: relative;
 }
 .card-controls button::after,
@@ -48,7 +49,8 @@ button, [role="button"], summary, .filter-chip, .stage-choice {
 .stepper button::after,
 .icon-button::after,
 .person-remove::after,
-.people-add-trigger::after {
+.people-add-trigger::after,
+.handle::before {
   content: '';
   position: absolute;
   top: 50%;

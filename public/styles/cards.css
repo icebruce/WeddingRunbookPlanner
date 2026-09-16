@@ -194,9 +194,12 @@
 .card--line .card-grip .icon { display: none; }
 .card--line .card-grip { width: 18px; }
 
-/* Handles: a small visible bar with a large invisible target, and only on the
-   selected card. The top one is absent on a locked activity, which has no
-   start to move. */
+/* Handles: a small bar inset from the card's own edge (docs/mockups/mobile.html),
+   not a shape floating outside it, with a larger invisible target laid over
+   it by a11y.css so a thumb still has 44 px to land on. Only on the selected
+   card; the top one is absent on a locked activity, which has no start to
+   move. The button itself stays fully transparent — only its ::after draws
+   anything — so it never looks bigger than the native bar it is. */
 /* They are added to the page rather than revealed, so they fade in with an
    animation; a transition would have nothing to run from. */
 @keyframes handle-in { from { opacity: 0; } }
@@ -204,18 +207,23 @@
   animation: handle-in 180ms ease-out;
   position: absolute;
   left: 50%;
-  width: 120px;
-  height: 44px;
+  width: 40px;
+  height: 16px;
   transform: translateX(-50%);
   display: grid;
   place-items: center;
   touch-action: none;
   cursor: ns-resize;
   z-index: 2;
+  border: 0;
+  padding: 0;
+  background: none;
+  -webkit-appearance: none;
+  appearance: none;
 }
 .handle::after { content: ''; width: 40px; height: 5px; border-radius: 3px; background: var(--sel); }
-.handle--top { top: -22px; }
-.handle--bottom { bottom: -22px; }
+.handle--top { top: 3px; }
+.handle--bottom { bottom: 3px; }
 
 .card:focus-visible { outline: 2px solid var(--sel); outline-offset: 2px; }
 .card.is-selected { box-shadow: 0 0 0 2px var(--sel), 0 8px 22px rgba(10, 108, 255, .14); }
@@ -289,6 +297,18 @@
   .card.is-selected .card-controls,
   .card.is-menu-open .card-controls { opacity: 1; }
   .card:hover { box-shadow: var(--shadow-hover); }
+}
+
+/* On a phone the edit pencil is redundant — selecting a card raises the
+   toolbar's own Edit button (render/toolbar.js) — and with no hover to hide
+   it, it sat on the card permanently, next to the lock button, both drawn
+   over whatever the title row put in that corner. Dropping the pencil and
+   reserving room for the one button that is left fixes both at once. */
+@media (max-width: 720px) {
+  .card-edit { display: none; }
+  .card-body,
+  .card--small .card-body { padding-right: 46px; }
+  .card--line .card-body { padding-right: 42px; }
 }
 
 /*

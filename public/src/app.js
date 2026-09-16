@@ -308,6 +308,7 @@ function showDiscardAlert() {
   const dismiss = () => {
     alert.close();
     alertRoot.innerHTML = '';
+    syncOverlayHistory();
   };
   alert.addEventListener('cancel', event => {
     event.preventDefault();
@@ -319,7 +320,72 @@ function showDiscardAlert() {
   });
   alert.querySelector('.sheet-close').addEventListener('click', dismiss);
   alert.showModal();
+  syncOverlayHistory();
 }
+
+// -------------------------------------------------------------- back button
+//
+// On a phone, "back" is the hardware button or edge gesture, and it goes to
+// the browser's history, not to the app. Left alone it leaves the whole plan
+// behind whatever was open — a sheet, a menu, a selected card — instead of
+// closing that one thing the way every native app on the phone does.
+//
+// The fix is a single dummy history entry that exists exactly while
+// something is open. Back then lands on that entry, which does not
+// navigate anywhere (same URL), and the resulting `popstate` is read as
+// "close the top thing" instead. Closing that thing any other way (Cancel,
+// tapping the scrim, Escape) consumes the same entry with `history.back()`
+// so the phone's back stack never grows a trail of dead stops.
+let overlayHistoryPushed = false;
+let ignoreNextPopstate = false;
+
+function topOverlayOpen() {
+  return Boolean(
+    alertRoot.querySelector('dialog[open]') ||
+    sheetRoot.querySelector('dialog[open]') ||
+    store.ui.openMenu ||
+    store.ui.selectedId
+  );
+}
+
+function syncOverlayHistory() {
+  const open = topOverlayOpen();
+  if (open && !overlayHistoryPushed) {
+    overlayHistoryPushed = true;
+    history.pushState({ wrpOverlay: true }, '');
+  } else if (!open && overlayHistoryPushed) {
+    overlayHistoryPushed = false;
+    ignoreNextPopstate = true;
+    history.back();
+  }
+}
+
+window.addEventListener('popstate', () => {
+  if (ignoreNextPopstate) {
+    ignoreNextPopstate = false;
+    return;
+  }
+  if (!topOverlayOpen()) return;
+  overlayHistoryPushed = false;
+
+  const alert = alertRoot.querySelector('dialog[open]');
+  if (alert) {
+    alert.dispatchEvent(new Event('cancel', { cancelable: true }));
+    return;
+  }
+  const sheet = sheetRoot.querySelector('dialog[open]');
+  if (sheet) {
+    (sheet.id === 'activity-dialog' ? requestCloseEditor : closeSheet)();
+    return;
+  }
+  if (store.ui.openMenu) {
+    store.setUi({ openMenu: null });
+    return;
+  }
+  if (store.ui.selectedId) {
+    store.setUi({ selectedId: null }, { regions: ['timeline', 'toolbar'] });
+  }
+});
 
 const gestures = createGestures({
   root: app,
@@ -502,6 +568,18 @@ function bindSheet(dialog) {
   dialog.querySelectorAll('.sheet-close').forEach(button => button.addEventListener('click', close));
   dialog.addEventListener('click', event => {
     if (event.target === dialog) close();
+  });
+
+  // A tap on a stage chip, a duration stepper or any other non-text control
+  // does not open the keyboard, so the browser has no reason of its own to
+  // scroll it into view — unlike a text field, which it scrolls above the
+  // keyboard automatically. Without this the row a phone just interacted
+  // with can sit under the keyboard, or off the bottom of a short sheet,
+  // with no way back to it but a manual scroll.
+  const sheetBody = dialog.querySelector('.sheet-body');
+  sheetBody?.addEventListener('focusin', event => {
+    const row = event.target.closest('.field, .group-row, .stage-choice');
+    row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   });
 
   if (dialog.id === 'activity-dialog') {
@@ -1416,7 +1494,10 @@ document.addEventListener('visibilitychange', () => {
 
 window.addEventListener('pagehide', () => saver.flushOnHide(api.saveOnHide));
 
-store.subscribe(change => repaint(change.regions));
+store.subscribe(change => {
+  repaint(change.regions);
+  syncOverlayHistory();
+});
 
 // -------------------------------------------------------------------- boot
 

@@ -41,7 +41,7 @@ function suggestionsFrom(plan) {
 
 function stageGrid(current) {
   return `<div class="stage-grid" role="radiogroup" aria-label="Stage">
-    ${STAGES.map(stage => `<label class="stage-choice ${stage.id === current ? 'is-current' : ''}" style="${phaseVars(stage)}">
+    ${STAGES.map(stage => `<label class="stage-choice" style="${phaseVars(stage)}">
       <input type="radio" name="stage" value="${stage.id}" ${stage.id === current ? 'checked' : ''}>
       ${icon(stage.icon)}<span>${escapeHtml(stage.label)}</span>
     </label>`).join('')}

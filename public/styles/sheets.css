@@ -298,7 +298,12 @@
 :root[data-theme="dark"] .stage-choice { background: color-mix(in srgb, var(--phase) 22%, var(--surface)); }
 :root[data-theme="dark"] .stage-choice .icon { color: color-mix(in srgb, var(--phase) 70%, #fff); }
 .stage-choice input { position: absolute; opacity: 0; pointer-events: none; }
-.stage-choice.is-current { box-shadow: inset 0 0 0 1.5px var(--phase); font-weight: 650; }
+/* Which chip reads as selected follows the radio's own checked state, not
+   the class the sheet was built with — the sheet is built once and never
+   rebuilt while it is open (sheets.js), so a class fixed to the stage the
+   activity opened with would keep showing that one as current even after a
+   different chip was picked, alongside the newly-checked one. */
+.stage-choice:has(input:checked) { box-shadow: inset 0 0 0 1.5px var(--phase); font-weight: 650; }
 .stage-choice:focus-within { outline: 2px solid var(--sel); outline-offset: 2px; }
 
 /* ---- action sheets ------------------------------------------------------- */
