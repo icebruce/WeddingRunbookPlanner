@@ -110,19 +110,24 @@ test('the gate reads counters without changing them', async () => {
   assert.ok(sent.some(command => command[0] === 'GET' && command[1].endsWith('global')));
 });
 
-test('a failure increments both counters through Upstash and sets the window once', async () => {
+test('a failure increments both counters in one round trip through Upstash', async () => {
   const sent = [];
-  let counter = 0;
   const client = {
     read: async () => WINDOW_SECONDS,
-    write: async command => { sent.push(command); return command[0] === 'INCR' ? ++counter : 'OK'; }
+    write: async command => { sent.push(command); return [1, 1]; }
   };
   await recordLoginFailure(requestFrom('203.0.113.12'), { client });
 
-  assert.deepEqual(sent[0], ['INCR', 'wedding-planner:rl:ip:203.0.113.12']);
-  assert.deepEqual(sent[1], ['EXPIRE', 'wedding-planner:rl:ip:203.0.113.12', String(WINDOW_SECONDS)]);
-  assert.deepEqual(sent[2], ['INCR', 'wedding-planner:rl:global']);
-  assert.equal(sent.filter(command => command[0] === 'EXPIRE').length, 1, 'the second counter was already open');
+  // One EVAL, not four separate commands: a burst of concurrent failures from
+  // the same address cannot land the two counters' INCR/EXPIRE pairs out of
+  // step with each other.
+  assert.equal(sent.length, 1);
+  const [command, , numkeys, ipKey, globalKey, window] = sent[0];
+  assert.equal(command, 'EVAL');
+  assert.equal(numkeys, '2');
+  assert.equal(ipKey, 'wedding-planner:rl:ip:203.0.113.12');
+  assert.equal(globalKey, 'wedding-planner:rl:global');
+  assert.equal(window, String(WINDOW_SECONDS));
 });
 
 test('clearing goes through Upstash when it is configured', async () => {

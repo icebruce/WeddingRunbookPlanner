@@ -12,26 +12,28 @@
 import './actions.js';
 import { api } from './api.js';
 import { PLAN_STATUSES, STAGES, deviceId } from './config.js';
-import { clearDeviceCopy, readDeviceCopy, writeDeviceCopy } from './device.js';
+import { readDeviceCopy, writeDeviceCopy } from './device.js';
 import { cssEscape, escapeHtml, focusByKey, paint, uid } from './dom.js';
-import { AUTO_VIEW_ONLY_MS, cardStateAt, clearOverride, createClock, minutesNow, readOverride, shouldBeOn, stripState, writeOverride } from './dayof.js';
+import { AUTO_VIEW_ONLY_MS, createClock, minutesNow, readOverride, shouldBeOn, stripState, writeOverride } from './dayof.js';
 import { createGestures } from './gestures.js';
 import { PX_PER_MIN } from './layout.js';
 import { icon } from './icons.js';
 import { SAVE_STATES, createSavePipeline } from './save.js';
 import { createStore } from './state.js';
+import { createAuth } from './auth.js';
+import { createVersions } from './versions.js';
+import { createActivityForm } from './activity-form.js';
 import { renderHeader } from './render/header.js';
-import { discardSheet, emptyState, peopleChips, renderSheet } from './render/sheets.js';
-import { buildSchedule, formatDuration, formatTime } from './schedule.js';
+import { discardSheet, emptyState, renderSheet } from './render/sheets.js';
+import { buildSchedule, formatTime } from './schedule.js';
 import { renderFilterBar, renderFilters } from './render/filters.js';
-import { initPickers } from './render/pickers.js';
 import { renderPrint } from './render/print.js';
 import { renderStrip } from './render/strip.js';
 import { renderHeading, renderSummary, renderTimeline } from './render/timeline.js';
 import { fitCards, hiddenDetails, watchFit } from './render/fit.js';
 import { createToaster } from './render/toast.js';
 import { renderToolbar } from './render/toolbar.js';
-import { checkPlan, normalizeDuration, roundTimeUp, validateActivity } from './validate.js';
+import { normalizeDuration } from './validate.js';
 
 const app = document.querySelector('#app');
 const sheetRoot = document.querySelector('#sheet-root');
@@ -130,8 +132,8 @@ let scrolledToNow = false;
 // Focus is returned to whatever opened the sheet when it closes, so a dialog
 // never leaves the next Tab starting from the top of the page.
 let dialogOpener = null;
-/** The editor's contents when it opened, so Cancel knows whether to ask. */
-let editorBaseline = null;
+/** The pending "unhighlight" timer from the last summary-link jump. */
+let highlightTimer = null;
 
 function screenOf(ui) {
   if (ui.loadError && !store.plan) return 'error';
@@ -278,7 +280,7 @@ function syncSheet() {
 }
 
 function closeSheet() {
-  editorBaseline = null;
+  activityForm.clearBaseline();
   store.setUi({ dialog: null }, { regions: [] });
   syncSheet();
 }
@@ -294,7 +296,7 @@ function closeSheet() {
  */
 function requestCloseEditor() {
   const form = sheetRoot.querySelector('#activity-form');
-  if (!form || editorBaseline === null || formSignature(form) === editorBaseline) {
+  if (!form || !activityForm.hasUnsavedChanges(form)) {
     closeSheet();
     return;
   }
@@ -467,115 +469,6 @@ async function flushSave() {
   store.setRevision(saver.revision);
 }
 
-// -------------------------------------------------------------- validation
-
-function clearFieldErrors(form) {
-  form.querySelectorAll('.field-error').forEach(node => node.remove());
-  form.querySelectorAll('[aria-invalid="true"]').forEach(node => {
-    node.removeAttribute('aria-invalid');
-    node.removeAttribute('aria-describedby');
-  });
-}
-
-/**
- * Validation runs through the module the server uses, so the message shown here
- * is the reason the server would have given — and the sheet stays open with the
- * offending field focused instead of the change being applied and then refused.
- */
-function showFieldError(form, field, message) {
-  const name = String(field || '').split('.').pop();
-  const control = form.querySelector(`[name="${name}"]`);
-  const note = document.createElement('p');
-  note.className = 'field-error';
-  note.id = `error-${name}`;
-  note.setAttribute('role', 'alert');
-  note.textContent = message;
-
-  if (!control) {
-    form.querySelector('.sheet-body')?.prepend(note);
-    return;
-  }
-  control.setAttribute('aria-invalid', 'true');
-  control.setAttribute('aria-describedby', note.id);
-  (control.closest('.field') || control.parentElement).append(note);
-  control.focus();
-}
-
-// ------------------------------------------------------------- people chips
-
-function peopleValues(root) {
-  const editor = root.querySelector('.people-editor');
-  if (!editor) return [];
-  try {
-    const stored = JSON.parse(editor.dataset.people || '[]');
-    const values = Array.isArray(stored) ? stored.map(value => String(value).trim()).filter(Boolean) : [];
-    // Text typed but not confirmed with Enter used to be dropped on Done (F20).
-    const pending = editor.querySelector('.people-add-input')?.value.trim();
-    if (pending && !values.some(person => person.toLowerCase() === pending.toLowerCase())) values.push(pending);
-    return values;
-  } catch {
-    return [];
-  }
-}
-
-function setPeopleValues(editor, values) {
-  const unique = [];
-  const seen = new Set();
-  for (const value of values.map(entry => String(entry).trim()).filter(Boolean)) {
-    const key = value.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    unique.push(value);
-  }
-  const capped = unique.slice(0, 30);
-  editor.dataset.people = JSON.stringify(capped);
-  editor.querySelector('.people-chip-list').innerHTML = peopleChips(capped);
-}
-
-function addPendingPerson(editor) {
-  const input = editor.querySelector('.people-add-input');
-  const value = input?.value.trim();
-  if (!value) return;
-  setPeopleValues(editor, [...JSON.parse(editor.dataset.people || '[]'), value]);
-  input.value = '';
-  editor.querySelector('.people-add-row').hidden = false;
-  editor.querySelector('.people-add-input')?.focus();
-}
-
-function bindPeopleEditor(dialog) {
-  const editor = dialog.querySelector('.people-editor');
-  if (!editor) return;
-
-  editor.addEventListener('click', event => {
-    const trigger = event.target.closest('.people-add-trigger');
-    if (trigger) {
-      editor.querySelector('.people-add-row').hidden = false;
-      trigger.setAttribute('aria-expanded', 'true');
-      editor.querySelector('.people-add-input')?.focus();
-      return;
-    }
-    const remove = event.target.closest('.person-remove');
-    if (remove) {
-      const person = remove.dataset.person;
-      setPeopleValues(editor, JSON.parse(editor.dataset.people || '[]').filter(value => value !== person));
-      return;
-    }
-    if (event.target.closest('.people-add-confirm')) addPendingPerson(editor);
-  });
-
-  editor.querySelector('.people-add-input')?.addEventListener('keydown', event => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      addPendingPerson(editor);
-    }
-    if (event.key === 'Escape') {
-      event.stopPropagation();
-      editor.querySelector('.people-add-row').hidden = true;
-      editor.querySelector('.people-add-trigger')?.focus();
-    }
-  });
-}
-
 // ------------------------------------------------------------ sheet wiring
 
 function bindSheet(dialog) {
@@ -602,284 +495,25 @@ function bindSheet(dialog) {
   });
 
   if (dialog.id === 'activity-dialog') {
-    const form = dialog.querySelector('#activity-form');
-    form.addEventListener('submit', submitActivity);
-
-    // Deleting from inside the editor is the same delete as anywhere else: no
-    // confirmation, and six seconds to undo.
-    dialog.querySelector('#delete-activity')?.addEventListener('click', () => {
-      const id = store.ui.dialog.activity.id;
-      editorBaseline = null;
-      closeSheet();
-      commit('activity.remove', { id });
-      store.setUi({ selectedId: null }, { regions: ['timeline', 'toolbar'] });
-    });
-
-    dialog.querySelector('#duplicate-activity')?.addEventListener('click', () => {
-      const id = store.ui.dialog.activity.id;
-      editorBaseline = null;
-      closeSheet();
-      const result = commit('activity.duplicate', { id, newId: uid() });
-      if (result) store.setUi({ selectedId: null }, { regions: ['timeline', 'toolbar'] });
-    });
-
-    for (const button of dialog.querySelectorAll('[data-duration-step]')) {
-      button.addEventListener('click', () => {
-        const input = dialog.querySelector('input[name="duration"]');
-        input.value = normalizeDuration(Number(input.value) + Number(button.dataset.durationStep));
-        updateEnds(dialog);
-      });
-    }
-
-    const duration = dialog.querySelector('input[name="duration"]');
-    duration?.addEventListener('blur', () => {
-      duration.value = normalizeDuration(Number(duration.value));
-      updateEnds(dialog);
-    });
-    duration?.addEventListener('input', () => updateEnds(dialog));
-
-    void initPickers(dialog, { onChange: () => updateEnds(dialog) });
-
-    bindPeopleEditor(dialog);
-    // What the form looked like on open, so Cancel knows whether to ask.
-    editorBaseline = formSignature(form);
+    activityForm.bindActivityDialog(dialog);
     return;
   }
 
   if (dialog.id === 'versions-dialog') {
-    dialog.querySelector('#version-form').addEventListener('submit', createVersion);
+    dialog.querySelector('#version-form').addEventListener('submit', versions.createVersion);
     for (const button of dialog.querySelectorAll('.restore-version')) {
-      button.addEventListener('click', () => void restoreVersion(button.dataset.versionId));
+      button.addEventListener('click', () => void versions.restoreVersion(button.dataset.versionId));
     }
     for (const button of dialog.querySelectorAll('.delete-version')) {
-      button.addEventListener('click', () => void removeVersion(button.dataset.versionId));
+      button.addEventListener('click', () => void versions.removeVersion(button.dataset.versionId));
     }
     return;
   }
 
   if (dialog.id === 'settings-dialog') {
-    dialog.querySelector('#settings-form').addEventListener('submit', submitSettings);
-    void initPickers(dialog);
+    activityForm.bindSettingsDialog(dialog);
   }
 
-}
-
-/** flatpickr's own "Y-m-d H:i" back into a Date, read from the hidden input it keeps in sync. */
-function parseDateTimeLocal(value) {
-  const match = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/.exec(value || '');
-  if (!match) return null;
-  const [, year, month, day, hour, minute] = match.map(Number);
-  return new Date(year, month - 1, day, hour, minute);
-}
-
-/** An activity's start, in minutes from midnight on the plan's date. */
-function minutesFromPlanDate(date) {
-  const planMidnight = new Date(`${store.plan.date}T00:00:00`);
-  return Math.round((date - planMidnight) / 60_000);
-}
-
-/** "Ends" is worked out from the start and the duration, and shown live. */
-function updateEnds(dialog) {
-  const endNode = dialog.querySelector('[data-ends]');
-  const humanNode = dialog.querySelector('[data-duration-human]');
-  const duration = normalizeDuration(Number(dialog.querySelector('input[name="duration"]').value));
-  if (humanNode) humanNode.textContent = formatDuration(duration);
-
-  if (!endNode) return;
-  const startDate = parseDateTimeLocal(dialog.querySelector('input[name="start"]').value);
-  if (!startDate) { endNode.textContent = '—'; return; }
-  endNode.textContent = formatTime(minutesFromPlanDate(startDate) + duration);
-}
-
-/** A stable description of the form, for telling "changed" from "untouched". */
-function formSignature(form) {
-  const data = [...new FormData(form).entries()].map(([key, value]) => `${key}=${value}`);
-  const people = form.querySelector('.people-editor')?.dataset.people ?? '[]';
-  const pending = form.querySelector('.people-add-input')?.value ?? '';
-  return JSON.stringify([data, people, pending]);
-}
-
-function submitActivity(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  clearFieldErrors(form);
-
-  const data = new FormData(form);
-  const startDate = parseDateTimeLocal(String(data.get('start') || ''));
-  const candidate = {
-    id: String(data.get('id')),
-    title: String(data.get('title')).trim(),
-    duration: normalizeDuration(Number(data.get('duration'))),
-    stage: String(data.get('stage')),
-    location: String(data.get('location')).trim(),
-    people: peopleValues(form),
-    notes: String(data.get('notes')).trim(),
-    start: startDate ? minutesFromPlanDate(startDate) : 0,
-    locked: data.get('locked') === 'on'
-  };
-
-  let activity;
-  try {
-    activity = validateActivity(candidate);
-  } catch (error) {
-    showFieldError(form, error.field, error.message);
-    return;
-  }
-
-  const creating = store.ui.dialog.mode === 'create';
-  // An activity created from an open time goes into that gap rather than after
-  // the selection; the gap is remembered on the dialog because nothing is
-  // committed until now.
-  const openTime = store.ui.dialog.openTime || null;
-  editorBaseline = null;
-  closeSheet();
-
-  if (creating) {
-    const result = openTime
-      ? commit('openTime.add', { openTime, activity })
-      : commit('activity.add', { activity, afterId: store.ui.selectedId });
-    if (result) store.setUi({ selectedId: activity.id }, { regions: ['timeline', 'toolbar'] });
-  } else {
-    commit('activity.update', { activity });
-  }
-}
-
-function submitSettings(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  clearFieldErrors(form);
-
-  const data = new FormData(form);
-  const text = name => String(data.get(name) || '').trim();
-
-  const changes = {
-    coupleLabel: text('coupleLabel'),
-    title: text('title'),
-    date: text('date'),
-    // Sunset is display-only, so it keeps whatever minute it is given, and an
-    // empty field means "no marker" rather than "the default".
-    sunset: text('sunset') || null,
-    // The view range only changes what is drawn. An end at or before the start
-    // is a plan that runs into the next day, not a mistake.
-    timelineStart: text('timelineStart') ? roundTimeUp(text('timelineStart')) : undefined,
-    timelineEnd: text('timelineEnd') ? roundTimeUp(text('timelineEnd')) : undefined
-  };
-
-  const candidate = { ...structuredClone(store.plan), ...changes };
-  if (changes.timelineStart === undefined) delete candidate.timelineStart;
-  if (changes.timelineEnd === undefined) delete candidate.timelineEnd;
-
-  const result = checkPlan(candidate);
-  if (!result.ok) {
-    showFieldError(form, result.error.field, result.error.message);
-    return;
-  }
-
-  const applied = {
-    coupleLabel: result.plan.coupleLabel,
-    title: result.plan.title,
-    date: result.plan.date,
-    sunset: result.plan.sunset ?? null
-  };
-  applied.timelineStart = result.plan.timelineStart ?? null;
-  applied.timelineEnd = result.plan.timelineEnd ?? null;
-
-  closeSheet();
-  commit('plan.settings', { changes: applied });
-  // The date decides whether the day-of view belongs on.
-  clock.tick();
-}
-
-async function createVersion(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const button = form.querySelector('button');
-  clearFieldErrors(form);
-  button.disabled = true;
-  try {
-    // A version is a copy of what is stored, so what is on screen has to be
-    // stored first.
-    await flushSave();
-    const result = await api.createVersion(new FormData(form).get('name'));
-    // The sheet stays open; its identity changes with the list, so it repaints.
-    store.setUi({ versions: result.versions }, { regions: [] });
-    syncSheet();
-  } catch (error) {
-    if (error.field) showFieldError(form, error.field, error.message);
-    else toast(error.message || 'Could not save that version.', { tone: 'error' });
-    button.disabled = false;
-  }
-}
-
-/**
- * Deleting a version is undoable like everything else — the copy is kept in
- * memory for as long as the toast is on screen and written back if asked.
- */
-async function removeVersion(id) {
-  const version = store.ui.versions.find(item => item.id === id);
-  if (!version) return;
-
-  try {
-    // The body is fetched before the delete, so Undo can put back the plan
-    // that was in it rather than whatever is on screen now. The list itself
-    // never carries plan bodies.
-    const { version: full } = await api.version(id);
-    const result = await api.deleteVersion(id);
-    store.setUi({ versions: result.versions }, { regions: [] });
-    syncSheet();
-
-    toast(`Deleted ${version.name}`, {
-      action: {
-        label: 'Undo',
-        run: async () => {
-          try {
-            const restored = await api.createVersion(full.name, { auto: full.auto, plan: full.plan });
-            store.setUi({ versions: restored.versions }, { regions: [] });
-            syncSheet();
-          } catch {
-            toast('That version could not be put back.', { tone: 'error' });
-          }
-        }
-      }
-    });
-  } catch (error) {
-    toast(error.message || 'Could not delete that version.', { tone: 'error' });
-  }
-}
-
-async function restoreVersion(id) {
-  const version = store.ui.versions.find(item => item.id === id);
-  if (!version) return;
-  try {
-    // The server keeps a copy of what is being replaced before it replaces it,
-    // so this needs no confirmation of its own.
-    const result = await api.restoreVersion(id, store.revision);
-    saver.markClean(result.revision);
-    store.setUi({ versions: result.versions, dialog: null }, { regions: [] });
-    currentDialogKey = null;
-    store.setPlan(result.plan, { revision: result.revision, updatedAt: result.updatedAt });
-    writeDeviceCopy(result.plan, { revision: result.revision, dirty: false });
-    clock.tick();
-    toast(`Restored ${version.name}`);
-  } catch (error) {
-    toast(error.message || 'Could not restore that version.', { tone: 'error' });
-  }
-}
-
-async function openVersions() {
-  rememberOpener('menu-app');
-  try {
-    await flushSave();
-    const result = await api.versions();
-    store.setRevision(result.revision, result.updatedAt);
-    store.setUi({
-      versions: result.versions,
-      openMenu: null,
-      dialog: { type: 'versions', updatedAt: result.updatedAt }
-    });
-  } catch (error) {
-    toast(error.message || 'Could not open version history.', { tone: 'error' });
-  }
 }
 
 // ------------------------------------------------------------ interactions
@@ -1016,12 +650,12 @@ const ACTION_HANDLERS = {
       store.setUi({ openMenu: null });
       return;
     }
-    if (action === 'versions') return void openVersions();
+    if (action === 'versions') return void versions.openVersions();
     if (action === 'settings') {
       rememberOpener('menu-app');
       return store.setUi({ openMenu: null, dialog: { type: 'settings' } });
     }
-    if (action === 'logout') return void signOut();
+    if (action === 'logout') return void auth.signOut();
   },
   conflict(_, element) {
     void resolveConflict(element.dataset.choice);
@@ -1078,7 +712,15 @@ const ACTION_HANDLERS = {
     if (!target) return;
     target.scrollIntoView({ block: 'center', behavior: 'smooth' });
     target.classList.add('is-highlighted');
-    setTimeout(() => target.classList.remove('is-highlighted'), 1600);
+    // A repaint before the highlight finishes (the jumped-to card gets
+    // edited, say) detaches this exact node; the old timer would then just
+    // do nothing, but it is still cleared so two jumps in a row cannot leave
+    // the wrong element highlighted.
+    if (highlightTimer) clearTimeout(highlightTimer);
+    highlightTimer = setTimeout(() => {
+      target.classList.remove('is-highlighted');
+      highlightTimer = null;
+    }, 1600);
   },
   'day-of-edit'() {
     store.setUi({ editingOnDay: true }, { regions: ['header', 'heading', 'timeline', 'toolbar'] });
@@ -1134,50 +776,6 @@ async function resolveConflict(choice) {
 
   store.setRevision(latest.revision);
   await saver.resume({ revision: latest.revision });
-}
-
-async function signOut() {
-  try { await flushSave(); } catch { /* the sign-out still happens; the copy stays on the device */ }
-  await api.logout().catch(() => {});
-  // Signing out is the one time this device is cleared: it is the only moment
-  // someone has said they are finished with it. The day-of override goes too —
-  // it is a decision about one date on one device, and the next person to sign
-  // in on it should get the plan's own answer.
-  clearDeviceCopy(store.plan?.id);
-  clearOverride();
-  saver.markClean(null);
-  store.resetUi();
-  store.setPlan(null, { revision: null });
-  store.setUi({ authenticated: false });
-}
-
-async function handleLogin(event, form) {
-  event.preventDefault();
-  const errorNode = form.querySelector('#login-error');
-  const button = form.querySelector('button[type="submit"]');
-  button.disabled = true;
-  errorNode.hidden = true;
-
-  try {
-    await api.login(new FormData(form).get('password'));
-
-    // Signing in again mid-edit must not cost the edit: the plan on screen is
-    // kept and only the revision is refreshed, so the save can be retried
-    // (or turn into a conflict). Loading here would overwrite the work (F10).
-    if (store.plan && saver.hasPendingChanges) {
-      store.setUi({ authenticated: true });
-      const current = await api.load().catch(() => null);
-      await saver.resume({ revision: current?.revision ?? store.revision });
-      return;
-    }
-
-    store.setUi({ authenticated: true });
-    await loadPlan();
-  } catch (error) {
-    errorNode.textContent = error.message || 'Unable to sign in.';
-    errorNode.hidden = false;
-    button.disabled = false;
-  }
 }
 
 // --------------------------------------------------------------- listeners
@@ -1278,7 +876,7 @@ document.addEventListener('keydown', event => {
 document.addEventListener('submit', event => {
   // Delegated, so the form comes from the target rather than currentTarget —
   // currentTarget here is the document.
-  if (event.target.id === 'login-form') void handleLogin(event, event.target);
+  if (event.target.id === 'login-form') void auth.handleLogin(event, event.target);
 });
 
 document.addEventListener('change', event => {
@@ -1326,6 +924,19 @@ const clock = createClock(now => {
   // would fight whatever is being dragged or read.
   advanceNow(changes.nowMinutes ?? null);
 });
+
+const auth = createAuth({ store, saver, flushSave, loadPlan });
+const versions = createVersions({
+  store,
+  saver,
+  toast,
+  flushSave,
+  syncSheet,
+  rememberOpener,
+  resetDialogKey: () => { currentDialogKey = null; },
+  clock
+});
+const activityForm = createActivityForm({ store, commit, closeSheet, clock });
 
 /**
  * Editing on the day is deliberate, and it lapses. Leaving the app for five
@@ -1468,10 +1079,17 @@ window.addEventListener('offline', () => repaint(['header', 'offline']));
  */
 const REFRESH_INTERVAL_MS = 60_000;
 
+// The 60-second interval and the visibility handler can land on the same
+// tick — a tab regaining focus just as the timer fires — and without this
+// both would open their own request.
+let refreshing = false;
+
 async function refreshFromServer() {
+  if (refreshing) return;
   if (!store.plan || !store.ui.authenticated) return;
   if (saver.hasPendingChanges || saver.isBlocked || store.ui.dialog) return;
 
+  refreshing = true;
   try {
     const result = await api.load(store.revision);
     if (result.unchanged) return;
@@ -1480,6 +1098,8 @@ async function refreshFromServer() {
     writeDeviceCopy(result.plan, { revision: result.revision, dirty: false });
   } catch {
     // A failed check is not news. The next one will do.
+  } finally {
+    refreshing = false;
   }
 }
 

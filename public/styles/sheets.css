@@ -69,7 +69,7 @@
 
 /* No font-size here: a11y.css sets one floor for every field on the page, and
    a 14 px box is what makes iOS Safari zoom in on focus and never zoom back. */
-.field input, .field select, .field textarea { width: 100%; border: 1px solid var(--spine); border-radius: 10px; background: var(--surface); padding: 10px 11px; outline: 0; transition: border-color .15s, box-shadow .15s; }
+.field input, .field select, .field textarea { width: 100%; border: 1px solid var(--hair); border-radius: 10px; background: var(--surface); padding: 10px 11px; outline: 0; transition: border-color .15s, box-shadow .15s; }
 
 .field input, .field select { min-height: 42px; }
 
@@ -81,7 +81,7 @@
 
 .stepper { display: grid; grid-template-columns: 38px 1fr 38px; }
 
-.stepper button, .stepper input { min-width: 0; min-height: 42px; border: 1px solid var(--spine); background: var(--surface); text-align: center; }
+.stepper button, .stepper input { min-width: 0; min-height: 42px; border: 1px solid var(--hair); background: var(--surface); text-align: center; }
 
 .stepper button:first-child { border-radius: 10px 0 0 10px; }
 
@@ -170,7 +170,7 @@
 .people-add-input {
   flex: 1;
   min-width: 0;
-  border: 1px solid var(--spine);
+  border: 1px solid var(--hair);
   border-radius: 10px;
   background: var(--surface);
   padding: 10px 11px;
@@ -257,21 +257,6 @@
 .group-value, .group-note { color: var(--soft); font-variant-numeric: tabular-nums; }
 .group-note { font-size: 15px; }
 .group-row input[type="time"] { border: 0; background: none; color: var(--ink); font: inherit; text-align: right; font-variant-numeric: tabular-nums; }
-
-.segmented { display: inline-flex; padding: 2px; border-radius: 9px; background: var(--fill-strong); }
-.segmented label {
-  display: grid;
-  place-items: center;
-  min-width: 78px;
-  height: 30px;
-  padding: 0 10px;
-  border-radius: 7px;
-  font-size: 14px;
-  font-weight: 550;
-  cursor: pointer;
-}
-.segmented label.is-on { background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
-.segmented input { position: absolute; opacity: 0; pointer-events: none; }
 
 .stepper { display: inline-flex; align-items: center; height: 36px; border-radius: 9px; background: var(--fill-strong); }
 .stepper button { width: 44px; height: 36px; display: grid; place-items: center; border: 0; background: none; color: var(--ink); }

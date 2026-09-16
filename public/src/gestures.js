@@ -19,7 +19,7 @@
  */
 import { PX_PER_MIN, applyLaneStyle, buildLayout } from './layout.js';
 import { buildSchedule, formatDuration, formatTime } from './schedule.js';
-import { resizeBottom, resizeTop, moveTo, moveGroup } from './operations.js';
+import { resizeBottom, resizeTop } from './operations.js';
 import { cssEscape } from './dom.js';
 
 /** Movement thresholds, in CSS pixels. */
@@ -291,10 +291,13 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
         delta: 0,
         plan: store.plan,
         item,
+        // The line the card is dragged against: read once, because a move
+        // never changes the day's visible range the way committing one can.
+        from: Number(root.querySelector('.timeline-grid')?.dataset.from),
         bubble: createBubble()
       };
       document.body.classList.add('is-moving');
-      card.classList.add('is-drag-source');
+      card.classList.add('is-lifted');
       drawMove();
     };
 
@@ -375,28 +378,39 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
     active.autoscroll = requestAnimationFrame(step);
   }
 
-  function previewPlanForMove() {
-    if (active.ids.length > 1) {
-      const result = moveGroup(active.plan, active.ids, active.delta);
-      return result ? result.plan : active.plan;
-    }
-    const result = moveTo(active.plan, active.id, active.item.start + active.delta);
-    return result ? result.plan : active.plan;
-  }
-
+  /**
+   * The dragged card follows the pointer exactly, the same treatment a
+   * resize edge gets — no lag, no relayout of anything else while the
+   * gesture is live. A group move carries its other unlocked members by the
+   * same delta, eased (`.is-settling`) rather than snapping with it, so the
+   * hand reads as being on one card even though several are moving.
+   *
+   * Nothing outside the dragged group previews at all: what the drop would
+   * do to an unrelated card's lane is shown once, on commit, not guessed at
+   * every frame.
+   */
   function drawMove() {
     if (active?.kind !== 'move') return;
-    const plan = previewPlanForMove();
-    const layout = applyPreview(plan);
+    const offset = active.delta * PX_PER_MIN;
 
-    const landing = layout.cards.find(entry => entry.item.id === active.id);
-    if (landing) {
-      active.bubble.textContent = active.ids.length > 1
-        ? `Starts ${formatTime(landing.item.start)} · ${active.ids.length} activities`
-        : `Starts ${formatTime(landing.item.start)}`;
-      active.bubble.style.left = `${Math.max(12, active.card.getBoundingClientRect().left)}px`;
-      active.bubble.style.top = `${landing.top - 40}px`;
+    // `.is-lifted` already carries the rotate/scale/shadow; only the offset
+    // is driven from here, so the two never fight over `transform`.
+    active.card.style.setProperty('--drag-y', `${offset}px`);
+
+    for (const id of active.ids) {
+      if (id === active.id) continue;
+      const other = cardFor(id);
+      if (!other) continue;
+      other.classList.add('is-settling');
+      other.style.transform = `translateY(${offset}px)`;
     }
+
+    const newStart = active.item.start + active.delta;
+    active.bubble.textContent = active.ids.length > 1
+      ? `Starts ${formatTime(newStart)} · ${active.ids.length} activities`
+      : `Starts ${formatTime(newStart)}`;
+    positionBubble(active.bubble, active.card, 'top');
+    if (Number.isFinite(active.from)) markSnapLine(newStart, active.from);
   }
 
   function onMoveEnd() {
@@ -497,13 +511,15 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
     if (active.kind === 'move') {
       if (active.autoscroll) cancelAnimationFrame(active.autoscroll);
       active.bubble.remove();
-      active.card.classList.remove('is-drag-source');
+      active.card.classList.remove('is-lifted');
       active.handle.removeEventListener('pointermove', onMoveMove);
       document.body.classList.remove('is-moving');
     }
     for (const card of root.querySelectorAll('.card')) {
       card.style.transform = '';
+      card.style.removeProperty('--drag-y');
       card.style.visibility = '';
+      card.classList.remove('is-settling');
     }
     active = null;
   }

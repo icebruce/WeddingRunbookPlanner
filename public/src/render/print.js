@@ -13,13 +13,16 @@ import { escapeHtml } from '../dom.js';
 import { STAGES } from '../config.js';
 import { buildSchedule, formatDuration, formatTime } from '../schedule.js';
 
+// Phase ids match the `--phase-*` custom properties in tokens.css exactly
+// (see config.js's own PHASE map), so the swatch reads the live token
+// instead of a second, driftable copy of the colour.
 const PHASES = [
-  { id: 'prep', label: 'Getting ready', stages: ['preparation'], colour: '#7A66E8' },
-  { id: 'photo', label: 'Photos', stages: ['first-look', 'photography'], colour: '#1F8A9B' },
-  { id: 'transit', label: 'Travel and buffer', stages: ['transition', 'buffer'], colour: '#6F7885' },
-  { id: 'ceremony', label: 'Ceremony', stages: ['ceremony'], colour: '#A67C0F' },
-  { id: 'cocktail', label: 'Cocktail and celebration', stages: ['celebration', 'cocktail'], colour: '#C44E78' },
-  { id: 'reception', label: 'Reception', stages: ['reception', 'dinner', 'party'], colour: '#3F8A57' }
+  { id: 'prep', label: 'Getting ready', stages: ['preparation'] },
+  { id: 'photo', label: 'Photos', stages: ['first-look', 'photography'] },
+  { id: 'transit', label: 'Travel and buffer', stages: ['transition', 'buffer'] },
+  { id: 'ceremony', label: 'Ceremony', stages: ['ceremony'] },
+  { id: 'cocktail', label: 'Cocktail and celebration', stages: ['celebration', 'cocktail'] },
+  { id: 'reception', label: 'Reception', stages: ['reception', 'dinner', 'party'] }
 ];
 
 const stageLabel = id => STAGES.find(stage => stage.id === id)?.label ?? id;
@@ -58,7 +61,7 @@ export function renderPrint({ plan, ui }) {
     </header>
 
     ${groups.map(group => `<section class="print-group">
-      <h2><span class="print-swatch" style="background:${group.phase.colour}"></span>${escapeHtml(group.phase.label)}</h2>
+      <h2><span class="print-swatch" style="background:var(--phase-${group.phase.id})"></span>${escapeHtml(group.phase.label)}</h2>
       ${group.items.map(item => `<article class="print-row">
         <div class="print-time">
           <strong>${escapeHtml(item.rangeLabel)}</strong>
