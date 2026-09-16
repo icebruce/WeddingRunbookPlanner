@@ -1,4 +1,4 @@
-import { test, expect, activity, seedPlan } from './fixtures.mjs';
+import { test, expect, activity, seedPlan, TEST_PASSWORD } from './fixtures.mjs';
 import { SCAN } from './a11y-scan.mjs';
 import { isPhoneLayout, signIn, signInAndWaitForPlan } from './helpers.mjs';
 
@@ -13,6 +13,15 @@ const plan = () => seedPlan({
     activity('party', 180, { title: 'Dancing & Party', stage: 'party', people: ['All Guests'] })
   ]
 });
+
+/** Tabs forwards until the locator has focus, or gives up and says so. */
+async function tabTo(page, locator, limit = 20) {
+  for (let press = 0; press < limit; press += 1) {
+    if (await locator.evaluate(node => node === document.activeElement)) return;
+    await page.keyboard.press('Tab');
+  }
+  expect(await locator.evaluate(node => node === document.activeElement), 'reachable by tabbing').toBe(true);
+}
 
 async function scan(page) {
   return page.evaluate(SCAN);
@@ -168,6 +177,86 @@ test('every gesture has a way in from the keyboard alone', async ({ page, server
 
   // And focus comes back where it started, not at the top of the page.
   await expect(card(page, 'ready')).toBeFocused();
+});
+
+/**
+ * The whole job, without a pointer.
+ *
+ * The test above proves each gesture has a keyboard route. This one walks the
+ * routes end to end, because a route that cannot be reached from the one
+ * before it is not a route: signing in, finding a card, changing its length,
+ * moving it, taking that back, renaming it, and getting into and out of the
+ * menu — all with the keyboard.
+ */
+test('a whole plan can be changed with the keyboard alone', async ({ page, server, isMobile }) => {
+  test.skip(Boolean(isMobile), 'this is the keyboard pass');
+  await server.seed({ plan: plan() });
+
+  // Sign in. Tab to the password field rather than clicking it.
+  await page.goto('/');
+  const password = page.locator('#login-form input[name="password"]');
+  await expect(password).toBeVisible();
+  await tabTo(page, password);
+  await page.keyboard.type(TEST_PASSWORD);
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#main-plan')).toBeVisible();
+
+  // Tab forwards until a card has focus. The count is a ceiling, not an
+  // expectation: what matters is that the timeline is reachable at all.
+  let reached = null;
+  for (let press = 0; press < 40 && !reached; press += 1) {
+    await page.keyboard.press('Tab');
+    reached = await page.evaluate(() => document.activeElement?.closest?.('.card')?.dataset.activityId ?? null);
+  }
+  expect(reached, 'a card is reachable by tabbing').toBe('ready');
+
+  // Select it, then reach its bottom handle and make it five minutes longer.
+  await page.keyboard.press('Enter');
+  await expect(card(page, 'ready')).toHaveClass(/is-selected/);
+  await tabTo(page, card(page, 'ready').locator('.handle--bottom'));
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('.save-indicator')).toHaveText('Saved');
+  expect((await server.read()).plan.activities[0].duration).toBe(50);
+
+  // Move it down the day, and take that back.
+  await card(page, 'ready').focus();
+  await page.keyboard.press('Alt+ArrowDown');
+  await expect(page.locator('.save-indicator')).toHaveText('Saved');
+  expect((await server.read()).plan.activities.map(item => item.id).slice(0, 2)).toEqual(['short', 'ready']);
+
+  await page.keyboard.press('Control+z');
+  await expect(page.locator('.save-indicator')).toHaveText('Saved');
+  expect((await server.read()).plan.activities.map(item => item.id).slice(0, 2)).toEqual(['ready', 'short']);
+
+  // Open it, rename it, and commit with Enter. Escape first, so that the two
+  // presses below are select-then-open whatever was selected before.
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.card.is-selected')).toHaveCount(0);
+  await card(page, 'ready').focus();
+  await page.keyboard.press('Enter');
+  await expect(card(page, 'ready')).toHaveClass(/is-selected/);
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#activity-dialog')).toBeVisible();
+
+  const name = page.locator('#activity-dialog input[name="title"]');
+  await name.focus();
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('Hair and makeup');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#activity-dialog')).toHaveCount(0);
+  await expect(page.locator('.save-indicator')).toHaveText('Saved');
+  expect((await server.read()).plan.activities[0].title).toBe('Hair and makeup');
+
+  // Focus comes back to the card it came from, not to the top of the page.
+  await expect(card(page, 'ready')).toBeFocused();
+
+  // And the menu opens and closes without a pointer, handing focus back.
+  await page.locator('[data-action="menu"][data-menu="app"]').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.menu-popover')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.menu-popover')).toHaveCount(0);
+  await expect(page.locator('[data-action="menu"][data-menu="app"]')).toBeFocused();
 });
 
 test('nothing is announced twice: only the toast and strip are live', async ({ page, server }) => {
