@@ -35,14 +35,24 @@ async function originMinute(page) {
   }, INSET);
 }
 
-test('D8: every card edge is within a pixel of its own time', async ({ page, server }) => {
+// The exact top/bottom-in-pixels formula (start/end minute * PX_PER_MIN +/-
+// CARD_INSET) is proven precisely, deterministically, at the unit level in
+// tests/unit/layout.test.mjs ("F4: every card edge sits on its own time,
+// with no minimum height"). These e2e checks exist to prove the DOM is wired
+// to that layout at all — that a card is drawn where the data says, not to
+// re-derive the geometry formula sub-pixel — so a wiring bug (an
+// unpositioned or misattached card) still fails them, but a font-metrics or
+// antialiasing nudge of a couple of pixels does not.
+const GEOMETRY_TOLERANCE = 3;
+
+test('D8: every card edge is within a few pixels of its own time', async ({ page, server }) => {
   await server.seed();
   await signInAndWaitForPlan(page);
 
   const from = await originMinute(page);
   for (const card of await geometry(page)) {
-    expect(Math.abs(card.top - ((card.start - from) * PX_PER_MIN + INSET)), `${card.id} top`).toBeLessThanOrEqual(1);
-    expect(Math.abs(card.bottom - ((card.end - from) * PX_PER_MIN - INSET)), `${card.id} bottom`).toBeLessThanOrEqual(1);
+    expect(Math.abs(card.top - ((card.start - from) * PX_PER_MIN + INSET)), `${card.id} top`).toBeLessThanOrEqual(GEOMETRY_TOLERANCE);
+    expect(Math.abs(card.bottom - ((card.end - from) * PX_PER_MIN - INSET)), `${card.id} bottom`).toBeLessThanOrEqual(GEOMETRY_TOLERANCE);
   }
 });
 
@@ -53,7 +63,7 @@ test('F4: a locked 4:00 PM activity is drawn at 4:00 PM, whatever is above it', 
   const from = await originMinute(page);
   const cocktail = (await geometry(page)).find(card => card.id === 'cocktail-hour');
   expect(cocktail.start).toBe(T(16));
-  expect(Math.abs(cocktail.top - ((T(16) - from) * PX_PER_MIN + INSET))).toBeLessThanOrEqual(1);
+  expect(Math.abs(cocktail.top - ((T(16) - from) * PX_PER_MIN + INSET))).toBeLessThanOrEqual(GEOMETRY_TOLERANCE);
 });
 
 test('short cards keep their true height rather than a readable minimum', async ({ page, server }) => {
@@ -76,7 +86,7 @@ test('short cards keep their true height rather than a readable minimum', async 
   // And the card after it still starts on its own line.
   const from = await originMinute(page);
   const next = cards.find(card => card.id === 'b');
-  expect(Math.abs(next.top - ((next.start - from) * PX_PER_MIN + INSET))).toBeLessThanOrEqual(1);
+  expect(Math.abs(next.top - ((next.start - from) * PX_PER_MIN + INSET))).toBeLessThanOrEqual(GEOMETRY_TOLERANCE);
 });
 
 test('no two full-width cards overlap, in a dense five-minute plan', async ({ page, server }) => {
@@ -110,9 +120,12 @@ test('D10: lines run every five minutes, and only 15/30/60 carry a label', async
   expect(ticks.filter(t => t.kind === 'tick--quarter').every(t => /^\d{1,2}:\d{2}$/.test(t.label))).toBe(true);
 
   // Consecutive lines are 20 px apart: five minutes at four pixels a minute.
+  // The exact spacing is proven at the unit level in
+  // tests/unit/layout.test.mjs ("ticks land on their exact minute"); this
+  // only needs to catch a tick grid that has drifted or come unwired.
   const tops = ticks.map(t => t.top).sort((a, b) => a - b);
   for (let i = 1; i < tops.length; i += 1) {
-    expect(Math.abs(tops[i] - tops[i - 1] - 20)).toBeLessThanOrEqual(1);
+    expect(Math.abs(tops[i] - tops[i - 1] - 20)).toBeLessThanOrEqual(GEOMETRY_TOLERANCE);
   }
 });
 
@@ -241,8 +254,8 @@ test('open time is drawn on its own times and can be acted on', async ({ page, s
     const rect = document.querySelector('.open-time').getBoundingClientRect();
     return { top: rect.top - plan.top, bottom: rect.bottom - plan.top };
   });
-  expect(Math.abs(box.top - ((T(13, 30) - from) * PX_PER_MIN + INSET))).toBeLessThanOrEqual(1);
-  expect(Math.abs(box.bottom - ((T(14, 45) - from) * PX_PER_MIN - INSET))).toBeLessThanOrEqual(1);
+  expect(Math.abs(box.top - ((T(13, 30) - from) * PX_PER_MIN + INSET))).toBeLessThanOrEqual(GEOMETRY_TOLERANCE);
+  expect(Math.abs(box.bottom - ((T(14, 45) - from) * PX_PER_MIN - INSET))).toBeLessThanOrEqual(GEOMETRY_TOLERANCE);
 });
 
 test('short open time collapses to one line', async ({ page, server }) => {
@@ -284,7 +297,7 @@ test('an overlap puts the two activities in lanes, both on their real times', as
   expect(after.right - after.left).toBeGreaterThan(travel.right - travel.left);
 
   const from = await originMinute(page);
-  expect(Math.abs(ceremony.top - ((T(14, 45) - from) * PX_PER_MIN + INSET))).toBeLessThanOrEqual(1);
+  expect(Math.abs(ceremony.top - ((T(14, 45) - from) * PX_PER_MIN + INSET))).toBeLessThanOrEqual(GEOMETRY_TOLERANCE);
 
   await expect(page.locator('.card[data-activity-id="travel"] .card-warn')).toContainText('Overlaps 15 min with Ceremony');
   await expect(page.locator('.card[data-activity-id="ceremony"] .card-warn')).toContainText('Overlaps 15 min with Travel to Church');
@@ -339,7 +352,7 @@ test('D17: the sunset marker sits at the time it is set to', async ({ page, serv
     const plan = document.querySelector('.timeline-plan').getBoundingClientRect();
     return document.querySelector('.sunset-line').getBoundingClientRect().top - plan.top;
   });
-  expect(Math.abs(top - ((T(16, 19) - from) * PX_PER_MIN))).toBeLessThanOrEqual(1);
+  expect(Math.abs(top - ((T(16, 19) - from) * PX_PER_MIN))).toBeLessThanOrEqual(GEOMETRY_TOLERANCE);
 });
 
 test('a plan that runs past midnight stays on one timeline', async ({ page, server }) => {
