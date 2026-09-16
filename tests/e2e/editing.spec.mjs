@@ -334,9 +334,9 @@ test.describe('open time', () => {
     await signInAndWaitForPlan(page);
 
     const gap = page.locator('.open-time');
-    await expect(gap.locator('.handle')).toHaveCount(2);
     // The next activity (ceremony) is locked, so only the top handle — the
     // previous, unlocked activity's own bottom edge — is offered.
+    await expect(gap.locator('.handle')).toHaveCount(1);
     await gap.locator('strong').click();
     await expect(page.locator('#open-time-dialog')).toHaveCount(0);
     await expect(gap).toHaveClass(/is-selected/);
@@ -353,7 +353,10 @@ test.describe('open time', () => {
       plan: seedPlan({
         activities: [
           activity('arrive', T(14), 30, { title: 'Arrival' }),
-          activity('ceremony', T(14, 40), 60, { title: 'Ceremony' })
+          // Locked so its own top handle never renders — otherwise that
+          // handle's 44 px touch target (a11y.css) reaches back up into
+          // this thin gap right above it and steals the click.
+          activity('ceremony', T(14, 40), 60, { title: 'Ceremony', locked: true })
         ]
       })
     });

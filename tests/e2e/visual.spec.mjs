@@ -157,7 +157,7 @@ const SCENES = [
   {
     name: 'editing-open-time',
     async run(page) {
-      await page.locator('.open-time').first().click();
+      await page.locator('.open-time-add').first().click();
       await expect(page.locator('#open-time-dialog')).toBeVisible();
     }
   },

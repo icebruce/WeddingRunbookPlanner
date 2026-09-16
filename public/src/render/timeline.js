@@ -31,7 +31,9 @@ function ruler(layout) {
  * A tall block behaves like a card: tapping its body selects it (revealing
  * the resize handles) rather than opening the actions sheet directly; only
  * its own + button opens that. A thin block has no room for the + at all, so
- * tapping it still opens the sheet the way the whole block used to.
+ * tapping it still opens the sheet the way the whole block used to — and it
+ * gets no handles either, since a 44 px touch target (a11y.css) would reach
+ * across most or all of a block that short and eat the tap meant for it.
  *
  * The handles are the same `.handle` control a card uses, just aimed at a
  * neighbour: the top one is the previous activity's own bottom handle in
@@ -63,7 +65,7 @@ function openTimeBlock(gap, ui, viewOnly) {
   // straight off that element rather than reconstructing it from role+id.
   // Either is absent when the activity it would resize is locked — same
   // rule a card's own handle follows.
-  const handles = viewOnly ? '' : `${gap.afterLocked ? '' : `<button type="button" class="handle handle--top" data-role="resize" data-id="${escapeHtml(gap.afterId)}"
+  const handles = (viewOnly || thin) ? '' : `${gap.afterLocked ? '' : `<button type="button" class="handle handle--top" data-role="resize" data-id="${escapeHtml(gap.afterId)}"
       tabindex="${selected ? '0' : '-1'}" data-focus-key="resize:gap:${escapeHtml(gap.beforeId)}"
       aria-label="${escapeHtml(`Resize the end of ${gap.afterTitle}`)}"></button>`}
     ${gap.beforeLocked ? '' : `<button type="button" class="handle handle--bottom" data-role="resize-top" data-id="${escapeHtml(gap.beforeId)}"
