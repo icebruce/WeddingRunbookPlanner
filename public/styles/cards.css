@@ -257,3 +257,40 @@
 .card-menu-layer { position: absolute; z-index: 60; }
 .card-menu-layer .card-menu,
 .card-menu-layer .stage-menu { position: static; }
+
+/* ---- the day itself ------------------------------------------------------ */
+
+/* What has already happened is still there to read, just no longer the point. */
+.card.is-past { opacity: .45; }
+
+.card.is-live { box-shadow: 0 0 0 1.5px var(--live), 0 6px 20px rgba(30, 158, 82, .16); }
+.card-progress { height: 3px; border-radius: 2px; background: color-mix(in srgb, var(--live) 18%, transparent); overflow: hidden; }
+.card-progress i { display: block; height: 100%; background: var(--live); }
+
+.now-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 10px;
+  background: var(--live-tint);
+  color: var(--live);
+  font-size: 12px;
+  font-weight: 650;
+}
+.now-tag i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--live);
+  animation: live-pulse 1.8s ease-out infinite;
+}
+@keyframes live-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--live) 55%, transparent); }
+  100% { box-shadow: 0 0 0 7px transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .now-tag i { animation: none; }
+}

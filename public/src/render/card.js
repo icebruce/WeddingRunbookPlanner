@@ -96,7 +96,7 @@ function accessibleName(item, stage) {
   return parts.join(', ');
 }
 
-export function renderCard(card, { ui, filter = null }) {
+export function renderCard(card, { ui, filter = null, nowMinutes = null }) {
   const { item } = card;
   const stage = stageOf(item.stage);
   const selected = ui.selectedId === item.id;
@@ -107,10 +107,22 @@ export function renderCard(card, { ui, filter = null }) {
   const narrow = card.lane !== null;
   const faded = filter && !(item.people || []).includes(filter);
 
+  // On the day a card is one of three things, and it says which.
+  const dayState = nowMinutes === null
+    ? null
+    : (item.end <= nowMinutes ? 'past' : item.start <= nowMinutes ? 'live' : 'ahead');
+  const live = dayState === 'live';
+  const progress = live ? (nowMinutes - item.start) / item.duration : 0;
+  // Nothing on a card is a control until Edit has been pressed. The solid
+  // lock on a fixed activity stays, because it is information, not a button.
+  const viewOnly = Boolean(ui.dayOf && !ui.editingOnDay);
+
   const classes = [
     'card',
     `card--${card.density}`,
     narrow && 'card--narrow',
+    dayState === 'past' && 'is-past',
+    live && 'is-live',
     selected && 'is-selected',
     item.overrun && 'is-overrun',
     item.conflictMinutes && 'is-conflicted',
@@ -122,9 +134,10 @@ export function renderCard(card, { ui, filter = null }) {
   // not fit, so it is built as one line rather than measured down to one.
   const body = card.density === 'line'
     ? `<span class="card-title">${title}</span>${glyphs(item)}<span class="card-line-time">${escapeHtml(formatTime(item.start))}</span>`
-    : `<div class="card-row card-title-row"><span class="card-title">${title}</span>${glyphs(item)}</div>
+    : `<div class="card-row card-title-row"><span class="card-title">${title}</span>${glyphs(item)}${live ? '<span class="now-tag"><i></i>Now</span>' : ''}</div>
        <div class="card-row card-time" data-drop="4"><span>${escapeHtml(narrow ? formatTime(item.start) : item.rangeLabel)}</span><strong>${escapeHtml(formatDuration(item.duration))}</strong></div>
        ${warning(item)}
+       ${live ? `<div class="card-row card-progress" data-drop="3" aria-hidden="true"><i style="width:${Math.round(progress * 100)}%"></i></div>` : ''}
        <div class="card-row card-location" data-drop="2">${icon('pin')}<span>${escapeHtml(item.location || '')}</span></div>
        ${narrow ? '' : `<div class="card-row card-stage" data-drop="1">${stagePill(stage, { interactive: true, expanded: stageOpen, id: item.id })}</div>`}
        ${narrow ? '' : `<div class="card-row card-people" data-drop="0">${peopleTags(item.people)}</div>`}`;
@@ -135,22 +148,22 @@ export function renderCard(card, { ui, filter = null }) {
     tabindex="0" data-action="select" data-id="${id}" data-focus-key="card:${id}"
     aria-label="${escapeHtml(accessibleName(item, stage))}">
     <span class="card-rule" aria-hidden="true"></span>
-    ${item.isFixed ? '' : `<span class="card-grip" data-role="reorder" data-id="${id}" aria-hidden="true">${icon('grip')}</span>`}
+    ${item.isFixed || viewOnly ? '' : `<span class="card-grip" data-role="reorder" data-id="${id}" aria-hidden="true">${icon('grip')}</span>`}
     <div class="card-body">${body}</div>
     <span class="card-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-    <div class="card-controls">
+    ${viewOnly ? '' : `<div class="card-controls">
       <button class="lock-button ${item.isFixed ? 'is-fixed' : ''}" type="button"
         data-action="lock" data-id="${id}" data-focus-key="lock:${id}" aria-pressed="${item.isFixed}"
         aria-label="${item.isFixed ? `Unfix ${title} from ${escapeHtml(item.startLabel)}` : `Fix ${title} at ${escapeHtml(item.startLabel)}`}">${icon(item.isFixed ? 'lock' : 'lock-open')}</button>
       <button class="icon-button card-menu-toggle" type="button"
         data-action="menu" data-menu="card-menu:${id}" data-focus-key="card-menu:${id}"
         aria-label="More options for ${title}" aria-haspopup="menu" aria-expanded="${menuOpen}">${icon('more')}</button>
-    </div>
+    </div>`}
     <!-- Handles exist only on the selected card, and the top one only where
          there is a start to move: a fixed activity has none. They are real
          buttons so the arrow keys can move an edge without a pointer. -->
-    ${selected && !item.isFixed ? `<button type="button" class="handle handle--top" data-role="resize-top" data-id="${id}" data-focus-key="resize-top:${id}" aria-label="Move the start of ${title}"></button>` : ''}
-    ${selected ? `<button type="button" class="handle handle--bottom" data-role="resize" data-id="${id}" data-focus-key="resize:${id}" aria-label="Move the end of ${title}"></button>
+    ${selected && !item.isFixed && !viewOnly ? `<button type="button" class="handle handle--top" data-role="resize-top" data-id="${id}" data-focus-key="resize-top:${id}" aria-label="Move the start of ${title}"></button>` : ''}
+    ${selected && !viewOnly ? `<button type="button" class="handle handle--bottom" data-role="resize" data-id="${id}" data-focus-key="resize:${id}" aria-label="Move the end of ${title}"></button>
       <button type="button" class="card-reorder" data-role="reorder" data-id="${id}" data-focus-key="reorder:${id}" aria-label="Move ${title}">${icon('reorder')}</button>` : ''}
   </article>`;
 }

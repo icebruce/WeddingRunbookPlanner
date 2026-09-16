@@ -31,13 +31,16 @@ function statusControl(plan) {
   </label>`;
 }
 
-function appMenu(open) {
+function appMenu(open, openMenuUi) {
   // A <details> element cannot be closed from the outside, which is why Escape
   // and a click elsewhere used to leave the menu open (F26). A plain button
   // plus state can be closed by anything.
   return `<div class="app-menu ${open ? 'is-open' : ''}">
     <button type="button" class="icon-button icon-button--outlined" data-action="menu" data-menu="app" data-focus-key="menu-app" aria-label="Open menu" aria-haspopup="menu" aria-expanded="${open}">${icon('menu')}</button>
     ${open ? `<div class="menu-popover" role="menu">
+      <button type="button" role="menuitem" data-action="menu-action" data-menu-action="day-of" aria-pressed="${Boolean(openMenuUi?.dayOf)}">
+        ${icon('live')}<span>Day-of view</span><span class="menu-switch ${openMenuUi?.dayOf ? '' : 'is-off'}"></span></button>
+      <div class="menu-divider"></div>
       <button type="button" role="menuitem" data-action="menu-action" data-menu-action="versions">${icon('history')}<span>Version history</span></button>
       <button type="button" role="menuitem" data-action="menu-action" data-menu-action="settings">${icon('settings')}<span>Plan settings</span></button>
       <div class="menu-divider"></div>
@@ -46,13 +49,32 @@ function appMenu(open) {
   </div>`;
 }
 
+/**
+ * On the day the top bar changes job. It stops offering the controls for
+ * building a plan and says which mode you are in: reading it, or — having
+ * deliberately said so — editing it while it runs.
+ */
+function dayOfControls(ui) {
+  if (ui.editingOnDay) {
+    return `<span class="mode-pill mode-pill--editing"><i></i>Editing</span>
+      <button type="button" class="button button--text" data-action="day-of-done" data-focus-key="day-of-done">Done</button>`;
+  }
+  return `<span class="mode-pill mode-pill--view">${icon('lock')}View only</span>
+    <button type="button" class="button button--text" data-action="day-of-edit" data-focus-key="day-of-edit">Edit</button>`;
+}
+
 export function renderHeader({ plan, ui }) {
-  return `
-    <a href="#main-plan" class="brand" aria-label="${escapeHtml(plan.coupleLabel || 'Our Wedding')} planner">${icon('heart')}<span>${escapeHtml(plan.coupleLabel || 'Our Wedding')}</span></a>
+  const brand = `<a href="#main-plan" class="brand" aria-label="${escapeHtml(plan.coupleLabel || 'Our Wedding')} planner">${icon('heart')}<span>${escapeHtml(plan.coupleLabel || 'Our Wedding')}</span></a>`;
+
+  if (ui.dayOf) {
+    return `${brand}<div class="topbar-actions">${dayOfControls(ui)}${appMenu(ui.openMenu === 'app', ui)}</div>`;
+  }
+
+  return `${brand}
     <div class="topbar-actions">
       ${saveIndicator(ui.saveState)}
       ${statusControl(plan)}
-      ${appMenu(ui.openMenu === 'app')}
+      ${appMenu(ui.openMenu === 'app', ui)}
     </div>`;
 }
 

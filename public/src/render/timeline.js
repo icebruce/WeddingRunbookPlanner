@@ -32,11 +32,11 @@ function ruler(layout) {
  * Open time is drawn, not implied. Under about 70 px there is no room for the
  * second line or the + button, so it becomes a single line.
  */
-function openTimeBlock(gap) {
+function openTimeBlock(gap, viewOnly) {
   const thin = gap.height < 70;
   return `<div class="open-time ${thin ? 'open-time--thin' : ''}" style="top:${gap.top}px;height:${gap.height}px"
-    data-action="open-time" data-before="${escapeHtml(gap.beforeId)}" data-start="${gap.start}" data-end="${gap.end}"
-    role="button" tabindex="0" data-focus-key="open-time:${escapeHtml(gap.beforeId)}"
+    ${viewOnly ? '' : `data-action="open-time"`} data-before="${escapeHtml(gap.beforeId)}" data-start="${gap.start}" data-end="${gap.end}"
+    ${viewOnly ? '' : 'role="button" tabindex="0"'} data-focus-key="open-time:${escapeHtml(gap.beforeId)}"
     aria-label="${escapeHtml(`${formatDuration(gap.minutes)} open before ${gap.beforeTitle}, ${formatTime(gap.start)} to ${formatTime(gap.end)}`)}">
     <strong>${escapeHtml(formatDuration(gap.minutes))} open</strong>
     ${thin ? '' : `<small>before ${escapeHtml(gap.beforeTitle)}</small><span class="open-time-add">${icon('plus')}</span>`}
@@ -59,15 +59,28 @@ function menuLayer(layout, ui) {
   return `<div class="card-menu-layer" style="top:${top}px;${side}">${renderCardMenu(card.item, kind)}</div>`;
 }
 
+/**
+ * The current time, drawn across the plan with its own pill in the ruler. It
+ * runs behind the cards: it is a reading of where the day has got to, not
+ * another thing competing for attention.
+ */
+function nowLine(layout, nowMinutes) {
+  if (nowMinutes === null || nowMinutes < layout.from || nowMinutes > layout.to) return '';
+  const top = (nowMinutes - layout.from) * 4;
+  return `<div class="now-line" style="top:${top}px"></div>
+    <div class="now-pill" style="top:${top - 11}px">${escapeHtml(formatTime(nowMinutes, { meridiem: false }))}</div>`;
+}
+
 export function renderTimeline({ plan, ui }) {
   const schedule = buildSchedule(plan);
   const layout = buildLayout(plan, schedule);
+  const nowMinutes = ui.dayOf ? (ui.nowMinutes ?? null) : null;
 
-  return `<div class="timeline-grid" style="height:${layout.height + 48}px">
-    <div class="timeline-ruler" aria-hidden="true">${ruler(layout)}</div>
+  return `<div class="timeline-grid ${ui.dayOf ? 'is-day-of' : ''}" style="height:${layout.height + 48}px">
+    <div class="timeline-ruler" aria-hidden="true">${ruler(layout)}${nowLine(layout, nowMinutes)}</div>
     <div class="timeline-plan">
-      ${layout.openTimes.map(openTimeBlock).join('')}
-      ${layout.cards.map(card => renderCard(card, { ui, filter: ui.filter })).join('')}
+      ${layout.openTimes.map(gap => openTimeBlock(gap, Boolean(ui.dayOf && !ui.editingOnDay))).join('')}
+      ${layout.cards.map(card => renderCard(card, { ui, filter: ui.filter, nowMinutes })).join('')}
       ${menuLayer(layout, ui)}
     </div>
     <div class="timeline-end" style="top:${layout.endTop + 10}px">

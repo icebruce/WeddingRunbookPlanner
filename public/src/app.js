@@ -14,6 +14,7 @@ import { api } from './api.js';
 import { STAGES, deviceId } from './config.js';
 import { clearDeviceCopy, readDeviceCopy, writeDeviceCopy } from './device.js';
 import { cssEscape, escapeHtml, focusByKey, paint, uid } from './dom.js';
+import { AUTO_VIEW_ONLY_MS, cardStateAt, createClock, minutesNow, readOverride, shouldBeOn, stripState, writeOverride } from './dayof.js';
 import { createGestures } from './gestures.js';
 import { icon } from './icons.js';
 import { SAVE_STATES, createSavePipeline } from './save.js';
@@ -87,7 +88,7 @@ const SHELL = `
 const REGIONS = {
   header: ({ plan, ui }) => renderHeader({ plan, ui }),
   offline: ({ ui }) => renderOfflineBar({ ui }),
-  strip: () => renderStrip(),
+  strip: ({ ui }) => renderStrip({ ui, strip: ui.strip }),
   heading: ({ plan }) => renderHeading({ plan }),
   summary: ({ plan, ui }) => renderSummary({ plan, ui }),
   timeline: ({ plan, ui }) => renderTimeline({ plan, ui }),
@@ -295,6 +296,11 @@ const gestures = createGestures({
  * rest of the day says so in the same toast.
  */
 function commit(action, payload, options = {}) {
+  // One gate for every change, whatever raised it — a gesture, a keyboard
+  // shortcut, a sheet. Blocking each entry point separately would eventually
+  // miss one.
+  if (isViewOnly()) return null;
+
   const result = store.dispatch(action, payload, options);
   if (!result) return null;
   saver.markDirty();
@@ -310,7 +316,13 @@ function commit(action, payload, options = {}) {
   return result;
 }
 
+/** On the day, nothing changes until someone has pressed Edit. */
+function isViewOnly() {
+  return Boolean(store.ui.dayOf && !store.ui.editingOnDay);
+}
+
 function undo() {
+  if (isViewOnly()) return;
   const result = store.undo({ regions: ['all'] });
   if (!result) return;
   saver.markDirty();
@@ -796,6 +808,16 @@ const ACTION_HANDLERS = {
   },
   'menu-action'(_, element) {
     const action = element.dataset.menuAction;
+    if (action === 'day-of') {
+      // Switching by hand is remembered for this date only: turning it off on
+      // the morning of the wedding should stay off for the rest of that day,
+      // and mean nothing the week after.
+      const next = !store.ui.dayOf;
+      writeOverride(store.plan.date, next);
+      store.setUi({ openMenu: null, editingOnDay: false }, { regions: [] });
+      clock.tick();
+      return;
+    }
     if (action === 'versions') return void openVersions();
     if (action === 'settings') {
       rememberOpener('menu-app');
@@ -849,6 +871,12 @@ const ACTION_HANDLERS = {
     target.scrollIntoView({ block: 'center', behavior: 'smooth' });
     target.classList.add('is-highlighted');
     setTimeout(() => target.classList.remove('is-highlighted'), 1600);
+  },
+  'day-of-edit'() {
+    store.setUi({ editingOnDay: true }, { regions: ['header', 'timeline', 'toolbar'] });
+  },
+  'day-of-done'() {
+    returnToViewOnly();
   },
   'save-retry'() {
     void saver.retry();
@@ -1041,6 +1069,50 @@ document.addEventListener('change', event => {
   }
 });
 
+/**
+ * The day-of clock.
+ *
+ * Reading it is what decides the strip, the time line and which cards are
+ * past, so every tick is a repaint of those and nothing else. Half a minute is
+ * enough for a countdown in whole minutes.
+ */
+const clock = createClock(now => {
+  if (!store.plan) return;
+
+  const automatic = shouldBeOn(store.plan, now);
+  const override = readOverride(store.plan.date);
+  const on = override === null ? automatic : override;
+
+  const changes = { dayOf: on };
+  if (on) {
+    changes.strip = stripState(store.plan, now);
+    changes.nowMinutes = minutesNow(store.plan, now);
+  } else {
+    changes.strip = null;
+    changes.nowMinutes = null;
+    changes.editingOnDay = false;
+  }
+
+  // The current activity changing is the only thing worth a repaint of the
+  // timeline; the countdown alone only changes the strip.
+  const currentChanged = store.ui.strip?.current?.id !== changes.strip?.current?.id
+    || store.ui.dayOf !== on;
+  store.setUi(changes, { regions: currentChanged ? ['header', 'strip', 'timeline'] : ['strip'] });
+});
+
+/**
+ * Editing on the day is deliberate, and it lapses. Leaving the app for five
+ * minutes means whatever was being edited is over, and coming back to a plan
+ * that can be changed by a stray thumb is the thing day-of view exists to
+ * prevent.
+ */
+let leftAt = null;
+
+function returnToViewOnly() {
+  if (!store.ui.editingOnDay) return;
+  store.setUi({ editingOnDay: false, selectedId: null, openMenu: null }, { regions: ['header', 'timeline', 'toolbar'] });
+}
+
 watchFit(app);
 window.addEventListener('online', () => void saver.handleOnline());
 window.addEventListener('offline', () => repaint(['header', 'offline']));
@@ -1076,9 +1148,13 @@ setInterval(() => {
 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
+    if (leftAt !== null && Date.now() - leftAt > AUTO_VIEW_ONLY_MS) returnToViewOnly();
+    leftAt = null;
+    clock.tick();
     void refreshFromServer();
     return;
   }
+  leftAt = Date.now();
   // Going away: send anything outstanding now rather than hoping the tab
   // survives long enough for the debounce.
   saver.flushOnHide(api.saveOnHide);

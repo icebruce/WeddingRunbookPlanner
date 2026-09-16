@@ -9,6 +9,7 @@ const paths = {
   note: '<path d="M6 4h9l4 4v12H6Z"/><path d="M14 4v5h5M9 13h6M9 16.5h4"/>',
   grip: '<circle cx="9" cy="7" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="7" r="1.1" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.1" fill="currentColor" stroke="none"/><circle cx="9" cy="17" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="17" r="1.1" fill="currentColor" stroke="none"/>',
   reorder: '<path d="M4 8h16M4 12h16M4 16h16"/>',
+  live: '<circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/><path d="M7 7a7 7 0 0 0 0 10M17 7a7 7 0 0 1 0 10M4 4a11 11 0 0 0 0 16M20 4a11 11 0 0 1 0 16"/>',
   swatch: '<path d="M4 6a2 2 0 0 1 2-2h4v14a4 4 0 0 1-8 0V6Z"/><path d="M10 9.5 13 6.5a2 2 0 0 1 2.8 0l2.8 2.8a2 2 0 0 1 0 2.8L10 20"/>',
   copy: '<rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 5.5H6a1.5 1.5 0 0 0-1.5 1.5v9.5"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/>',
