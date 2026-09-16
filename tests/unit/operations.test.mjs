@@ -13,6 +13,7 @@ import {
   remove,
   resizeBottom,
   resizeTop,
+  setSettings,
   setStage,
   toggleLock,
   update
@@ -254,4 +255,52 @@ test('an open-time action against open time that no longer exists does nothing',
   assert.equal(keepAsBuffer(before, stale, 'x'), null);
   assert.equal(extendPrevious(before, stale), null);
   assert.equal(addInOpenTime(before, stale, activity('x', 0, 30)), null);
+});
+
+// ------------------------------------------------------------- settings
+
+test('setSettings never mutates the plan it was given', () => {
+  const before = plan([activity('a', T(10), 30)]);
+  const snapshot = structuredClone(before);
+  setSettings(before, { title: 'New Title', sunset: '17:05' });
+  assert.deepEqual(before, snapshot);
+});
+
+test('setSettings applies title, timeline range, sunset and status changes', () => {
+  const before = plan([activity('a', T(10), 30)]);
+  const { plan: after } = setSettings(before, {
+    title: 'Our Big Day',
+    timelineStart: '09:00',
+    timelineEnd: '23:00',
+    sunset: '17:05',
+    status: 'Confirming'
+  });
+
+  assert.equal(after.title, 'Our Big Day');
+  assert.equal(after.timelineStart, '09:00');
+  assert.equal(after.timelineEnd, '23:00');
+  assert.equal(after.sunset, '17:05');
+  assert.equal(after.status, 'Confirming');
+  assert.deepEqual(after.activities, before.activities, 'nothing about the activities changed');
+});
+
+test('clearing the sunset marker persists it as cleared, not merely absent', () => {
+  const before = plan([activity('a', T(10), 30)], { sunset: '16:19' });
+  const { plan: after } = setSettings(before, { sunset: null });
+  assert.equal(after.sunset, null);
+});
+
+test('widening the view range applies both ends at once', () => {
+  const before = plan([activity('a', T(10), 30)], { timelineStart: '09:00', timelineEnd: '20:00' });
+  const { plan: after } = setSettings(before, { timelineStart: '07:00', timelineEnd: '23:30' });
+  assert.equal(after.timelineStart, '07:00');
+  assert.equal(after.timelineEnd, '23:30');
+});
+
+test('saving identical settings values leaves the plan unchanged', () => {
+  const before = plan([activity('a', T(10), 30)], {
+    title: 'Wedding Day', status: 'Working', sunset: '16:19'
+  });
+  const { plan: after } = setSettings(before, { title: 'Wedding Day', status: 'Working', sunset: '16:19' });
+  assert.deepEqual(after, before, 'the values are the same, so nothing actually changed');
 });

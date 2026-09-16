@@ -412,7 +412,8 @@ const gestures = createGestures({
   repaint,
   // A long press is the phone's way into the editor; double-click is the
   // pointer equivalent.
-  onLongPress: id => openEditor(id)
+  onLongPress: id => openEditor(id),
+  onDoubleClick: id => openEditor(id)
 });
 
 // ------------------------------------------------------------------ changes
@@ -1209,12 +1210,6 @@ document.addEventListener('click', event => {
   if (store.ui.selectedId && !event.target.closest('.card, dialog, .topbar, .toolbar')) {
     store.setUi({ selectedId: null }, { regions: ['timeline', 'toolbar'] });
   }
-});
-
-document.addEventListener('dblclick', event => {
-  const card = event.target.closest('.card');
-  if (!card || event.target.closest('button')) return;
-  openEditor(card.dataset.id);
 });
 
 document.addEventListener('keydown', event => {

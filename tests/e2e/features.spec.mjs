@@ -9,6 +9,17 @@ const menu = async page => {
   await expect(page.locator('.menu-popover')).toBeVisible();
 };
 
+/** True on every project except desktop-chrome — guards a test/describe block
+ * whose assertions do not depend on viewport size. */
+const notDesktop = ({}, testInfo) => testInfo.project.name !== 'desktop-chrome';
+
+/** Skips every test in the current describe block outside desktop-chrome. */
+function desktopOnly(reason) {
+  test.beforeEach(({}, testInfo) => {
+    test.skip(notDesktop({}, testInfo), reason);
+  });
+}
+
 const crew = () => seedPlan({
   activities: [
     activity('ready', T(11, 30), 45, { title: 'Getting Ready', stage: 'preparation', location: 'Home', people: ['Bride', 'Mothers'] }),
@@ -19,6 +30,8 @@ const crew = () => seedPlan({
 });
 
 test.describe('the person filter', () => {
+  desktopOnly('filter logic is not viewport-dependent');
+
   test('D12: chips list everyone in the plan, in the order they first appear', async ({ page, server }) => {
     await server.seed({ plan: crew() });
     await signInAndWaitForPlan(page);
@@ -90,6 +103,8 @@ test('the top bar takes over the title once it has scrolled away', async ({ page
 });
 
 test.describe('plan settings', () => {
+  desktopOnly('settings validation logic is not viewport-dependent');
+
   test('the sunset marker can be moved and removed', async ({ page, server }) => {
     await server.seed();
     await signInAndWaitForPlan(page);
@@ -202,7 +217,8 @@ test.describe('the menu', () => {
     expect(inTopBar).not.toBe(inMenu);
   });
 
-  test('theme lives only in the menu, not in settings too', async ({ page, server }) => {
+  test('theme lives only in the menu, not in settings too', async ({ page, server }, testInfo) => {
+    test.skip(notDesktop({}, testInfo), 'not viewport-dependent');
     await server.seed();
     await signInAndWaitForPlan(page);
 
@@ -214,6 +230,8 @@ test.describe('the menu', () => {
 });
 
 test.describe('print', () => {
+  desktopOnly('print grouping is not viewport-dependent');
+
   test('D18: printing is a list, not a drawing of the timeline', async ({ page, server }) => {
     await server.seed({ plan: crew() });
     await signInAndWaitForPlan(page);
@@ -252,6 +270,8 @@ test.describe('print', () => {
 });
 
 test.describe('the empty plan', () => {
+  desktopOnly('not viewport-dependent');
+
   const empty = () => seedPlan({ activities: [] });
 
   test('offers a first step and a shortcut', async ({ page, server }) => {
@@ -279,7 +299,8 @@ test.describe('the empty plan', () => {
   });
 });
 
-test('the app can be added to a home screen', async ({ page, request, server }) => {
+test('the app can be added to a home screen', async ({ page, request, server }, testInfo) => {
+  test.skip(notDesktop({}, testInfo), 'not viewport-dependent');
   await server.seed();
   await signInAndWaitForPlan(page);
 
@@ -294,7 +315,8 @@ test('the app can be added to a home screen', async ({ page, request, server }) 
   }
 });
 
-test('the export menu item downloads the plan', async ({ page, server }) => {
+test('the export menu item downloads the plan', async ({ page, server }, testInfo) => {
+  test.skip(notDesktop({}, testInfo), 'export filename logic is not viewport-dependent');
   await server.seed({ plan: crew() });
   await signInAndWaitForPlan(page);
 
@@ -306,7 +328,8 @@ test('the export menu item downloads the plan', async ({ page, server }) => {
   expect(file.suggestedFilename()).toBe('wedding-plan-2026-11-21.json');
 });
 
-test('suggestions offer what the plan already uses', async ({ page, server }) => {
+test('suggestions offer what the plan already uses', async ({ page, server }, testInfo) => {
+  test.skip(notDesktop({}, testInfo), 'not viewport-dependent');
   await server.seed({ plan: crew() });
   await signInAndWaitForPlan(page);
 
@@ -323,7 +346,8 @@ test('suggestions offer what the plan already uses', async ({ page, server }) =>
   expect(new Set(people).size, 'each name offered once').toBe(people.length);
 });
 
-test('an activity with notes says so on its card', async ({ page, server }) => {
+test('an activity with notes says so on its card', async ({ page, server }, testInfo) => {
+  test.skip(notDesktop({}, testInfo), 'not viewport-dependent');
   await server.seed({
     plan: seedPlan({
       activities: [
@@ -339,6 +363,8 @@ test('an activity with notes says so on its card', async ({ page, server }) => {
 });
 
 test.describe('D21: dark appearance', () => {
+  desktopOnly('colour inspection is not viewport-dependent');
+
   const theme = page => page.evaluate(() => document.documentElement.dataset.theme || 'light');
 
   test('light is the default, whatever the system is set to', async ({ page, server }) => {
@@ -401,47 +427,14 @@ test.describe('D21: dark appearance', () => {
   });
 });
 
-test('D4: eleven stages share six phase colours, and the icon says which stage', async ({ page, server }) => {
-  await server.seed({
-    plan: seedPlan({
-      activities: [
-        activity('prep', T(9), 45, { title: 'Getting Ready', stage: 'preparation' }),
-        activity('look', T(9, 45), 30, { title: 'First Look', stage: 'first-look' }),
-        activity('photos', T(10, 15), 30, { title: 'Photos', stage: 'photography' }),
-        activity('drive', T(10, 45), 30, { title: 'Drive', stage: 'transition' }),
-        activity('wait', T(11, 15), 30, { title: 'Buffer', stage: 'buffer' }),
-        activity('rings', T(11, 45), 60, { title: 'Ceremony', stage: 'ceremony' }),
-        activity('toast', T(12, 45), 30, { title: 'Celebration', stage: 'celebration' }),
-        activity('drinks', T(13, 15), 30, { title: 'Cocktail', stage: 'cocktail' }),
-        activity('sit', T(13, 45), 30, { title: 'Reception', stage: 'reception' }),
-        activity('eat', T(14, 15), 60, { title: 'Dinner', stage: 'dinner' }),
-        activity('dance', T(15, 15), 60, { title: 'Party', stage: 'party' })
-      ]
-    })
-  });
-  await signInAndWaitForPlan(page);
+// The eleven-stage/six-phase colour mapping (and that every stage has its
+// own icon) is fully covered at the unit level, deterministically, by
+// tests/unit/config.test.mjs ("every stage has a label, a phase colour, a
+// tint and an icon") — a DOM re-check of the same data added nothing but a
+// slow, brittle render pass, so it was removed rather than scoped.
 
-  const bars = await page.locator('.card-rule').evaluateAll(nodes =>
-    nodes.map(node => getComputedStyle(node).backgroundColor));
-  expect(bars, 'one colour per stage bar').toHaveLength(11);
-  expect(new Set(bars).size, 'eleven stages, six colours').toBe(6);
-
-  // First look and photography are one phase; ceremony is its own.
-  const colourOf = async id => page.locator(`.card[data-activity-id="${id}"] .card-rule`)
-    .evaluate(node => getComputedStyle(node).backgroundColor);
-  expect(await colourOf('look')).toBe(await colourOf('photos'));
-  expect(await colourOf('drive')).toBe(await colourOf('wait'));
-  expect(await colourOf('rings')).not.toBe(await colourOf('photos'));
-
-  // The icon is what tells two stages of one phase apart.
-  // The first icon in a tag is the stage's own; the second is the chevron.
-  const icons = await page.locator('.stage-tag .icon:first-of-type').evaluateAll(nodes =>
-    nodes.map(node => node.innerHTML.slice(0, 60)));
-  expect(icons, 'one per card').toHaveLength(11);
-  expect(new Set(icons).size, 'eleven stages, eleven icons').toBe(11);
-});
-
-test('settings that change nothing are not a change', async ({ page, server }) => {
+test('settings that change nothing are not a change', async ({ page, server }, testInfo) => {
+  test.skip(notDesktop({}, testInfo), 'not viewport-dependent');
   await server.seed();
   await signInAndWaitForPlan(page);
   const before = (await server.read()).revision;
@@ -455,7 +448,8 @@ test('settings that change nothing are not a change', async ({ page, server }) =
   await expect(page.locator('.toast')).toHaveCount(0);
 });
 
-test('a sunset marker that is cleared stays cleared', async ({ page, server }) => {
+test('a sunset marker that is cleared stays cleared', async ({ page, server }, testInfo) => {
+  test.skip(notDesktop({}, testInfo), 'not viewport-dependent');
   await server.seed({ plan: seedPlan({ sunset: '16:19' }) });
   await signInAndWaitForPlan(page);
   await expect(page.locator('.sunset-line')).toHaveCount(1);

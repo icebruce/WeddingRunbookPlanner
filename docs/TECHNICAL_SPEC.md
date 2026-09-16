@@ -372,7 +372,7 @@ Preview and production databases are already separate.
 ## 17. Testing
 
 ### 17.1 Unit (`node --test`)
-- schedule: ripple, fixed open time, conflict, midnight, `gapBefore`, every operation, `shifted` counts.
+- schedule: overlap detection, open-time gaps, midnight rollover, every operation.
 - layout: exact positions, range with next-day end, ticks hierarchy, lanes non-overlap.
 - validate: every field boundary; client/server copies identical.
 - save: debounce, single-flight, backoff sequence, no retry on 4xx, 401 keeps plan, 409 uses current plan, device copy lifecycle (fake timers + fake fetch).

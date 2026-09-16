@@ -2,6 +2,14 @@ import { readFile } from 'node:fs/promises';
 
 import { test, expect, TEST_PASSWORD } from './fixtures.mjs';
 
+// These are HTTP-level checks (auth, rate limiting, CSRF/origin, body size,
+// response shape) with no viewport-dependent assertion anywhere in the file,
+// so running them under every device project would only multiply CI time
+// without adding coverage.
+test.beforeEach(({}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chrome', 'not viewport-dependent');
+});
+
 /**
  * These go through the HTTP layer rather than the UI. Each uses its own
  * x-forwarded-for value so that exhausting one address's login budget does not
