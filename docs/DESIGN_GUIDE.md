@@ -174,7 +174,9 @@ Pinned filter row: 44 px, `--sel-tint` glass, `Showing **Photographer** · 2 of 
 | Overlap lanes | Equal-width lanes across however many activities overlap at once (interval-graph colouring; no fixed/overrunning asymmetry), 6 px gap; narrow cards wrap title and location, hide stage and people; red 3 px bar in the ruler over the overlap |
 
 ### 4.4 Open time block
-Dashed 1.5 px `#CFCFC8`, 12 px radius, `rgba(255,255,255,.35)` fill. Centered `35 min open` (16/600 `--ink-2`), `before Ceremony` (14 `--soft`), 30 px + button. Under 70 px tall: single left-aligned line, 13/600, no button. Active (tapped): `--sel` border, `--sel-tint` fill, `--sel` text.
+Dashed 1.5 px `#CFCFC8`, 12 px radius, `rgba(255,255,255,.35)` fill. Centered `35 min open` (16/600 `--ink-2`), `before Ceremony` (14 `--soft`), 30 px + button. Under 70 px tall: single left-aligned line, 13/600, no button. Active (tapped) or selected: `--sel` border, `--sel-tint` fill, `--sel` text.
+
+Same resize handles as a card (§4.3: 34×9 hollow `--sel` capsule), astride its own top/bottom edge, hidden until selected or — where there's a mouse — hovered/focused, same as a card's. Selecting the block (tapping anything but its + button) is what reveals them; the + button opens the open-time actions (§5.9 of `FUNCTIONAL_SPEC.md`) instead of selecting.
 
 ### 4.5 Selection toolbar (phone)
 Floating, 12 px from sides, 30 px above the home indicator, 24 px radius, glass white. Context line 13 (`**Title** · time`), optional hidden-details line 13 `--soft` (single line, ellipsis). Five equal buttons 54 px tall: 22 px icon over 12 px label; Delete in `--bad`. Replaces the + button while a card is selected.

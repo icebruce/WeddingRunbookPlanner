@@ -143,11 +143,19 @@ export function buildSchedule(plan) {
   const openTimes = [];
   for (let i = 1; i < blocks.length; i += 1) {
     const before = blocks[i].items.reduce((min, item) => (item.start < min.start ? item : min), blocks[i].items[0]);
+    // The activity right on the gap's other edge — its own end is where the
+    // gap starts. Resizing the gap's top handle is really resizing this
+    // activity's end (see gestures.js).
+    const after = blocks[i - 1].items.reduce((max, item) => (item.end > max.end ? item : max), blocks[i - 1].items[0]);
     openTimes.push({
       start: blocks[i - 1].end,
       end: blocks[i].start,
       beforeId: before.id,
       beforeTitle: before.title,
+      beforeLocked: before.locked,
+      afterId: after.id,
+      afterTitle: after.title,
+      afterLocked: after.locked,
       index: i
     });
   }
