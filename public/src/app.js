@@ -103,6 +103,8 @@ const REGIONS = {
 
 let currentScreen = null;
 let currentDialogKey = null;
+/** Set once per visit to the day-of view, so the scroll happens on arrival only. */
+let scrolledToNow = false;
 // Focus is returned to whatever opened the sheet when it closes, so a dialog
 // never leaves the next Tab starting from the top of the page.
 let dialogOpener = null;
@@ -183,6 +185,7 @@ function paintRegions(names) {
   }
   if (names.includes('timeline')) {
     gestures.bind();
+    scrollToNow();
     // What a card can show depends on its rendered size, so it is measured
     // after the paint rather than guessed from the duration. The toolbar then
     // repeats whatever the selected card had to drop.
@@ -190,6 +193,26 @@ function paintRegions(names) {
       if (store.ui.selectedId) paintRegions(['toolbar']);
     });
   }
+}
+
+/**
+ * On arriving at the day-of view, put the current time in the upper third:
+ * what is happening now belongs near the top of the screen, with what is
+ * coming below it, because that is the direction the day is read in.
+ */
+function scrollToNow() {
+  if (!store.ui.dayOf || store.ui.nowMinutes === null || store.ui.nowMinutes === undefined) {
+    scrolledToNow = false;
+    return;
+  }
+  if (scrolledToNow) return;
+
+  const line = app.querySelector('.now-line');
+  if (!line) return;
+  scrolledToNow = true;
+
+  const top = line.getBoundingClientRect().top + window.scrollY;
+  window.scrollTo({ top: Math.max(0, top - window.innerHeight / 3), behavior: 'instant' });
 }
 
 // ------------------------------------------------------------------ sheets
@@ -691,6 +714,7 @@ async function restoreVersion(id) {
     currentDialogKey = null;
     store.setPlan(result.plan, { revision: result.revision, updatedAt: result.updatedAt });
     writeDeviceCopy(result.plan, { revision: result.revision, dirty: false });
+    clock.tick();
     toast(`Restored ${version.name}`);
   } catch (error) {
     toast(error.message || 'Could not restore that version.', { tone: 'error' });
@@ -1066,6 +1090,9 @@ document.addEventListener('submit', event => {
 document.addEventListener('change', event => {
   if (event.target.dataset?.action === 'status') {
     commit('plan.status', { status: event.target.value }, { regions: ['header'] });
+    // Final is what turns the day-of view on, so the answer is re-read now
+    // rather than up to half a minute later.
+    clock.tick();
   }
 });
 
@@ -1174,6 +1201,9 @@ async function loadPlan() {
     store.setUi({ readOnlyCopy: false }, { regions: [] });
     store.setPlan(result.plan, { revision: result.revision, updatedAt: result.updatedAt });
     writeDeviceCopy(result.plan, { revision: result.revision, dirty: false });
+    // The clock's first tick happened before there was a plan to read, and
+    // whether the day-of view belongs on is a question about the plan.
+    clock.tick();
 
     // Edits made while the app was last open, still unsent.
     const copy = readDeviceCopy(result.plan.id);
@@ -1196,6 +1226,7 @@ async function loadPlan() {
       store.setUi({ readOnlyCopy: true }, { regions: [] });
       store.setPlan(copy.plan, { revision: copy.revision, updatedAt: copy.savedAt });
       if (copy.dirty) saver.markDirty();
+      clock.tick();
       return;
     }
     store.setUi({ loadError: error.message || 'Please try again.' });
@@ -1204,6 +1235,7 @@ async function loadPlan() {
 
 async function init() {
   repaint();
+  clock.start();
   try {
     const session = await api.session();
     store.setUi({ authenticated: Boolean(session.authenticated) });
