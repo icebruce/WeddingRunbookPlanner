@@ -7,12 +7,14 @@
     "dev": "node scripts/dev-server.mjs",
     "test": "node --test tests/unit/*.test.mjs",
     "test:e2e": "playwright test",
-    "check": "for f in scripts/dev-server.mjs api/*.js lib/server/*.js public/src/*.js public/src/render/*.js; do node --check \"$f\" || exit 1; done"
+    "check": "for f in scripts/dev-server.mjs api/*.js lib/server/*.js public/src/*.js public/src/render/*.js; do node --check \"$f\" || exit 1; done",
+    "lint": "eslint ."
   },
   "engines": {
     "node": ">=20"
   },
   "devDependencies": {
-    "@playwright/test": "1.56.0"
+    "@playwright/test": "1.56.0",
+    "eslint": "^9.39.5"
   }
 }

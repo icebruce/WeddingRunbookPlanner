@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createSessionToken, sessionCookie } from '../../lib/server/auth.js';
+import { createSessionToken } from '../../lib/server/auth.js';
 import { createSeedEnvelope } from '../../lib/server/seed-template.js';
 import { DATA_KEY, VERSIONS_KEY, setDriver } from '../../lib/server/storage.js';
 
