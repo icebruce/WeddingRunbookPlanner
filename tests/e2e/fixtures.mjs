@@ -78,24 +78,40 @@ export const test = base.extend({
     const dataFile = path.join(dir, 'store.json');
     const { child, baseURL } = await startServer(dataFile);
 
+    // Versions live in their own store, so resetting the plan alone would let
+    // one test's versions turn up in the next one.
+    const versionsFile = `${dataFile}.versions.json`;
+
+    const readFile = async file => {
+      try {
+        return JSON.parse(await fs.readFile(file, 'utf8'));
+      } catch (error) {
+        if (error.code === 'ENOENT') return null;
+        throw error;
+      }
+    };
+
     await use({
       baseURL,
       dataFile,
-      /** Replace the whole stored envelope. Call before navigating. */
-      async seed({ plan = seedPlan(), revision = 1, versions = [], updatedAt = new Date().toISOString(), updatedBy = null } = {}) {
-        await fs.writeFile(dataFile, JSON.stringify({ revision, updatedAt, updatedBy, plan, versions }, null, 2), 'utf8');
+      versionsFile,
+
+      /** Replace the whole stored state. Call before navigating. */
+      async seed({ plan = seedPlan(), revision = 1, versions = [], updatedAt = new Date().toISOString(), updatedBy = null, legacyEnvelope = false } = {}) {
+        const envelope = { revision, updatedAt, updatedBy, plan };
+        // `legacyEnvelope` writes the pre-split shape, for migration tests.
+        if (legacyEnvelope) envelope.versions = versions;
+        await fs.writeFile(dataFile, JSON.stringify(envelope, null, 2), 'utf8');
+        await fs.writeFile(versionsFile, JSON.stringify({ versions: legacyEnvelope ? [] : versions }, null, 2), 'utf8');
       },
+
       /** Read the stored envelope back, to assert what the server actually kept. */
-      async read() {
-        try {
-          return JSON.parse(await fs.readFile(dataFile, 'utf8'));
-        } catch (error) {
-          if (error.code === 'ENOENT') return null;
-          throw error;
-        }
-      },
+      read: () => readFile(dataFile),
+      readVersions: async () => (await readFile(versionsFile))?.versions ?? [],
+
       async clear() {
         await fs.rm(dataFile, { force: true });
+        await fs.rm(versionsFile, { force: true });
       }
     });
 

@@ -12,7 +12,14 @@
  */
 const VISIBLE_MS = 6_000;
 
-export function createToaster(region) {
+/**
+ * `host()` says where the toast should go. A modal <dialog> renders in the
+ * browser's top layer, above everything else on the page — so a toast left in
+ * its usual place while a sheet is open is visible but not pressable, and
+ * "Undo" that cannot be pressed is not an offer. When a sheet is open the
+ * toast goes inside it.
+ */
+export function createToaster(region, host = () => region) {
   let current = null;
   let timer = null;
 
@@ -53,7 +60,9 @@ export function createToaster(region) {
       node.append(button);
     }
 
-    region.append(node);
+    const parent = host() || region;
+    if (parent !== region) node.classList.add('toast--layered');
+    parent.append(node);
     current = node;
     requestAnimationFrame(() => node.classList.add('is-visible'));
     timer = setTimeout(dismiss, duration);

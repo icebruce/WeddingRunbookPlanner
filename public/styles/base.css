@@ -270,3 +270,24 @@ body.is-resizing { cursor: ns-resize; }
 @media (prefers-reduced-motion: reduce) {
   .card.is-settling, .card.is-pressed { transition: none; }
 }
+
+/* Pinned bars sit under the top bar and stay there: the offline one, and the
+   filter one. They are statements of fact, not alerts. */
+.pinned-bar {
+  position: sticky;
+  top: 52px;
+  z-index: 34;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 18px;
+  font-size: 14px;
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+.pinned-bar--offline {
+  background: color-mix(in srgb, var(--fill-strong) 94%, transparent);
+  color: var(--ink-2);
+  border-bottom: .5px solid var(--hair);
+}

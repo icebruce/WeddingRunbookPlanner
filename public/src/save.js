@@ -179,6 +179,8 @@ export function createSavePipeline({
 
   return {
     get state() { return state; },
+    /** True while a request is in the air, for the page-hide flush. */
+    get inFlight() { return Boolean(inFlight); },
     get revision() { return currentRevision; },
     get hasPendingChanges() { return dirtySeq > savedSeq; },
     get isBlocked() { return blocked; },
@@ -204,6 +206,22 @@ export function createSavePipeline({
     /** Send now, skipping the debounce (sign-out, version save, page hide). */
     flushNow() {
       return flush();
+    },
+
+    /**
+     * The page is going away. There is no time for a round trip, so the
+     * request is handed to the browser with `keepalive` and the answer is
+     * never read; whatever happens, the device copy still holds the change and
+     * it is sent again on the next open.
+     */
+    flushOnHide(send) {
+      if (!this.hasPendingChanges || blocked) return false;
+      try {
+        send(getPlan(), currentRevision, deviceId);
+        return true;
+      } catch {
+        return false;
+      }
     },
 
     /** The header's "Not saved" is tappable; this is what it does. */

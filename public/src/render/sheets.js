@@ -201,6 +201,25 @@ export function stageSheet(item) {
   </dialog>`;
 }
 
+/**
+ * "Changed on another device."
+ *
+ * Neither copy is thrown away: whichever side is not chosen is kept as an
+ * automatic version, so the choice is which one to carry on with rather than
+ * which one to lose.
+ */
+export function conflictSheet(latest) {
+  const when = latest?.updatedAt ? formatVersionDate(latest.updatedAt) : null;
+  return `<dialog id="conflict-dialog" class="alert-dialog">
+    <div class="alert">
+      <h2>Changed on another device</h2>
+      <p>This plan was saved somewhere else${when ? ` at ${escapeHtml(when)}` : ''}. Whichever you do not choose is kept in version history.</p>
+      <button type="button" class="button button--primary" data-action="conflict" data-choice="remote">Use the other version</button>
+      <button type="button" class="button button--quiet" data-action="conflict" data-choice="local">Keep my changes</button>
+    </div>
+  </dialog>`;
+}
+
 /** "Discard changes?" — the one question the editor asks. */
 export function discardSheet() {
   return `<dialog id="discard-dialog" class="alert-dialog">
@@ -213,7 +232,17 @@ export function discardSheet() {
   </dialog>`;
 }
 
-export function versionsSheet(versions) {
+/**
+ * Version history.
+ *
+ * The current plan is the first row, marked as such, because "which of these
+ * is what I am looking at?" is the first question anyone asks. Every row
+ * carries a one-line summary computed when the version was written, so the
+ * list can be shown without loading a single plan body.
+ */
+export function versionsSheet(versions, { plan, updatedAt, deviceLabel = 'this device' } = {}) {
+  const current = plan ? buildSummary(plan) : null;
+
   return `<dialog id="versions-dialog" class="sheet-dialog sheet-dialog--wide">
     <section class="sheet">
       <header class="sheet-header">
@@ -223,17 +252,67 @@ export function versionsSheet(versions) {
       </header>
       <div class="sheet-body">
         <form id="version-form" class="version-create" novalidate>
-          <label class="field"><span class="field-label">Save the current plan as a named version</span><input name="name" maxlength="80" placeholder="e.g. After photographer review"></label>
+          <div class="field">
+            <span class="field-label">Save the current plan as a named version</span>
+            <input name="name" maxlength="80" placeholder="e.g. After photographer review">
+          </div>
           <button class="button button--primary" type="submit">${icon('save')}<span>Save version</span></button>
         </form>
+
         <div class="version-list">
-          ${versions.length
-            ? versions.map(version => `<article class="version-item"><div><strong>${escapeHtml(version.name)}</strong><span>${escapeHtml(formatVersionDate(version.createdAt))}</span></div><button class="button button--quiet restore-version" type="button" data-version-id="${escapeHtml(version.id)}">Restore</button></article>`).join('')
-            : '<div class="empty-state">No saved versions yet.</div>'}
+          ${current ? `<article class="version-item version-item--current">
+            <div>
+              <strong>Current plan</strong>
+              <span>Edited ${escapeHtml(relativeTime(updatedAt))} on ${escapeHtml(deviceLabel)}</span>
+              <span class="version-summary">${escapeHtml(summaryLine(current))}</span>
+            </div>
+            <span class="version-badge">Now</span>
+          </article>` : ''}
+
+          ${versions.map(version => `<article class="version-item" data-version-id="${escapeHtml(version.id)}">
+            <div>
+              <strong>${escapeHtml(version.name)}</strong>
+              <span>${escapeHtml(formatVersionDate(version.createdAt))}${version.auto ? ' · saved automatically' : ''}</span>
+              <span class="version-summary">${escapeHtml(summaryLine(version.summary))}</span>
+            </div>
+            <div class="version-actions">
+              <button class="button button--quiet restore-version" type="button" data-version-id="${escapeHtml(version.id)}">Restore</button>
+              <button class="icon-button delete-version" type="button" data-version-id="${escapeHtml(version.id)}" aria-label="Delete ${escapeHtml(version.name)}">${icon('trash')}</button>
+            </div>
+          </article>`).join('')}
+
+          ${versions.length ? '' : '<div class="empty-state">No saved versions yet.</div>'}
         </div>
       </div>
     </section>
   </dialog>`;
+}
+
+function summaryLine(summary) {
+  if (!summary || !summary.count) return 'Nothing planned yet';
+  const count = `${summary.count} ${summary.count === 1 ? 'activity' : 'activities'}`;
+  return summary.start && summary.end ? `${count} · ${summary.start} – ${summary.end}` : count;
+}
+
+/** The same summary the server writes onto a version, for the current plan. */
+function buildSummary(plan) {
+  const schedule = buildSchedule(plan);
+  return {
+    count: schedule.summary.count,
+    start: schedule.summary.count ? formatTime(schedule.summary.start) : null,
+    end: schedule.summary.count ? formatTime(schedule.summary.end) : null
+  };
+}
+
+function relativeTime(value) {
+  const then = new Date(value);
+  if (Number.isNaN(then.getTime())) return 'just now';
+  const minutes = Math.round((Date.now() - then.getTime()) / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hr ago`;
+  return formatVersionDate(value);
 }
 
 export function settingsSheet(plan) {
@@ -266,7 +345,8 @@ export function renderSheet(ui, plan) {
   if (dialog.type === 'activity') return activitySheet(dialog, plan);
   if (dialog.type === 'open-time') return openTimeSheet(dialog.openTime, plan);
   if (dialog.type === 'stage') return stageSheet(dialog.item);
-  if (dialog.type === 'versions') return versionsSheet(ui.versions);
+  if (dialog.type === 'conflict') return conflictSheet(dialog.latest);
+  if (dialog.type === 'versions') return versionsSheet(ui.versions, { plan, updatedAt: dialog.updatedAt });
   if (dialog.type === 'settings') return settingsSheet(plan);
   return '';
 }

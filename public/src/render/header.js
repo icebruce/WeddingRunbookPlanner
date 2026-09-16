@@ -56,13 +56,8 @@ export function renderHeader({ plan, ui }) {
     </div>`;
 }
 
-export function renderConflict({ ui }) {
-  if (!ui.conflict) return '';
-  return `<div class="conflict-banner" role="alert">
-    <div>${icon('warning')}<span><strong>Changed on another device.</strong> Choose which copy to keep.</span></div>
-    <div class="conflict-actions">
-      <button class="button button--quiet" type="button" data-action="conflict" data-choice="remote">Use the other version</button>
-      <button class="button button--primary" type="button" data-action="conflict" data-choice="local">Keep my changes</button>
-    </div>
-  </div>`;
-}
+/*
+ * The "changed on another device" banner used to live here. It is a dialog
+ * now: the choice decides which copy the day carries on from, and that is not
+ * something to leave sitting at the top of the page while editing continues.
+ */

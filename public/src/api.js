@@ -63,8 +63,24 @@ export const api = {
   load: since => request(since === undefined || since === null ? '/api/plan' : `/api/plan?since=${encodeURIComponent(since)}`),
   save: (plan, revision, deviceId) => request('/api/plan', { method: 'PUT', body: JSON.stringify({ plan, revision, deviceId }) }),
   versions: () => request('/api/versions'),
-  createVersion: (name, revision, extra = {}) => request('/api/versions', { method: 'POST', body: JSON.stringify({ name, revision, ...extra }) }),
-  restoreVersion: (id, revision) => request('/api/versions', { method: 'PUT', body: JSON.stringify({ id, revision }) })
+  version: id => request(`/api/versions?id=${encodeURIComponent(id)}`),
+  createVersion: (name, extra = {}) => request('/api/versions', { method: 'POST', body: JSON.stringify({ name, ...extra }) }),
+  restoreVersion: (id, revision) => request('/api/versions', { method: 'PUT', body: JSON.stringify({ id, revision }) }),
+  deleteVersion: id => request(`/api/versions?id=${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  /**
+   * Sent as the page goes away. `keepalive` lets the browser finish it after
+   * the tab is gone; there is no answer to read, so there is nothing to await.
+   */
+  saveOnHide(plan, revision, deviceId) {
+    fetch('/api/plan', {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan, revision, deviceId }),
+      keepalive: true
+    }).catch(() => {});
+  }
 };
 
 export { request };

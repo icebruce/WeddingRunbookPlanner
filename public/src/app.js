@@ -12,12 +12,13 @@
 import './actions.js';
 import { api } from './api.js';
 import { STAGES, deviceId } from './config.js';
+import { clearDeviceCopy, readDeviceCopy, writeDeviceCopy } from './device.js';
 import { cssEscape, escapeHtml, focusByKey, paint, uid } from './dom.js';
 import { createGestures } from './gestures.js';
 import { icon } from './icons.js';
 import { SAVE_STATES, createSavePipeline } from './save.js';
 import { createStore } from './state.js';
-import { renderConflict, renderHeader } from './render/header.js';
+import { renderHeader } from './render/header.js';
 import { discardSheet, peopleChips, renderSheet } from './render/sheets.js';
 import { buildSchedule, formatTime } from './schedule.js';
 import { renderStrip } from './render/strip.js';
@@ -30,7 +31,12 @@ import { checkPlan, normalizeDuration, roundTimeUp, validateActivity } from './v
 const app = document.querySelector('#app');
 const sheetRoot = document.querySelector('#sheet-root');
 const alertRoot = document.querySelector('#alert-root');
-const toast = createToaster(document.querySelector('#toast-region'));
+const toast = createToaster(
+  document.querySelector('#toast-region'),
+  // A sheet is drawn in the top layer, so a toast raised while one is open has
+  // to be drawn inside it or it cannot be pressed.
+  () => alertRoot.querySelector('dialog[open]') || sheetRoot.querySelector('dialog[open]')
+);
 
 const store = createStore();
 const DEVICE_ID = deviceId();
@@ -39,20 +45,37 @@ const saver = createSavePipeline({
   save: (plan, revision, device) => api.save(plan, revision, device),
   getPlan: () => store.plan,
   deviceId: DEVICE_ID,
-  onStateChange: next => store.setUi({ saveState: next }, { regions: ['header'] }),
-  onSaved: ({ revision, updatedAt }) => store.setRevision(revision, updatedAt),
+  // The offline bar reads the same state as the header, so both repaint.
+  onStateChange: next => store.setUi({ saveState: next }, { regions: ['header', 'offline'] }),
+  onSaved: ({ revision, updatedAt }) => {
+    store.setRevision(revision, updatedAt);
+    writeDeviceCopy(store.plan, { revision, dirty: false });
+  },
   onError: message => toast(message, { tone: 'error' }),
   // The local side of a conflict is read when the user chooses, not captured
   // here, so "Keep my changes" means the plan as it is now (F12).
-  onConflict: latest => store.setUi({ conflict: { latest } }, { regions: ['conflict'] }),
+  onConflict: latest => store.setUi({ conflict: { latest }, dialog: { type: 'conflict', latest } }),
   onUnauthorized: () => store.setUi({ authenticated: false })
 });
+
+/**
+ * The offline bar. It is not an error: the plan is on screen, the edits are on
+ * the device, and they will go when there is a connection. Saying so is the
+ * difference between "wait" and "your work is gone".
+ */
+function renderOfflineBar({ ui }) {
+  if (ui.saveState !== SAVE_STATES.offline && !ui.readOnlyCopy) return '';
+  const message = ui.readOnlyCopy
+    ? "You're offline. This is the last plan saved on this device."
+    : "You're offline. Changes stay on this device and save when you reconnect.";
+  return `<div class="pinned-bar pinned-bar--offline" role="status">${escapeHtml(message)}</div>`;
+}
 
 // ---------------------------------------------------------------- screens
 
 const SHELL = `
   <header class="topbar" data-region="header"></header>
-  <div data-region="conflict"></div>
+  <div data-region="offline"></div>
   <div data-region="strip"></div>
   <main id="main-plan" class="planner">
     <section class="planner-heading" data-region="heading"></section>
@@ -63,7 +86,7 @@ const SHELL = `
 
 const REGIONS = {
   header: ({ plan, ui }) => renderHeader({ plan, ui }),
-  conflict: ({ ui }) => renderConflict({ ui }),
+  offline: ({ ui }) => renderOfflineBar({ ui }),
   strip: () => renderStrip(),
   heading: ({ plan }) => renderHeading({ plan }),
   summary: ({ plan, ui }) => renderSummary({ plan, ui }),
@@ -178,8 +201,9 @@ function paintRegions(names) {
  */
 function dialogKey(dialog) {
   if (!dialog) return null;
+  if (dialog.type === 'conflict') return `conflict:${dialog.latest?.revision ?? 'unknown'}`;
   if (dialog.type === 'activity') return `activity:${dialog.mode}:${dialog.activity.id}`;
-  if (dialog.type === 'versions') return `versions:${store.ui.versions.length}`;
+  if (dialog.type === 'versions') return `versions:${store.ui.versions.length}:${store.revision}`;
   if (dialog.type === 'open-time') return `open-time:${dialog.openTime.beforeId}:${dialog.openTime.start}`;
   if (dialog.type === 'stage') return `stage:${dialog.item.id}`;
   return dialog.type;
@@ -274,6 +298,9 @@ function commit(action, payload, options = {}) {
   const result = store.dispatch(action, payload, options);
   if (!result) return null;
   saver.markDirty();
+  // Written before the save is attempted, so a change survives the app being
+  // closed a moment later.
+  writeDeviceCopy(store.plan, { revision: store.revision, dirty: true });
 
   if (options.silent) return result;
   const shift = shiftMessage(result.shifted);
@@ -287,6 +314,7 @@ function undo() {
   const result = store.undo({ regions: ['all'] });
   if (!result) return;
   saver.markDirty();
+  writeDeviceCopy(store.plan, { revision: store.revision, dirty: true });
   // Selecting an activity that the undo removed would leave the toolbar
   // describing something that is no longer there.
   if (store.ui.selectedId && !store.plan.activities.some(a => a.id === store.ui.selectedId)) {
@@ -473,7 +501,12 @@ function bindSheet(dialog) {
 
   if (dialog.id === 'versions-dialog') {
     dialog.querySelector('#version-form').addEventListener('submit', createVersion);
-    dialog.querySelectorAll('.restore-version').forEach(button => button.addEventListener('click', () => restoreVersion(button.dataset.versionId)));
+    for (const button of dialog.querySelectorAll('.restore-version')) {
+      button.addEventListener('click', () => void restoreVersion(button.dataset.versionId));
+    }
+    for (const button of dialog.querySelectorAll('.delete-version')) {
+      button.addEventListener('click', () => void removeVersion(button.dataset.versionId));
+    }
     return;
   }
 
@@ -584,17 +617,53 @@ async function createVersion(event) {
   clearFieldErrors(form);
   button.disabled = true;
   try {
+    // A version is a copy of what is stored, so what is on screen has to be
+    // stored first.
     await flushSave();
-    const result = await api.createVersion(new FormData(form).get('name'), store.revision);
-    saver.markClean(result.revision);
-    store.setRevision(result.revision);
+    const result = await api.createVersion(new FormData(form).get('name'));
     // The sheet stays open; its identity changes with the list, so it repaints.
     store.setUi({ versions: result.versions }, { regions: [] });
     syncSheet();
   } catch (error) {
     if (error.field) showFieldError(form, error.field, error.message);
-    else toast(error.message || 'Could not save that version.', 'error');
+    else toast(error.message || 'Could not save that version.', { tone: 'error' });
     button.disabled = false;
+  }
+}
+
+/**
+ * Deleting a version is undoable like everything else — the copy is kept in
+ * memory for as long as the toast is on screen and written back if asked.
+ */
+async function removeVersion(id) {
+  const version = store.ui.versions.find(item => item.id === id);
+  if (!version) return;
+
+  try {
+    // The body is fetched before the delete, so Undo can put back the plan
+    // that was in it rather than whatever is on screen now. The list itself
+    // never carries plan bodies.
+    const { version: full } = await api.version(id);
+    const result = await api.deleteVersion(id);
+    store.setUi({ versions: result.versions }, { regions: [] });
+    syncSheet();
+
+    toast(`Deleted ${version.name}`, {
+      action: {
+        label: 'Undo',
+        run: async () => {
+          try {
+            const restored = await api.createVersion(full.name, { auto: full.auto, plan: full.plan });
+            store.setUi({ versions: restored.versions }, { regions: [] });
+            syncSheet();
+          } catch {
+            toast('That version could not be put back.', { tone: 'error' });
+          }
+        }
+      }
+    });
+  } catch (error) {
+    toast(error.message || 'Could not delete that version.', { tone: 'error' });
   }
 }
 
@@ -602,12 +671,17 @@ async function restoreVersion(id) {
   const version = store.ui.versions.find(item => item.id === id);
   if (!version) return;
   try {
+    // The server keeps a copy of what is being replaced before it replaces it,
+    // so this needs no confirmation of its own.
     const result = await api.restoreVersion(id, store.revision);
     saver.markClean(result.revision);
     store.setUi({ versions: result.versions, dialog: null }, { regions: [] });
+    currentDialogKey = null;
     store.setPlan(result.plan, { revision: result.revision, updatedAt: result.updatedAt });
+    writeDeviceCopy(result.plan, { revision: result.revision, dirty: false });
+    toast(`Restored ${version.name}`);
   } catch (error) {
-    toast(error.message || 'Could not restore that version.', 'error');
+    toast(error.message || 'Could not restore that version.', { tone: 'error' });
   }
 }
 
@@ -616,10 +690,14 @@ async function openVersions() {
   try {
     await flushSave();
     const result = await api.versions();
-    store.setRevision(result.revision);
-    store.setUi({ versions: result.versions, openMenu: null, dialog: { type: 'versions' } });
+    store.setRevision(result.revision, result.updatedAt);
+    store.setUi({
+      versions: result.versions,
+      openMenu: null,
+      dialog: { type: 'versions', updatedAt: result.updatedAt }
+    });
   } catch (error) {
-    toast(error.message || 'Could not open version history.', 'error');
+    toast(error.message || 'Could not open version history.', { tone: 'error' });
   }
 }
 
@@ -726,7 +804,7 @@ const ACTION_HANDLERS = {
     if (action === 'logout') return void signOut();
   },
   conflict(_, element) {
-    resolveConflict(element.dataset.choice);
+    void resolveConflict(element.dataset.choice);
   },
   'open-time'(_, element) {
     rememberOpener(`open-time:${element.dataset.before}`);
@@ -781,23 +859,43 @@ const ACTION_HANDLERS = {
   }
 };
 
-function resolveConflict(choice) {
+/**
+ * Resolving a conflict never throws a copy away. The side that is not chosen
+ * is written to version history first, so "Keep my changes" does not mean
+ * "lose theirs" and vice versa.
+ */
+async function resolveConflict(choice) {
   const latest = store.ui.conflict?.latest;
   if (!latest) return;
-  store.setUi({ conflict: null }, { regions: ['conflict'] });
+
+  const mine = structuredClone(store.plan);
+  closeSheet();
+  store.setUi({ conflict: null }, { regions: [] });
+
+  const stamp = new Date().toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' });
+  const keeping = choice === 'remote' ? mine : latest.plan;
+  const name = choice === 'remote' ? `My unsaved changes – ${stamp}` : `Other device – ${stamp}`;
+  await api.createVersion(name, { auto: true, plan: keeping }).catch(() => {
+    toast('The other copy could not be saved to version history.', { tone: 'error' });
+  });
 
   if (choice === 'remote') {
     saver.markClean(latest.revision);
     store.setPlan(latest.plan, { revision: latest.revision, updatedAt: latest.updatedAt });
+    writeDeviceCopy(latest.plan, { revision: latest.revision, dirty: false });
     return;
   }
+
   store.setRevision(latest.revision);
-  void saver.resume({ revision: latest.revision });
+  await saver.resume({ revision: latest.revision });
 }
 
 async function signOut() {
   try { await flushSave(); } catch { /* the sign-out still happens; the copy stays on the device */ }
   await api.logout().catch(() => {});
+  // Signing out is the one time the copy is cleared: it is the only moment
+  // someone has said they are finished with this device.
+  clearDeviceCopy(store.plan?.id);
   saver.markClean(null);
   store.resetUi();
   store.setPlan(null, { revision: null });
@@ -945,7 +1043,48 @@ document.addEventListener('change', event => {
 
 watchFit(app);
 window.addEventListener('online', () => void saver.handleOnline());
-window.addEventListener('offline', () => repaint(['header']));
+window.addEventListener('offline', () => repaint(['header', 'offline']));
+
+/**
+ * Picking up someone else's change.
+ *
+ * Asked on coming back to the app and every minute while it is visible, and
+ * only ever applied when there is nothing of our own waiting to be saved —
+ * otherwise this would be the silent overwrite the conflict dialog exists to
+ * prevent.
+ */
+const REFRESH_INTERVAL_MS = 60_000;
+
+async function refreshFromServer() {
+  if (!store.plan || !store.ui.authenticated) return;
+  if (saver.hasPendingChanges || saver.isBlocked || store.ui.dialog) return;
+
+  try {
+    const result = await api.load(store.revision);
+    if (result.unchanged) return;
+    saver.markClean(result.revision);
+    store.setPlan(result.plan, { revision: result.revision, updatedAt: result.updatedAt });
+    writeDeviceCopy(result.plan, { revision: result.revision, dirty: false });
+  } catch {
+    // A failed check is not news. The next one will do.
+  }
+}
+
+setInterval(() => {
+  if (document.visibilityState === 'visible') void refreshFromServer();
+}, REFRESH_INTERVAL_MS);
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    void refreshFromServer();
+    return;
+  }
+  // Going away: send anything outstanding now rather than hoping the tab
+  // survives long enough for the debounce.
+  saver.flushOnHide(api.saveOnHide);
+});
+
+window.addEventListener('pagehide', () => saver.flushOnHide(api.saveOnHide));
 
 store.subscribe(change => repaint(change.regions));
 
@@ -956,10 +1095,31 @@ async function loadPlan() {
   try {
     const result = await api.load();
     saver.markClean(result.revision);
+    store.setUi({ readOnlyCopy: false }, { regions: [] });
     store.setPlan(result.plan, { revision: result.revision, updatedAt: result.updatedAt });
+    writeDeviceCopy(result.plan, { revision: result.revision, dirty: false });
+
+    // Edits made while the app was last open, still unsent.
+    const copy = readDeviceCopy(result.plan.id);
+    if (copy?.dirty && copy.revision === result.revision) {
+      store.setPlan(copy.plan, { revision: result.revision, updatedAt: result.updatedAt });
+      saver.markDirty();
+    }
+    return;
   } catch (error) {
     if (error.status === 401) {
       store.setUi({ authenticated: false });
+      return;
+    }
+
+    // Nothing could be loaded. If this device has a copy, showing it — clearly
+    // marked as such — beats a blank screen and a message.
+    const copy = readDeviceCopy();
+    if (copy) {
+      saver.markClean(copy.revision);
+      store.setUi({ readOnlyCopy: true }, { regions: [] });
+      store.setPlan(copy.plan, { revision: copy.revision, updatedAt: copy.savedAt });
+      if (copy.dirty) saver.markDirty();
       return;
     }
     store.setUi({ loadError: error.message || 'Please try again.' });

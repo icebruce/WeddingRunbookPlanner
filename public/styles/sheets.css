@@ -277,3 +277,48 @@
   .group-row { min-height: 42px; font-size: 15px; }
   .action-sheet { left: auto; right: 24px; bottom: 24px; width: 340px; }
 }
+
+/* ---- version history ----------------------------------------------------- */
+
+.version-create { padding-bottom: 18px; border-bottom: .5px solid var(--hair); }
+.version-create .button { margin-top: 12px; }
+.version-list { display: grid; gap: 2px; padding-top: 14px; }
+.version-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.version-item > div { display: grid; gap: 2px; min-width: 0; }
+.version-item strong { font-size: 15px; font-weight: 600; }
+.version-item span { color: var(--soft); font-size: 13px; }
+.version-summary { font-variant-numeric: tabular-nums; }
+.version-item--current { background: var(--sel-tint); }
+.version-item--current strong { color: var(--sel); }
+.version-badge {
+  flex: none;
+  padding: 3px 10px;
+  border-radius: 11px;
+  background: var(--sel);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 650;
+}
+.version-actions { display: flex; align-items: center; gap: 4px; flex: none; }
+.delete-version { width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 10px; background: none; color: var(--bad); }
+.delete-version .icon { width: 18px; height: 18px; }
+
+/* A toast shown inside an open sheet, so that it is in the same top layer and
+   can actually be pressed. */
+.toast--layered {
+  position: fixed;
+  z-index: 10;
+  left: 50%;
+  bottom: calc(24px + var(--safe-bottom));
+  transform: translateX(-50%) translateY(8px);
+  width: min(360px, calc(100vw - 32px));
+}
+.toast--layered.is-visible { transform: translateX(-50%) translateY(0); }

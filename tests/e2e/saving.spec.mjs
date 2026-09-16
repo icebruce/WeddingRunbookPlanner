@@ -152,7 +152,7 @@ test('F3: two devices saving at once — one wins, the other is told', async ({ 
   await expect(saveState(page)).toHaveText('Saved');
 
   await renameFirstActivity(second, 'Device B loses');
-  await expect(second.locator('.conflict-banner')).toBeVisible();
+  await expect(second.locator('#conflict-dialog')).toBeVisible();
 
   const stored = await server.read();
   expect(stored.plan.activities[0].title).toBe('Device A wins');
@@ -168,7 +168,7 @@ test('F12: "Keep my changes" saves the plan as it is now, not a stale snapshot',
   await expect(other.locator('.save-indicator')).toHaveText('Saved');
 
   await renameFirstActivity(page, 'Mine, typed first');
-  await expect(page.locator('.conflict-banner')).toBeVisible();
+  await expect(page.locator('#conflict-dialog')).toBeVisible();
 
   // Typed after the conflict appeared: this is what must survive.
   await renameFirstActivity(page, 'Mine, typed after the banner');
@@ -190,8 +190,12 @@ test('F27: a session check that fails offers Retry, not the sign-in screen', asy
   await expect(page.locator('#login-form')).toBeVisible();
 });
 
-test('a plan that cannot be loaded never shows as an empty timeline', async ({ page }) => {
+test('a plan that cannot be loaded never shows as an empty timeline', async ({ page, context }) => {
   await signInAndWaitForPlan(page);
+  // No copy on this device, and no plan from the server: the only honest
+  // thing to show is that it could not be loaded.
+  await context.clearCookies({ name: 'nothing' }).catch(() => {});
+  await page.evaluate(() => localStorage.clear());
   await page.route('**/api/plan', route => route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":{"code":"server_error","message":"nope"}}' }));
 
   await page.reload();
