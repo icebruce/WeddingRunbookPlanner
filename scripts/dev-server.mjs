@@ -82,4 +82,6 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(port, '127.0.0.1', () => console.log(`Wedding planner running at http://127.0.0.1:${port}`));
+// PORT=0 lets the OS pick a free port; the real one is printed so callers
+// (the e2e harness) can read it back instead of guessing.
+server.listen(port, '127.0.0.1', () => console.log(`Wedding planner running at http://127.0.0.1:${server.address().port}`));

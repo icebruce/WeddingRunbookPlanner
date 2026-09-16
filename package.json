@@ -5,13 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev-server.mjs",
-    "test": "node --test tests/*.test.mjs",
+    "test": "node --test tests/unit/*.test.mjs",
+    "test:e2e": "playwright test",
     "check": "node --check public/src/app.js && node --check public/src/schedule.js && node --check public/src/api.js && node --check lib/server/auth.js && node --check lib/server/storage.js"
   },
   "engines": {
     "node": ">=20"
   },
   "devDependencies": {
-    "@playwright/test": "^1.63.0"
+    "@playwright/test": "1.56.0"
   }
 }

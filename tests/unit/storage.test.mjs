@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { createVersion, readData, restoreVersion, savePlan } from '../lib/server/storage.js';
+import { createVersion, readData, restoreVersion, savePlan } from '../../lib/server/storage.js';
 
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'wedding-planner-'));
 process.env.LOCAL_DATA_FILE = path.join(dir, 'store.json');

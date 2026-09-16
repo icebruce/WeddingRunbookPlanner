@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSchedule, buildTimelineLayout, clampDuration, formatDuration, formatTime, parseTime } from '../public/src/schedule.js';
+import { buildSchedule, buildTimelineLayout, clampDuration, formatDuration, formatTime, parseTime } from '../../public/src/schedule.js';
 
 const plan = activities => ({ dayStart: '10:00', activities });
 const item = (id, duration, lockedStart = null) => ({ id, title: id, duration, stage: 'preparation', location: '', people: [], notes: '', lockedStart });

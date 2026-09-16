@@ -1,37 +1,89 @@
-# Wedding Day Planner
+# Wedding Runbook Planner
 
-A private, responsive one-day wedding timeline planner built with HTML, CSS, and vanilla JavaScript. It uses a linked/ripple scheduling model, fixed-time anchors, drag-and-drop reordering, duration resizing, conflict detection, autosave, and named versions.
+A private, shared, one-day wedding planner: build the timeline on a phone or a
+laptop, and run the day from it. HTML, CSS and vanilla JavaScript — no
+framework, no bundler, no build step, and no runtime dependencies.
+
+The specifications in `docs/` are the source of truth:
+
+| Document | Decides |
+|---|---|
+| `docs/FUNCTIONAL_SPEC.md` | Behaviour |
+| `docs/TECHNICAL_SPEC.md` | Architecture and implementation |
+| `docs/DESIGN_GUIDE.md` | Look and feel |
+| `docs/IMPLEMENTATION_PLAN.md` | Stage order and gates |
+| `docs/mockups/` | Approved visual reference |
+
+## Layout
+
+```
+api/          Vercel Functions
+lib/server/   Server-only code (never served over HTTP)
+public/       The only directory served to browsers
+scripts/      Local dev server
+tests/unit/   node --test
+tests/e2e/    Playwright
+```
+
+`vercel.json` sets `outputDirectory: "public"`, so server code, seed data,
+tests and package metadata are not downloadable from the site.
 
 ## Requirements
 
-- Node.js 20+ for local development and Vercel Functions
-- No npm runtime or frontend dependencies
+- Node.js 20+ (22 in CI)
 - Upstash Redis REST credentials for production persistence
+- `@playwright/test` is the only dependency, and it is dev-only
 
-## Local development
+## Running it locally
 
-1. Copy `.env.example` values into your shell or `.env` loader of choice.
-2. At minimum set:
+1. Set the environment variables (see `.env.example`); at minimum:
    - `APP_PASSWORD`
    - `SESSION_SECRET` (32+ characters)
-3. Run `npm run dev`.
-4. Open `http://127.0.0.1:4173`.
+2. `npm install`
+3. `npm run dev`
+4. Open `http://127.0.0.1:4173`
 
-When Upstash variables are absent locally, data is stored in `.data/store.json`. On Vercel, cloud storage is required.
+With no Upstash variables set, data is stored in `.data/store.json`
+(`LOCAL_DATA_FILE` overrides the path). On Vercel, cloud storage is required
+and the app fails closed rather than falling back to a file.
+
+## Testing
+
+| Command | What it runs |
+|---|---|
+| `npm test` | Unit tests (`tests/unit/*.test.mjs`, `node --test`) |
+| `npm run test:e2e` | Playwright end-to-end tests (`tests/e2e/*.spec.mjs`) |
+| `npm run check` | Syntax check of the main modules |
+
+The e2e harness starts one dev server per worker on its own port, backed by its
+own data file, so tests never share state and never touch a real database. Each
+test seeds the store directly through the `server` fixture.
+
+Projects: `desktop-chrome` (1280 px), `iphone-13`, `pixel-7`, `ipad`.
+
+> **Engine note.** `iphone-13` and `ipad` are WebKit projects. When WebKit is
+> not installed — some sandboxes cannot download it — the config falls back to
+> Chromium with the same iOS device descriptor and prints a warning, so a green
+> local run is never mistaken for WebKit coverage. CI installs WebKit and runs
+> those projects on the real engine.
+
+Playwright is pinned to an exact version because the browser build revision has
+to match the installed browsers.
 
 ## Production environment variables
 
-- `APP_PASSWORD` — shared planner password
-- `SESSION_SECRET` — random value of at least 32 characters
-- `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` — direct Upstash credentials, **or**
-- `KV_REST_API_URL` + `KV_REST_API_TOKEN` — credentials injected by the Vercel Upstash integration
+| Variable | Purpose |
+|---|---|
+| `APP_PASSWORD` | Shared planner password |
+| `SESSION_SECRET` | Random value, 32+ characters |
+| `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` | Upstash credentials |
+| `KV_REST_API_URL` + `KV_REST_API_TOKEN` | Alternative names injected by the Vercel Upstash integration |
+
+Changing `APP_PASSWORD` signs every device out.
 
 ## Deployment
 
-The repository is Vercel-ready. Import it as a project, configure the password/session variables and connect an Upstash Redis store, and deploy. Production and preview deployments can share or use separate Upstash databases depending on the desired isolation.
-
-## Commands
-
-- `npm test` — unit tests for scheduling, authentication, and persistence
-- `npm run check` — JavaScript syntax checks
-- `npm run dev` — zero-dependency local server
+Vercel builds a preview for every push and deploys `main` to production.
+Preview and production use separate Upstash databases. Rolling back means
+redeploying the previous production deployment; the stored format only ever
+gains fields, so older deployments keep reading it.
