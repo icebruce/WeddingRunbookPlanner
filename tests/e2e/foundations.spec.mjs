@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures.mjs';
-import { failRequests, openActivityEditor, signInAndWaitForPlan } from './helpers.mjs';
+import { failRequests, isPhoneLayout, openActivityEditor, signInAndWaitForPlan } from './helpers.mjs';
 
 const firstCard = page => page.locator('.card').first();
 
@@ -170,6 +170,11 @@ test('the toast region is the only live region, and #app is not one', async ({ p
 });
 
 test('an activity added from the card menu is placed after the selected card', async ({ page, server }) => {
+  // Selecting a card replaces the + with the toolbar on a phone, so there is
+  // no add control to press while something is selected. The wide layout keeps
+  // its header button, and that is the one that says where the new activity
+  // lands.
+  test.skip(isPhoneLayout(page), 'the + is replaced by the toolbar at this width');
   await signInAndWaitForPlan(page);
 
   await page.locator('.card').nth(1).click();

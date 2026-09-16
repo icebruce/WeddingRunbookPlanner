@@ -79,6 +79,18 @@ export function supportsTouchDrag(browserName) {
   return browserName === 'chromium';
 }
 
+/**
+ * Which layout is on screen.
+ *
+ * Layout follows width — sheets and the selection toolbar below 720 px,
+ * dialogs and a header add button above it. Interaction follows input
+ * capability instead, which is why an iPad gets the wide layout but still
+ * selects a card to reveal its handles rather than hovering for them.
+ */
+export function isPhoneLayout(page) {
+  return page.viewportSize().width <= 720;
+}
+
 async function touchSession(page) {
   const client = await page.context().newCDPSession(page);
   return {

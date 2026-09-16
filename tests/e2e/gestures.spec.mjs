@@ -1,5 +1,5 @@
 import { test, expect, activity, seedPlan } from './fixtures.mjs';
-import { boxInView, centreOf, signInAndWaitForPlan, supportsTouchDrag, touchDrag, touchTap } from './helpers.mjs';
+import { boxInView, centreOf, isPhoneLayout, signInAndWaitForPlan, supportsTouchDrag, touchDrag, touchTap } from './helpers.mjs';
 
 const PX_PER_MIN = 4;
 
@@ -92,8 +92,11 @@ test('a selected card offers handles; a fixed one has no top handle', async ({ p
   await expect(card(page, 'ceremony').locator('.handle--bottom')).toHaveCount(1);
 });
 
-test('D2: the toolbar replaces the + and says what the card hid', async ({ page, server, isMobile }) => {
-  test.skip(!isMobile, 'the toolbar is the phone layout');
+test('D2: the toolbar replaces the + and says what the card hid', async ({ page, server }) => {
+  // The toolbar belongs to the narrow layout. An iPad is a touch device but a
+  // wide one: it gets the desktop layout, and reveals a card's handles by
+  // selection rather than by hover.
+  test.skip(!isPhoneLayout(page), 'the toolbar is the narrow layout');
   await server.seed({
     plan: seedPlan({
       activities: [
