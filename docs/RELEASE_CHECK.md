@@ -13,6 +13,7 @@ Run at the end of the redesign, against branch `claude/tender-ptolemy-auoyoi`.
 | `npm test` (unit) | 179 passed |
 | `npm run test:e2e` (desktop-chrome, iphone-13, pixel-7, ipad) | 786 passed, 0 failed |
 | `VISUAL=1 npx playwright test visual` | 64 passed, stable over three runs |
+| CI (Chromium **and** WebKit), commit `f915b56` | green |
 
 WebKit could not be downloaded in the development environment, so the
 `iphone-13` and `ipad` projects ran on Chromium with the iOS device
