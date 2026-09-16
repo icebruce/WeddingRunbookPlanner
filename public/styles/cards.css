@@ -197,12 +197,13 @@
 .card--line .card-grip .icon { display: none; }
 .card--line .card-grip { width: 18px; }
 
-/* Handles: a small bar inset from the card's own edge (docs/mockups/mobile.html),
-   not a shape floating outside it, with a larger invisible target laid over
-   it by a11y.css so a thumb still has 44 px to land on. The top one is
-   absent on a locked activity, which has no start to move. The button itself
-   stays fully transparent — only its ::after draws anything — so it never
-   looks bigger than the native bar it is.
+/* Handles: a hollow capsule centered astride the card's own edge
+   (docs/mockups/mobile.html), straddling the border line rather than sitting
+   inset from it, with a larger invisible target laid over it by a11y.css so
+   a thumb still has 44 px to land on. The top one is absent on a locked
+   activity, which has no start to move. The button itself stays fully
+   transparent — only its ::after draws anything — so it never looks bigger
+   than the capsule it is.
    They are in the DOM on every unlocked, draggable card (so a mouse can
    reveal them by hovering, with nothing to select first — FUNCTIONAL_SPEC
    §4.2), but hidden and inert until the card is selected, or — where there
@@ -227,9 +228,9 @@
   pointer-events: none;
   transition: opacity 140ms ease-out;
 }
-.handle::after { content: ''; width: 40px; height: 5px; border-radius: 3px; background: var(--sel); }
-.handle--top { top: 3px; }
-.handle--bottom { bottom: 3px; }
+.handle::after { content: ''; width: 28px; height: 12px; border-radius: 6px; background: var(--surface); border: 2px solid var(--sel); }
+.handle--top { top: -8px; }
+.handle--bottom { bottom: -8px; }
 .card.is-selected .handle { opacity: 1; pointer-events: auto; }
 
 .card:focus-visible { outline: 2px solid var(--sel); outline-offset: 2px; }
