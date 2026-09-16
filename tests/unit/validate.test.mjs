@@ -10,7 +10,6 @@ import {
   isFiveMinuteTime,
   isTime,
   normalizeDuration,
-  normalizeGap,
   roundTimeUp,
   validateActivity,
   validatePlan,
@@ -25,7 +24,8 @@ const activity = (extra = {}) => ({
   location: 'Church',
   people: ['Bride'],
   notes: '',
-  lockedStart: null,
+  start: 885,
+  locked: false,
   ...extra
 });
 
@@ -34,7 +34,6 @@ const plan = (extra = {}) => ({
   title: 'Wedding Day',
   coupleLabel: 'Our Wedding',
   date: '2026-11-21',
-  dayStart: '11:30',
   status: 'Working',
   activities: [activity()],
   ...extra
@@ -52,6 +51,7 @@ test('accepts the seed-shaped plan and returns a normalised copy', () => {
   assert.equal(result.title, 'Wedding Day');
   assert.equal(result.activities.length, 1);
   assert.equal(result.activities[0].duration, 60);
+  assert.equal(result.activities[0].start, 885);
 });
 
 test('F2: a whitespace-only title is rejected, not silently emptied', () => {
@@ -70,8 +70,7 @@ test('F15: the time format rejects impossible clock times', () => {
   assert.equal(isTime('24:00'), false);
   assert.equal(isTime('9:05'), false);
   assert.equal(isTime('14:45'), true);
-  rejects(plan({ dayStart: '99:99' }), 'dayStart');
-  rejects(plan({ activities: [activity({ lockedStart: '25:61' })] }), 'activities[0].lockedStart');
+  rejects(plan({ activities: [activity({ start: 'soon' })] }), 'activities[0].start');
 });
 
 test('F15: the status enum is closed', () => {
@@ -109,7 +108,7 @@ test('F15: unknown fields are dropped instead of stored', () => {
     activities: [activity({ colour: 'red', __proto__hack: 1 })]
   }));
   assert.equal('secret' in result, false);
-  assert.deepEqual(Object.keys(result.activities[0]).sort(), ['duration', 'id', 'location', 'lockedStart', 'notes', 'people', 'stage', 'title']);
+  assert.deepEqual(Object.keys(result.activities[0]).sort(), ['duration', 'id', 'location', 'locked', 'notes', 'people', 'stage', 'start', 'title']);
 });
 
 test('activity ids follow the documented pattern and stay unique', () => {
@@ -138,21 +137,16 @@ test('dates must be real calendar dates', () => {
   assert.equal(validatePlan(plan({ date: '2026-11-21' })).date, '2026-11-21');
 });
 
-test('fixed starts and dayStart must fall on a 5-minute mark', () => {
-  rejects(plan({ dayStart: '11:32' }), 'dayStart');
-  rejects(plan({ activities: [activity({ lockedStart: '14:47' })] }), 'activities[0].lockedStart');
-  assert.equal(validatePlan(plan({ activities: [activity({ lockedStart: '14:45' })] })).activities[0].lockedStart, '14:45');
+test('a start is rounded to the 5-minute grid rather than refused', () => {
+  assert.equal(validatePlan(plan({ activities: [activity({ start: 887 })] })).activities[0].start, 885);
+  rejects(plan({ activities: [activity({ start: -5 })] }), 'activities[0].start');
+  rejects(plan({ activities: [activity({ start: LIMITS.startMax + 10 })] }), 'activities[0].start');
 });
 
-test('gapBefore is stored only for flexible activities', () => {
-  const flexible = validatePlan(plan({ activities: [activity({ gapBefore: 12 })] }));
-  assert.equal(flexible.activities[0].gapBefore, 15, 'rounds up to the 5-minute grid');
-
-  const fixed = validatePlan(plan({ activities: [activity({ lockedStart: '14:45', gapBefore: 30 })] }));
-  assert.equal('gapBefore' in fixed.activities[0], false, 'a fixed start makes stored open time meaningless');
-
-  const none = validatePlan(plan({ activities: [activity({ gapBefore: 0 })] }));
-  assert.equal('gapBefore' in none.activities[0], false);
+test('an activity can be locked, which is only ever a plain boolean', () => {
+  assert.equal(validatePlan(plan({ activities: [activity({ locked: true })] })).activities[0].locked, true);
+  assert.equal(validatePlan(plan({ activities: [activity({ locked: 'yes' })] })).activities[0].locked, true);
+  assert.equal(validatePlan(plan({ activities: [activity({ locked: undefined })] })).activities[0].locked, false);
 });
 
 test('the view range may end after midnight, and sunset is display-only', () => {
@@ -193,8 +187,6 @@ test('F19: rounding helpers round up, without browser validation', () => {
   assert.equal(normalizeDuration(42), 45);
   assert.equal(normalizeDuration(0), 5);
   assert.equal(normalizeDuration(10_000), 720);
-  assert.equal(normalizeGap(-5), 0);
-  assert.equal(normalizeGap(7), 10);
   assert.equal(isFiveMinuteTime('14:45'), true);
   assert.equal(isFiveMinuteTime('14:47'), false);
 });

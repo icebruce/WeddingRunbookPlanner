@@ -1,27 +1,28 @@
 /**
  * The plan actions available in this stage.
  *
- * Each is a pure function of the plan; the scheduling operations from the
- * technical specification (resize, reorder around fixed activities, open-time
- * handling) arrive with the timeline work and register here alongside them.
+ * Each is a pure function of the plan. Nothing here reports "how far the rest
+ * of the day moved" any more — there is no rest-of-the-day to move. The one
+ * exception is `activity.moveGroup`, which is the one deliberate way several
+ * activities move at once.
  */
 import { defineAction } from './state.js';
 import { normalizeDuration } from './validate.js';
-import { buildSchedule, minutesToTime } from './schedule.js';
+import { buildSchedule } from './schedule.js';
 import {
   addInOpenTime,
   duplicate,
   extendPrevious,
-  fix,
   insertAfter,
   keepAsBuffer,
-  move,
+  moveGroup,
+  moveTo,
   remove,
   resizeBottom,
   resizeTop,
   setSettings,
   setStage,
-  unfix,
+  toggleLock,
   update
 } from './operations.js';
 
@@ -31,21 +32,20 @@ function findActivity(plan, id) {
 
 /**
  * Most actions are an operation plus a label. The operation decides whether
- * anything changed and how far the rest of the day moved; the label is what
- * the undo toast says.
+ * anything changed; the label is what the undo toast says.
  */
 function fromOperation(run, label) {
   return (plan, payload) => {
     const result = run(plan, payload);
     if (!result) return null;
     const activity = findActivity(plan, payload.id) || result.plan.activities.find(a => a.id === result.activityId);
-    return { plan: result.plan, shifted: result.shifted, label: label(activity, payload, result) };
+    return { plan: result.plan, label: label(activity, payload, result) };
   };
 }
 
 defineAction('activity.add', (plan, { activity, afterId = null }) => {
   const result = insertAfter(plan, afterId, activity);
-  return { plan: result.plan, shifted: result.shifted, label: `Added ${activity.title}` };
+  return { plan: result.plan, label: `Added ${activity.title}` };
 });
 
 defineAction('activity.update', fromOperation(
@@ -85,19 +85,20 @@ defineAction('activity.resizeTop', fromOperation(
   activity => `Resized ${activity.title}`
 ));
 
-defineAction('activity.move', fromOperation(
-  (plan, { id, toIndex }) => move(plan, id, toIndex),
+defineAction('activity.moveTo', fromOperation(
+  (plan, { id, start }) => moveTo(plan, id, start),
   activity => `Moved ${activity.title}`
 ));
 
-defineAction('activity.fix', fromOperation(
-  (plan, { id }) => fix(plan, id),
-  activity => `Fixed ${activity.title}`
-));
+defineAction('activity.moveGroup', (plan, { ids, deltaMinutes }) => {
+  const result = moveGroup(plan, ids, deltaMinutes);
+  if (!result) return null;
+  return { plan: result.plan, label: `Moved ${result.movedCount} ${result.movedCount === 1 ? 'activity' : 'activities'}` };
+});
 
-defineAction('activity.unfix', fromOperation(
-  (plan, { id }) => unfix(plan, id),
-  activity => `Unfixed ${activity.title}`
+defineAction('activity.toggleLock', fromOperation(
+  (plan, { id }) => toggleLock(plan, id),
+  activity => (activity?.locked ? `Unlocked ${activity.title}` : `Locked ${activity.title}`)
 ));
 
 defineAction('activity.duplicate', fromOperation(
@@ -120,11 +121,6 @@ defineAction('openTime.add', fromOperation(
   (_, payload) => `Added ${payload.activity.title || 'activity'}`
 ));
 
-/*
- * Settings go through the same operation as everything else, because they are
- * not all cosmetic: moving the first start time moves every flexible activity
- * with it, and the toast has to say so.
- */
 defineAction('plan.settings', (plan, { changes }) => {
   const same = Object.entries(changes).every(([key, value]) => (plan[key] ?? null) === (value ?? null));
   if (same) return null;

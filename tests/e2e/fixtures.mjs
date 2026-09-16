@@ -16,16 +16,17 @@ export function seedPlan(overrides = {}) {
   return { ...structuredClone(SEED_PLAN), ...overrides };
 }
 
-export function activity(id, duration, extra = {}) {
+export function activity(id, start, duration, extra = {}) {
   return {
     id,
     title: id,
+    start,
     duration,
     stage: 'preparation',
     location: '',
     people: [],
     notes: '',
-    lockedStart: null,
+    locked: false,
     ...extra
   };
 }

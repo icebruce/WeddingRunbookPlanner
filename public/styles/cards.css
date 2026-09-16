@@ -4,7 +4,7 @@
  * A card is exactly as tall as its duration. What it shows is decided by
  * measuring it (fit.js) and dropping rows in one order — people, stage,
  * location, progress, time — until the content fits. The title and any warning
- * never drop. Three faint dots in the corner say something was hidden.
+ * never drop.
  */
 
 .card {
@@ -19,8 +19,8 @@
      is clipped by .card-body instead. */
   -webkit-touch-callout: none;
   user-select: none;
-  /* A swipe that starts on a card scrolls the day. Only the handles take
-     touch, and only while the card is selected (F5). */
+  /* A swipe that starts on a card scrolls the day. Only the handles and the
+     grip take touch (F5). */
   touch-action: pan-y;
   /* The ring and the hover lift are both box-shadow, so they are one
      transition. Nothing else about a card moves under its own steam: while an
@@ -28,10 +28,11 @@
   transition: box-shadow 180ms ease-out;
 }
 
-/* The stage bar: phase colour, inset so it scales with the card. */
+/* The stage bar: phase colour, inset so it scales with the card, sitting just
+   after the grip so the two never overlap. */
 .card-rule {
   position: absolute;
-  left: 10px;
+  left: 26px;
   top: 8px;
   bottom: 8px;
   width: 3px;
@@ -39,18 +40,25 @@
   background: var(--phase);
 }
 .card--line .card-rule { top: 5px; bottom: 5px; }
+/* Locked reads as a structural difference, not a colour — the phase colour is
+   what says what kind of activity this is, and locked is not a phase. */
+.card.is-locked .card-rule { width: 4px; background: var(--fixed); }
 
 .card-body {
   position: absolute;
   inset: 0;
-  padding: 9px 12px 9px 26px;
+  padding: 9px 12px 9px 42px;
   display: flex;
   flex-direction: column;
   gap: 4px;
   overflow: hidden;
   border-radius: var(--radius);
 }
-.card--small .card-body { padding: 7px 12px 7px 26px; gap: 2px; }
+/* Tight enough at 15–29 minutes that the wider gutter the always-visible grip
+   needs (42px, up from 26px) has to be paid for somewhere: less top and
+   bottom padding, so the title and time still both fit before anything is
+   dropped. */
+.card--small .card-body { padding: 5px 12px 5px 42px; gap: 2px; }
 
 /* On a phone location and people are two rows like any other. */
 .card-meta { display: contents; }
@@ -73,8 +81,7 @@
 
 .glyph { display: inline-flex; flex: none; }
 .glyph .icon { width: 15px; height: 15px; }
-.glyph--fixed { color: var(--fixed); }
-.glyph--note { color: var(--faint); }
+.glyph--note { color: var(--faint); cursor: default; }
 
 .card-time {
   font-size: 15px;
@@ -95,7 +102,10 @@
 
 /* One-line cards: ten minutes or less is 40 px, and a title plus its start
    time is all that fits. */
-.card--line .card-body { flex-direction: row; align-items: center; gap: 6px; padding: 0 12px 0 26px; }
+/* At its smallest a card is 40 px tall — just the lock and edit buttons side
+   by side — so the title and time reserve room for them on the right rather
+   than running underneath. */
+.card--line .card-body { flex-direction: row; align-items: center; gap: 6px; padding: 0 78px 0 42px; }
 .card--line .card-title { font-size: 15px; line-height: 18px; }
 .card-line-time { margin-left: auto; color: var(--soft); font-size: 13px; font-variant-numeric: tabular-nums; }
 
@@ -120,31 +130,27 @@
   align-items: center;
   gap: 5px;
   height: 26px;
-  padding: 0 9px;
+  padding: 0 10px;
   border: 0;
   border-radius: 13px;
   background: var(--phase-tint);
   color: var(--ink-2);
   font-size: 13px;
+  line-height: 1;
   font-weight: 550;
   white-space: nowrap;
 }
 /* On a dark surface the raw phase colour is too dark to see, so it is
    lightened towards white. */
-.stage-tag .icon { width: 14px; height: 14px; color: var(--phase); }
+.stage-tag .icon { width: 14px; height: 14px; color: var(--phase); flex: none; }
 :root[data-theme="dark"] .stage-tag { background: color-mix(in srgb, var(--phase) 22%, var(--surface)); }
 :root[data-theme="dark"] .stage-tag .icon { color: color-mix(in srgb, var(--phase) 70%, #fff); }
 .stage-tag--button { cursor: pointer; font-family: inherit; }
 .stage-tag--button .icon:last-child { width: 12px; height: 12px; color: var(--soft); }
 
-/* Something was hidden. Three dots, not a truncation mark on the text. */
-.card-dots { position: absolute; right: 9px; bottom: 7px; display: none; gap: 2.5px; }
-.card-dots i { width: 3.5px; height: 3.5px; border-radius: 50%; background: var(--dots); }
-.card.is-clipped .card-dots { display: flex; }
-
 .card-controls { position: absolute; top: 4px; right: 4px; display: flex; align-items: center; gap: 2px; }
 .card-controls .lock-button,
-.card-controls .card-menu-toggle {
+.card-controls .card-edit {
   width: 34px;
   height: 34px;
   display: grid;
@@ -155,17 +161,41 @@
   color: var(--faint);
 }
 .card-controls .icon { width: 18px; height: 18px; }
-.lock-button.is-fixed { color: var(--fixed); }
+.card-controls .lock-button:hover,
+.card-controls .card-edit:hover { background: var(--fill); color: var(--ink-2); }
+/* Locked is a strong, filled cue — the thing this app used to say in red,
+   said instead in ink so red still means only one thing (conflict). */
+.lock-button.is-locked { background: var(--fixed); color: var(--bg); }
+.lock-button.is-locked:hover { background: var(--fixed); opacity: .85; }
 
-/* The grip is the only place a drag starts with a mouse. */
-/* The body is painted after the grip, so without a stacking order of its own
-   the grip is laid out but never receives a pointer. */
-.card-grip { position: absolute; z-index: 3; left: 0; top: 0; bottom: 0; width: 22px; display: none; place-items: center; color: var(--dots); cursor: grab; }
-.card-reorder { position: absolute; top: 0; right: 0; width: 44px; height: 44px; display: grid; place-items: center; color: var(--sel); touch-action: none; }
-.card-reorder .icon { width: 20px; height: 20px; }
+/* The grip: always visible, never only on hover — a phone has no hover to
+   wait for. It scales with the card, because a drag target on a two-hour
+   card and a drag target on a fifteen-minute one are not the same size, and
+   pretending otherwise is why it used to disappear on short cards. */
+.card-grip {
+  position: absolute;
+  z-index: 3;
+  left: 4px;
+  top: 4px;
+  bottom: 4px;
+  width: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--dots);
+  cursor: grab;
+  touch-action: none;
+}
+.card-grip:hover { background: var(--fill); color: var(--soft); }
+.card-grip .icon { width: 14px; height: 14px; }
+/* A ten-minute card has no room for the dots; the bar alone still marks
+   where to grab it. */
+.card--line .card-grip .icon { display: none; }
+.card--line .card-grip { width: 18px; }
 
 /* Handles: a small visible bar with a large invisible target, and only on the
-   selected card. The top one is absent on a fixed activity, which has no
+   selected card. The top one is absent on a locked activity, which has no
    start to move. */
 /* They are added to the page rather than revealed, so they fade in with an
    animation; a transition would have nothing to run from. */
@@ -190,21 +220,26 @@
 .card:focus-visible { outline: 2px solid var(--sel); outline-offset: 2px; }
 .card.is-selected { box-shadow: 0 0 0 2px var(--sel), 0 8px 22px rgba(10, 108, 255, .14); }
 .card.is-selected .card-body { padding-right: 44px; }
+/* A group selection reads differently from a single one: this card will move
+   together with others, not open for editing on its own. */
+.card.is-group-selected { box-shadow: 0 0 0 2px var(--sel), 0 0 0 5px var(--sel-tint); }
 .card.is-faded { opacity: .32; }
 .card.is-menu-open { z-index: 20; }
 
-/* Conflict: both cards keep their real times and sit side by side, and the
-   part that overlaps is hatched rather than merely outlined. */
-.card.is-overrun,
-.card.is-conflicted { box-shadow: 0 0 0 1px rgba(208, 52, 44, .45), var(--shadow-card); }
-.card.is-overrun::after {
+/*
+ * Overlap: two activities that share real minutes, drawn side by side rather
+ * than stacked on top of each other, with the exact shared window hatched —
+ * not the whole card, only the part that truly collides.
+ */
+.card.is-overlap { box-shadow: 0 0 0 1px rgba(208, 52, 44, .45), var(--shadow-card); }
+.card.is-overlap.is-selected { box-shadow: 0 0 0 1px rgba(208, 52, 44, .45), 0 0 0 3px var(--sel), 0 8px 22px rgba(10, 108, 255, .14); }
+.card.is-overlap::after {
   content: '';
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 0;
-  height: var(--overrun-height, 0);
-  border-radius: 0 0 var(--radius) var(--radius);
+  top: var(--overlap-top, 0);
+  height: var(--overlap-height, 0);
   pointer-events: none;
   background: repeating-linear-gradient(135deg,
     rgba(208, 52, 44, .10) 0 6px,
@@ -212,8 +247,8 @@
 }
 .card--narrow .card-location span { white-space: normal; }
 
-/* Menus anchored to a card. */
-.card-menu, .stage-menu {
+/* The stage-change menu, anchored to a card. */
+.stage-menu {
   position: absolute;
   z-index: 60;
   min-width: 200px;
@@ -221,10 +256,12 @@
   border-radius: 14px;
   background: var(--surface);
   box-shadow: var(--shadow-float);
+  top: 32px;
+  left: 0;
+  max-height: 320px;
+  overflow: auto;
 }
-.card-menu { top: 40px; right: 4px; }
-.stage-menu { top: 32px; left: 0; max-height: 320px; overflow: auto; }
-.card-menu button, .stage-menu-option {
+.stage-menu-option {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -239,13 +276,12 @@
   font-size: 15px;
   text-align: left;
 }
-.card-menu button .icon, .stage-menu-option .icon { width: 17px; height: 17px; color: var(--soft); }
-.stage-menu-option .icon { color: var(--phase); }
+.stage-menu-option .icon { width: 17px; height: 17px; color: var(--phase); }
 .stage-menu-option.is-current { background: var(--fill); font-weight: 600; }
-.card-menu button.is-danger { color: var(--bad-text); }
-.card-menu button.is-danger .icon { color: var(--bad-text); }
 
-/* Where there is a mouse, controls appear on hover instead of on selection. */
+/* Where there is a mouse, the lock and edit buttons appear on hover instead
+   of sitting on the card at all times; the grip does not — it is the drag
+   affordance, and it has to be visible before you have found it. */
 @media (hover: hover) and (pointer: fine) {
   .card-controls { opacity: 0; transition: opacity 140ms ease-out; }
   .card:hover .card-controls,
@@ -253,8 +289,6 @@
   .card.is-selected .card-controls,
   .card.is-menu-open .card-controls { opacity: 1; }
   .card:hover { box-shadow: var(--shadow-hover); }
-  .card-grip { display: grid; }
-  .card-body { padding-left: 34px; }
 }
 
 /*
@@ -266,7 +300,7 @@
  * over its duration, 138 for the widest stage tag) so that the titles of
  * neighbouring cards line up down the page.
  *
- * Conflict columns keep the phone's stack: a card sharing the width with
+ * Overlap columns keep the phone's stack: a card sharing the width with
  * another has no room for three columns.
  */
 @media (min-width: 721px) {
@@ -281,9 +315,9 @@
     row-gap: 6px;
     align-items: start;
     align-content: start;
-    /* The lock and the ⋯ are positioned over the card, not laid out in it;
-       this is the column they sit in. */
-    padding: 10px 78px 10px 26px;
+    /* The lock and the edit button are positioned over the card, not laid
+       out in it; this is the column they sit in. */
+    padding: 10px 78px 10px 42px;
   }
   .card:not(.card--narrow):not(.card--line) .card-time {
     grid-column: 1;
@@ -319,12 +353,11 @@
 
   /* A one-line card leads with its time too, so the columns still line up. */
   .card--line .card-line-time { order: -1; width: 132px; margin-left: 0; font-size: 13px; }
-  .card--line .card-body { padding-left: 26px; gap: 14px; }
+  .card--line .card-body { padding-left: 42px; gap: 14px; }
 }
 
 /* Menus live above the cards, because a card is clipped to its own height. */
 .card-menu-layer { position: absolute; z-index: 60; }
-.card-menu-layer .card-menu,
 .card-menu-layer .stage-menu { position: static; }
 
 /* ---- the day itself ------------------------------------------------------ */

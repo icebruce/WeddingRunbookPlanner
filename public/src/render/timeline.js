@@ -16,16 +16,12 @@ function ruler(layout) {
     `<div class="tick tick--${tick.kind}" style="top:${tick.top}px"><s></s>${tick.labelled ? `<b>${escapeHtml(tickLabel(tick.minute))}</b>` : ''}</div>`
   ).join('');
 
-  const rails = layout.conflictRails.map(rail =>
-    `<div class="conflict-rail" style="top:${rail.top}px;height:${rail.height}px" title="${escapeHtml(`${rail.minutes} min overlap`)}"></div>`
-  ).join('');
-
   const sunset = layout.sunset
     ? `<div class="sunset-line" style="top:${layout.sunset.top}px"></div>
        <div class="sunset-pill" style="top:${layout.sunset.top - 11}px">${icon('sun')}<span>${escapeHtml(formatTime(layout.sunset.minutes, { meridiem: false }))}</span></div>`
     : '';
 
-  return `${lines}${rails}${sunset}`;
+  return `${lines}${sunset}`;
 }
 
 /**
@@ -44,19 +40,16 @@ function openTimeBlock(gap, viewOnly) {
 }
 
 /**
- * The open menu, drawn above the cards rather than inside one. A card is
+ * The stage menu, drawn above the cards rather than inside one. A card is
  * clipped to its duration, so a menu inside a short card would be cut off.
  */
 function menuLayer(layout, ui) {
-  const match = /^(stage|card-menu):(.+)$/.exec(ui.openMenu || '');
+  const match = /^stage:(.+)$/.exec(ui.openMenu || '');
   if (!match) return '';
-  const [, kind, id] = match;
-  const card = layout.cards.find(entry => entry.item.id === id);
+  const card = layout.cards.find(entry => entry.item.id === match[1]);
   if (!card) return '';
 
-  const top = card.top + (kind === 'stage' ? 34 : 40);
-  const side = kind === 'stage' ? 'left:8px' : 'right:4px';
-  return `<div class="card-menu-layer" style="top:${top}px;${side}">${renderCardMenu(card.item, kind)}</div>`;
+  return `<div class="card-menu-layer" style="top:${card.top + 34}px;left:8px">${renderCardMenu(card.item)}</div>`;
 }
 
 /**

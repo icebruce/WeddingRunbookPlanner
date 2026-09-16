@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures.mjs';
-import { failRequests, isPhoneLayout, openActivityEditor, signInAndWaitForPlan } from './helpers.mjs';
+import { failRequests, isPhoneLayout, openActivityEditor, setPicker, signInAndWaitForPlan } from './helpers.mjs';
 
 const firstCard = page => page.locator('.card').first();
 
@@ -79,10 +79,6 @@ test('F26: Escape closes every menu and returns focus to what opened it', async 
   await page.keyboard.press('Escape');
   await expect(page.locator('.stage-menu')).toHaveCount(0);
 
-  await firstCard(page).locator('.card-menu-toggle').click();
-  await expect(page.locator('.card-menu')).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.locator('.card-menu')).toHaveCount(0);
 });
 
 test('F26: a click elsewhere closes an open menu', async ({ page }) => {
@@ -126,18 +122,13 @@ test('a person added with Enter is kept too, and duplicates are ignored', async 
   expect(people.filter(person => person.toLowerCase() === 'florist')).toHaveLength(1);
 });
 
-test('F19: a fixed time off the 5-minute grid rounds up, with no browser message', async ({ page, server }) => {
+test('F19: a start set through the picker lands exactly, with no browser message', async ({ page, server }) => {
   await signInAndWaitForPlan(page);
 
   await openActivityEditor(page, firstCard(page));
   const dialog = page.locator('#activity-dialog');
-  // Flexible and Fixed are one choice, not a switch with a field beside it.
-  await dialog.locator('.segmented label', { hasText: 'Fixed' }).click();
-  await expect(dialog.locator('.timing-fixed')).toBeVisible();
-  await dialog.locator('input[name="lockedStart"]').fill('14:47');
+  await setPicker(page, dialog.locator('input[name="start"]'), '2026-11-21 09:03');
 
-  // The browser must not be the one objecting: no step attribute, no bubble.
-  await expect(dialog.locator('input[name="lockedStart"]')).not.toHaveAttribute('step', /.*/);
   const valid = await dialog.locator('#activity-form').evaluate(form => form.checkValidity());
   expect(valid).toBe(true);
 
@@ -145,10 +136,11 @@ test('F19: a fixed time off the 5-minute grid rounds up, with no browser message
   await expect(dialog).toHaveCount(0);
   await expect(page.locator('.save-indicator')).toHaveText('Saved');
 
-  expect((await server.read()).plan.activities[0].lockedStart).toBe('14:50');
+  // 9:02 rounds up to the 5-minute grid, with no browser validation message.
+  expect((await server.read()).plan.activities[0].start).toBe(9 * 60 + 5);
   // The card shows a range, and a range drops the first AM/PM when both
-  // halves share it: "2:50 – 3:35 PM".
-  await expect(firstCard(page)).toContainText('2:50 – 3:35 PM');
+  // halves share it: "9:05 – 9:50 AM".
+  await expect(page.locator('.card[data-activity-id="getting-ready"]')).toContainText('9:05 – 9:50 AM');
 });
 
 test('F19: a typed duration rounds up instead of being refused', async ({ page, server }) => {
@@ -219,7 +211,9 @@ test('a card opens its editor and gets focus back when the sheet closes', async 
 
   await page.locator('#activity-dialog .sheet-close').click();
   await expect(page.locator('#activity-dialog')).toHaveCount(0);
-  await expect(page.locator('.card').nth(1)).toBeFocused();
+  // Focus returns to the control that was actually pressed — the card's own
+  // edit button — not to the card as a whole.
+  await expect(page.locator('.card').nth(1).locator('.card-edit')).toBeFocused();
 });
 
 test('exactly one add control is offered, and the header one says where it lands', async ({ page }) => {
@@ -238,18 +232,6 @@ test('exactly one add control is offered, and the header one says where it lands
   } else {
     await expect(page.locator('.add-hint')).toBeHidden();
   }
-});
-
-test('F26: Escape on a card menu returns focus to the button that opened it', async ({ page }) => {
-  await signInAndWaitForPlan(page);
-
-  const toggle = page.locator('.card').first().locator('.card-menu-toggle');
-  await toggle.click();
-  await expect(page.locator('.card-menu')).toBeVisible();
-
-  await page.keyboard.press('Escape');
-  await expect(page.locator('.card-menu')).toHaveCount(0);
-  await expect(page.locator('.card').first().locator('.card-menu-toggle')).toBeFocused();
 });
 
 test('F26: Escape on the stage menu returns focus to the stage tag', async ({ page }) => {

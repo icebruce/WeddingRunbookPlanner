@@ -24,7 +24,7 @@ function editingButtons(item, id) {
   return BUTTONS.map(button => {
     if (button.action === 'lock') {
       return `<button type="button" class="toolbar-button" data-action="lock" data-id="${id}" data-focus-key="toolbar-lock">
-        ${icon(item.isFixed ? 'lock' : 'lock-open')}<span>${item.isFixed ? 'Unlock' : 'Lock'}</span></button>`;
+        ${icon(item.locked ? 'lock' : 'lock-open')}<span>${item.locked ? 'Unlock' : 'Lock'}</span></button>`;
     }
     if (button.action === 'menu') {
       return `<button type="button" class="toolbar-button" data-action="menu" data-menu="stage:${id}" data-focus-key="toolbar-stage" aria-haspopup="menu">

@@ -2,6 +2,7 @@ import { test, expect, activity, seedPlan } from './fixtures.mjs';
 import { signInAndWaitForPlan } from './helpers.mjs';
 
 const PX_PER_MIN = 4;
+const INSET = 2;
 const T = (h, m = 0) => h * 60 + m;
 
 /** Reads a card's real position on screen, relative to the timeline. */
@@ -26,12 +27,12 @@ async function geometry(page) {
 
 async function originMinute(page) {
   // The first tick's minute and position give the mapping from time to pixels.
-  return page.evaluate(() => {
+  return page.evaluate(inset => {
     const plan = document.querySelector('.timeline-plan');
     const planTop = plan.getBoundingClientRect().top;
     const first = document.querySelector('.card');
-    return Number(first.dataset.start) - (first.getBoundingClientRect().top - planTop - 1) / 4;
-  });
+    return Number(first.dataset.start) - (first.getBoundingClientRect().top - planTop - inset) / 4;
+  }, INSET);
 }
 
 test('D8: every card edge is within a pixel of its own time', async ({ page, server }) => {
@@ -40,29 +41,29 @@ test('D8: every card edge is within a pixel of its own time', async ({ page, ser
 
   const from = await originMinute(page);
   for (const card of await geometry(page)) {
-    expect(Math.abs(card.top - ((card.start - from) * PX_PER_MIN + 1)), `${card.id} top`).toBeLessThanOrEqual(1);
-    expect(Math.abs(card.bottom - ((card.end - from) * PX_PER_MIN - 1)), `${card.id} bottom`).toBeLessThanOrEqual(1);
+    expect(Math.abs(card.top - ((card.start - from) * PX_PER_MIN + INSET)), `${card.id} top`).toBeLessThanOrEqual(1);
+    expect(Math.abs(card.bottom - ((card.end - from) * PX_PER_MIN - INSET)), `${card.id} bottom`).toBeLessThanOrEqual(1);
   }
 });
 
-test('F4: a fixed 4:00 PM activity is drawn at 4:00 PM, whatever is above it', async ({ page, server }) => {
+test('F4: a locked 4:00 PM activity is drawn at 4:00 PM, whatever is above it', async ({ page, server }) => {
   await server.seed();
   await signInAndWaitForPlan(page);
 
   const from = await originMinute(page);
   const cocktail = (await geometry(page)).find(card => card.id === 'cocktail-hour');
   expect(cocktail.start).toBe(T(16));
-  expect(Math.abs(cocktail.top - ((T(16) - from) * PX_PER_MIN + 1))).toBeLessThanOrEqual(1);
+  expect(Math.abs(cocktail.top - ((T(16) - from) * PX_PER_MIN + INSET))).toBeLessThanOrEqual(1);
 });
 
 test('short cards keep their true height rather than a readable minimum', async ({ page, server }) => {
   await server.seed({
     plan: seedPlan({
       activities: [
-        activity('a', 45, { title: 'Getting Ready' }),
-        activity('bouquet', 5, { title: 'Bouquet handoff' }),
-        activity('b', 10, { title: 'Quick change' }),
-        activity('c', 30, { title: 'Portraits' })
+        activity('a', T(10), 45, { title: 'Getting Ready' }),
+        activity('bouquet', T(10, 45), 5, { title: 'Bouquet handoff' }),
+        activity('b', T(10, 50), 10, { title: 'Quick change' }),
+        activity('c', T(11), 30, { title: 'Portraits' })
       ]
     })
   });
@@ -70,18 +71,18 @@ test('short cards keep their true height rather than a readable minimum', async 
 
   const cards = await geometry(page);
   const bouquet = cards.find(card => card.id === 'bouquet');
-  expect(Math.round(bouquet.bottom - bouquet.top)).toBe(5 * PX_PER_MIN - 2);
+  expect(Math.round(bouquet.bottom - bouquet.top)).toBe(5 * PX_PER_MIN - INSET * 2);
 
   // And the card after it still starts on its own line.
   const from = await originMinute(page);
   const next = cards.find(card => card.id === 'b');
-  expect(Math.abs(next.top - ((next.start - from) * PX_PER_MIN + 1))).toBeLessThanOrEqual(1);
+  expect(Math.abs(next.top - ((next.start - from) * PX_PER_MIN + INSET))).toBeLessThanOrEqual(1);
 });
 
 test('no two full-width cards overlap, in a dense five-minute plan', async ({ page, server }) => {
   await server.seed({
     plan: seedPlan({
-      activities: Array.from({ length: 12 }, (_, i) => activity(`a${i}`, 5, { title: `Step ${i + 1}` }))
+      activities: Array.from({ length: 12 }, (_, i) => activity(`a${i}`, T(9) + i * 5, 5, { title: `Step ${i + 1}` }))
     })
   });
   await signInAndWaitForPlan(page);
@@ -125,15 +126,17 @@ test('the ruler has a spine and the day ends with a marker', async ({ page, serv
 
 test('D9: rows drop in order as cards get shorter', async ({ page, server }) => {
   const durations = [45, 30, 25, 20, 15, 10, 5];
-  await server.seed({
-    plan: seedPlan({
-      activities: durations.map((duration, i) => activity(`d${duration}`, duration, {
-        title: `Activity ${i + 1}`,
-        location: 'St. Peter and Paul Orthodox Sobor',
-        people: ['Bride', 'Groom', 'Photographer']
-      }))
-    })
+  let cursor = T(9);
+  const activities = durations.map((duration, i) => {
+    const a = activity(`d${duration}`, cursor, duration, {
+      title: `Activity ${i + 1}`,
+      location: 'St. Peter and Paul Orthodox Sobor',
+      people: ['Bride', 'Groom', 'Photographer']
+    });
+    cursor += duration;
+    return a;
   });
+  await server.seed({ plan: seedPlan({ activities }) });
   await signInAndWaitForPlan(page);
   await page.waitForTimeout(300);
 
@@ -168,12 +171,12 @@ test('D9: rows drop in order as cards get shorter', async ({ page, server }) => 
   }
 });
 
-test('the dots appear exactly when something is hidden', async ({ page, server }) => {
+test('a card says whether it had to hide anything', async ({ page, server }) => {
   await server.seed({
     plan: seedPlan({
       activities: [
-        activity('roomy', 180, { title: 'Dancing', location: 'Le Richmond', people: ['All Guests'] }),
-        activity('tight', 15, { title: 'Quick change', location: 'Le Richmond', people: ['Bride', 'Groom'] })
+        activity('roomy', T(10), 180, { title: 'Dancing', location: 'Le Richmond', people: ['All Guests'] }),
+        activity('tight', T(13), 15, { title: 'Quick change', location: 'Le Richmond', people: ['Bride', 'Groom'] })
       ]
     })
   });
@@ -183,22 +186,17 @@ test('the dots appear exactly when something is hidden', async ({ page, server }
   const state = await page.evaluate(() =>
     Object.fromEntries([...document.querySelectorAll('.card')].map(card => [
       card.dataset.activityId,
-      {
-        clipped: card.classList.contains('is-clipped'),
-        dotsVisible: getComputedStyle(card.querySelector('.card-dots')).display !== 'none'
-      }
+      { clipped: card.classList.contains('is-clipped') }
     ])));
 
   expect(state.roomy.clipped).toBe(false);
-  expect(state.roomy.dotsVisible).toBe(false);
   expect(state.tight.clipped).toBe(true);
-  expect(state.tight.dotsVisible).toBe(true);
 });
 
 test('D25: people show as names, and the overflow is counted', async ({ page, server }) => {
   await server.seed({
     plan: seedPlan({
-      activities: [activity('portraits', 90, {
+      activities: [activity('portraits', T(10), 90, {
         title: 'Getting-ready Portraits',
         people: ['Bride', 'Photographer', 'Mothers', 'Sister', 'Maid of Honour', 'Grandma', 'Cousin Léa']
       })]
@@ -224,10 +222,9 @@ test('D25: people show as names, and the overflow is counted', async ({ page, se
 test('open time is drawn on its own times and can be acted on', async ({ page, server }) => {
   await server.seed({
     plan: seedPlan({
-      dayStart: '13:00',
       activities: [
-        activity('arrive', 30, { title: 'Arrival & Buffer' }),
-        activity('ceremony', 60, { title: 'Ceremony', lockedStart: '14:45' })
+        activity('arrive', T(13), 30, { title: 'Arrival & Buffer' }),
+        activity('ceremony', T(14, 45), 60, { title: 'Ceremony', locked: true })
       ]
     })
   });
@@ -244,17 +241,16 @@ test('open time is drawn on its own times and can be acted on', async ({ page, s
     const rect = document.querySelector('.open-time').getBoundingClientRect();
     return { top: rect.top - plan.top, bottom: rect.bottom - plan.top };
   });
-  expect(Math.abs(box.top - ((T(13, 30) - from) * PX_PER_MIN + 1))).toBeLessThanOrEqual(1);
-  expect(Math.abs(box.bottom - ((T(14, 45) - from) * PX_PER_MIN - 1))).toBeLessThanOrEqual(1);
+  expect(Math.abs(box.top - ((T(13, 30) - from) * PX_PER_MIN + INSET))).toBeLessThanOrEqual(1);
+  expect(Math.abs(box.bottom - ((T(14, 45) - from) * PX_PER_MIN - INSET))).toBeLessThanOrEqual(1);
 });
 
 test('short open time collapses to one line', async ({ page, server }) => {
   await server.seed({
     plan: seedPlan({
-      dayStart: '14:00',
       activities: [
-        activity('arrive', 30, { title: 'Arrival' }),
-        activity('ceremony', 60, { title: 'Ceremony', lockedStart: '14:40' })
+        activity('arrive', T(14), 30, { title: 'Arrival' }),
+        activity('ceremony', T(14, 40), 60, { title: 'Ceremony', locked: true })
       ]
     })
   });
@@ -264,14 +260,13 @@ test('short open time collapses to one line', async ({ page, server }) => {
   await expect(page.locator('.open-time')).toContainText('10 min open');
 });
 
-test('a conflict puts the two activities in columns, both on their real times', async ({ page, server }) => {
+test('an overlap puts the two activities in lanes, both on their real times', async ({ page, server }) => {
   await server.seed({
     plan: seedPlan({
-      dayStart: '13:00',
       activities: [
-        activity('travel', 120, { title: 'Travel to Church' }),
-        activity('ceremony', 60, { title: 'Ceremony', lockedStart: '14:45' }),
-        activity('after', 30, { title: 'Photos' })
+        activity('travel', T(13), 120, { title: 'Travel to Church' }),
+        activity('ceremony', T(14, 45), 60, { title: 'Ceremony', locked: true }),
+        activity('after', T(15, 45), 30, { title: 'Photos' })
       ]
     })
   });
@@ -289,21 +284,19 @@ test('a conflict puts the two activities in columns, both on their real times', 
   expect(after.right - after.left).toBeGreaterThan(travel.right - travel.left);
 
   const from = await originMinute(page);
-  expect(Math.abs(ceremony.top - ((T(14, 45) - from) * PX_PER_MIN + 1))).toBeLessThanOrEqual(1);
+  expect(Math.abs(ceremony.top - ((T(14, 45) - from) * PX_PER_MIN + INSET))).toBeLessThanOrEqual(1);
 
-  await expect(page.locator('.card[data-activity-id="travel"] .card-warn')).toContainText('Runs 15 min into Ceremony');
-  await expect(page.locator('.card[data-activity-id="ceremony"] .card-warn')).toContainText('Fixed · 15 min overlap');
-  await expect(page.locator('.conflict-rail')).toHaveCount(1);
+  await expect(page.locator('.card[data-activity-id="travel"] .card-warn')).toContainText('Overlaps 15 min with Ceremony');
+  await expect(page.locator('.card[data-activity-id="ceremony"] .card-warn')).toContainText('Overlaps 15 min with Travel to Church');
 });
 
 test('D11: the summary counts the day and offers the problems as links', async ({ page, server }) => {
   await server.seed({
     plan: seedPlan({
-      dayStart: '13:00',
       activities: [
-        activity('travel', 120, { title: 'Travel' }),
-        activity('ceremony', 60, { title: 'Ceremony', lockedStart: '14:45' }),
-        activity('gap-after', 30, { title: 'Photos', lockedStart: '16:30' })
+        activity('travel', T(13), 120, { title: 'Travel' }),
+        activity('ceremony', T(14, 45), 60, { title: 'Ceremony', locked: true }),
+        activity('gap-after', T(16, 30), 30, { title: 'Photos', locked: true })
       ]
     })
   });
@@ -318,10 +311,9 @@ test('D11: the summary counts the day and offers the problems as links', async (
 test('a summary link scrolls to the thing it names', async ({ page, server }) => {
   await server.seed({
     plan: seedPlan({
-      dayStart: '11:00',
       activities: [
-        ...Array.from({ length: 6 }, (_, i) => activity(`filler${i}`, 60, { title: `Filler ${i}` })),
-        activity('late', 30, { title: 'Late fixed', lockedStart: '19:00' })
+        ...Array.from({ length: 6 }, (_, i) => activity(`filler${i}`, T(11) + i * 60, 60, { title: `Filler ${i}` })),
+        activity('late', T(19), 30, { title: 'Late fixed', locked: true })
       ]
     })
   });
@@ -353,10 +345,9 @@ test('D17: the sunset marker sits at the time it is set to', async ({ page, serv
 test('a plan that runs past midnight stays on one timeline', async ({ page, server }) => {
   await server.seed({
     plan: seedPlan({
-      dayStart: '21:00',
       activities: [
-        activity('party', 180, { title: 'Dancing & Party' }),
-        activity('after', 60, { title: 'After party', lockedStart: '01:15' })
+        activity('party', T(21), 180, { title: 'Dancing & Party' }),
+        activity('after', T(25, 15), 60, { title: 'After party', locked: true })
       ]
     })
   });

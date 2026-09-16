@@ -36,15 +36,12 @@ export async function openPlanner(page, password = TEST_PASSWORD) {
  * Open an activity's editor.
  *
  * Double-click is a desktop gesture and does not fire on a touch device, so a
- * spec that needs the editor on every project goes through the card's ⋯ menu.
- * The phone's own gesture for this is a long press, which arrives with the
- * direct manipulation stage.
+ * spec that needs the editor on every project goes through the card's own
+ * pencil button. The phone's own gesture for this is a long press, which
+ * arrives with the direct manipulation stage.
  */
 export async function openActivityEditor(page, card) {
-  await card.locator('.card-menu-toggle').click();
-  // The menu is drawn above the timeline, not inside the card, because a card
-  // is clipped to its own height.
-  await page.locator('.card-menu [data-action="edit"]').click();
+  await card.locator('.card-edit').click();
   await expect(page.locator('#activity-dialog')).toBeVisible();
 }
 
@@ -294,4 +291,20 @@ export async function countRequests(page, { url = '**/api/**', method } = {}) {
 /** Freeze the page clock at a wall time on the plan's date. */
 export async function setClock(page, isoTime) {
   await page.clock.install({ time: new Date(isoTime) });
+}
+
+/**
+ * Sets a flatpickr field directly through the widget's own API rather than
+ * typing into it — the field is `readonly` by design (picking a time is
+ * meant to go through the calendar and the clock, not a keyboard), so a plain
+ * `.fill()` cannot reach it. flatpickr keeps a reference to its instance on
+ * the input element itself.
+ */
+export async function setPicker(page, locator, value) {
+  await locator.evaluate((node, isoOrString) => {
+    const instance = node._flatpickr;
+    if (!instance) throw new Error('flatpickr has not attached to this input yet');
+    if (!isoOrString) instance.clear(true);
+    else instance.setDate(isoOrString, true);
+  }, value);
 }

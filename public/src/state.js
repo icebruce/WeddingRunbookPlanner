@@ -29,6 +29,9 @@ export function defineAction(name, handler, { label } = {}) {
 function defaultUi() {
   return {
     selectedId: null,
+    // Two or more ids, held together only long enough to drag them as one
+    // group. Empty otherwise — a single selection lives in `selectedId` alone.
+    groupSelection: [],
     // Only one menu or popover is open at a time; this holds its identity.
     openMenu: null,
     dialog: null,

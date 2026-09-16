@@ -29,7 +29,7 @@ export function renderStrip({ ui, strip }) {
       ${strip.remainingLabel ? `<span class="live-remaining">${escapeHtml(strip.remainingLabel)}</span>` : ''}
     </div>
     <div class="live-second">${strip.detail && strip.kind !== 'during' ? escapeHtml(strip.detail) : next}
-      ${strip.overrunning ? `<span class="live-over">${escapeHtml(strip.overrunning.title)} runs over</span>` : ''}
+      ${strip.overrunning ? `<span class="live-over">Also now: ${escapeHtml(strip.overrunning.title)}</span>` : ''}
     </div>
     <div class="live-progress" aria-hidden="true"><i style="width:${(progress * 100).toFixed(1)}%"></i></div>
   </div>`;

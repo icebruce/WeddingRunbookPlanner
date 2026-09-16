@@ -6,6 +6,7 @@ import { isPhoneLayout, signInAndWaitForPlan } from './helpers.mjs';
  * moment in a fixed day rather than a race against real time.
  */
 const DATE = '2026-11-21';
+const T = (h, m = 0) => h * 60 + m;
 const at = (hours, minutes = 0, day = 21) =>
   new Date(`2026-11-${String(day).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`);
 
@@ -14,12 +15,11 @@ const strip = page => page.locator('.live-strip');
 
 const day = (extra = {}) => seedPlan({
   date: DATE,
-  dayStart: '11:30',
   activities: [
-    activity('ready', 45, { title: 'Getting Ready', location: 'Home' }),
-    activity('portraits', 30, { title: 'Portraits' }),
-    activity('ceremony', 60, { title: 'Ceremony', lockedStart: '14:45' }),
-    activity('party', 120, { title: 'Dancing & Party' })
+    activity('ready', T(11, 30), 45, { title: 'Getting Ready', location: 'Home' }),
+    activity('portraits', T(12, 15), 30, { title: 'Portraits' }),
+    activity('ceremony', T(14, 45), 60, { title: 'Ceremony', locked: true }),
+    activity('party', T(15, 45), 120, { title: 'Dancing & Party' })
   ],
   ...extra
 });
@@ -62,22 +62,21 @@ test.describe('D13: what the strip says', () => {
     });
   }
 
-  test('during a conflict, the fixed activity is the one happening', async ({ page, server }) => {
+  test('when two things overlap, the locked activity is the one happening', async ({ page, server }) => {
     await openAt(page, server, at(15, 0), day({
       activities: [
-        activity('travel', 240, { title: 'Travel to Church' }),
-        activity('ceremony', 60, { title: 'Ceremony', lockedStart: '14:45' })
+        activity('travel', T(11, 30), 240, { title: 'Travel to Church' }),
+        activity('ceremony', T(14, 45), 60, { title: 'Ceremony', locked: true })
       ]
     }));
 
     await expect(strip(page).locator('.live-activity')).toHaveText('Ceremony');
-    await expect(strip(page)).toContainText('Travel to Church runs over');
+    await expect(strip(page)).toContainText('Also now: Travel to Church');
   });
 
   test('past midnight, the day is still the same day', async ({ page, server }) => {
     await openAt(page, server, at(1, 15, 22), day({
-      dayStart: '22:00',
-      activities: [activity('party', 240, { title: 'Dancing & Party', lockedStart: '22:00' })]
+      activities: [activity('party', T(22), 240, { title: 'Dancing & Party', locked: true })]
     }));
 
     await expect(strip(page)).toBeVisible();
@@ -128,8 +127,8 @@ test('the time line keeps moving through a long activity', async ({ page, server
   // beside it.
   await openAt(page, server, at(15, 0), day({
     activities: [
-      activity('ready', 45, { title: 'Getting Ready' }),
-      activity('party', 180, { title: 'Dancing & Party', lockedStart: '14:45' })
+      activity('ready', T(11, 30), 45, { title: 'Getting Ready' }),
+      activity('party', T(14, 45), 180, { title: 'Dancing & Party', locked: true })
     ]
   }));
 
@@ -161,10 +160,9 @@ test('the time line keeps moving through a long activity', async ({ page, server
 
 test('the view opens near the current time rather than at the top', async ({ page, server }) => {
   await openAt(page, server, at(16, 0), day({
-    dayStart: '08:00',
     activities: [
-      ...Array.from({ length: 8 }, (_, i) => activity(`filler${i}`, 60, { title: `Filler ${i + 1}` })),
-      activity('late', 60, { title: 'Reception' })
+      ...Array.from({ length: 8 }, (_, i) => activity(`filler${i}`, T(8) + i * 60, 60, { title: `Filler ${i + 1}` })),
+      activity('late', T(16), 60, { title: 'Reception' })
     ]
   }));
 

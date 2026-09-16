@@ -11,11 +11,13 @@ async function rename(page, id, title) {
   await expect(page.locator('#activity-dialog')).toHaveCount(0);
 }
 
+const T = (h, m = 0) => h * 60 + m;
+
 const base = () => seedPlan({
   activities: [
-    activity('ready', 45, { title: 'Getting Ready' }),
-    activity('portraits', 30, { title: 'Portraits' }),
-    activity('travel', 35, { title: 'Travel' })
+    activity('ready', T(11, 30), 45, { title: 'Getting Ready' }),
+    activity('portraits', T(12, 15), 30, { title: 'Portraits' }),
+    activity('travel', T(12, 45), 35, { title: 'Travel' })
   ]
 });
 

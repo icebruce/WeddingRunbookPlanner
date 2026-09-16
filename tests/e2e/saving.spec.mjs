@@ -244,10 +244,10 @@ test('the conflict dialog blocks editing until it is answered', async ({ page, c
   // until it is settled which copy the day carries on from. The control is
   // still drawn — it is the modal dialog above it that makes it unreachable,
   // so the test is whether it can be pressed, not whether it is painted.
-  const reachable = await page.locator('.card').first().locator('.card-menu-toggle')
+  const reachable = await page.locator('.card').first().locator('.card-edit')
     .click({ timeout: 1500 }).then(() => true).catch(() => false);
   expect(reachable).toBe(false);
-  await expect(page.locator('.card-menu')).toHaveCount(0);
+  await expect(page.locator('#activity-dialog')).toHaveCount(0);
 });
 
 test('F27: a session check that fails offers Retry, not the sign-in screen', async ({ page }) => {

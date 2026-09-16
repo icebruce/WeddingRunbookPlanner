@@ -1,7 +1,7 @@
 import { escapeHtml } from '../dom.js';
 import { icon } from '../icons.js';
 import { STAGES, phaseVars } from '../config.js';
-import { buildSchedule, formatDuration, formatTime, minutesToTime } from '../schedule.js';
+import { buildSchedule, formatDuration, formatTime } from '../schedule.js';
 
 /**
  * Sheets on a phone, dialogs on a laptop — the same content and the same
@@ -51,36 +51,27 @@ function stageGrid(current) {
 /**
  * The timing block.
  *
- * "Flexible" and "Fixed" are the two things an activity's start can be, so
- * they are one control rather than a switch with a field that appears beside
- * it. Flexible says what it follows and shows the start it works out to;
- * Fixed offers that same time to edit.
+ * One field decides when an activity happens: a date and time together, so an
+ * activity that runs past midnight is simply set to a time on the next
+ * calendar day rather than needing a switch of its own. Duration is entered
+ * in minutes — the grid this app schedules on — with the hours-and-minutes
+ * reading shown beside it, because "80 min" and "1 hr 20 min" are the same
+ * number and only one of them is easy to picture.
  */
-function timingBlock(item, scheduled, plan) {
-  const fixed = Boolean(item.lockedStart);
-  const start = scheduled ? scheduled.start : null;
-  const end = scheduled ? scheduled.end : null;
+function timingBlock(item, plan, start) {
+  const startDate = new Date(`${plan.date}T00:00:00`);
+  startDate.setMinutes(startDate.getMinutes() + (Number.isFinite(start) ? start : 0));
+  const end = (Number.isFinite(start) ? start : 0) + (Number(item.duration) || 30);
 
   return `<fieldset class="field-group timing">
     <legend class="field-label">Timing</legend>
-    <div class="group-row">
+
+    <label class="group-row">
       <span>Starts</span>
-      <span class="segmented" role="radiogroup" aria-label="Starts">
-        <label class="${fixed ? '' : 'is-on'}"><input type="radio" name="timing" value="flexible" ${fixed ? '' : 'checked'}>Flexible</label>
-        <label class="${fixed ? 'is-on' : ''}"><input type="radio" name="timing" value="fixed" ${fixed ? 'checked' : ''}>Fixed</label>
+      <span class="picker-field">
+        <input name="start" data-picker="datetime" type="text" value="${escapeHtml(formatDateTimeLocal(startDate))}" readonly>
+        ${icon('clock', 'picker-icon')}
       </span>
-    </div>
-
-    <div class="group-row timing-flexible ${fixed ? 'is-hidden' : ''}">
-      <span class="group-note">Follows the activity before it</span>
-      <span class="group-value">${start === null ? '—' : escapeHtml(formatTime(start))}</span>
-    </div>
-
-    <label class="group-row timing-fixed ${fixed ? '' : 'is-hidden'}">
-      <span>Starts at</span>
-      <!-- No step attribute: a value off the five-minute grid is rounded up on
-           Done rather than refused by the browser in its own words. -->
-      <input name="lockedStart" type="time" value="${escapeHtml(item.lockedStart || (start === null ? plan.dayStart : minutesToTime(start)))}">
     </label>
 
     <div class="group-row">
@@ -88,21 +79,28 @@ function timingBlock(item, scheduled, plan) {
       <span class="stepper">
         <button type="button" data-duration-step="-5" aria-label="Five minutes shorter">${icon('minus')}</button>
         <input name="duration" type="text" inputmode="numeric" value="${Number(item.duration) || 30}" aria-label="Duration in minutes">
+        <span class="stepper-unit">min</span>
         <button type="button" data-duration-step="5" aria-label="Five minutes longer">${icon('plus')}</button>
       </span>
+      <span class="group-note" data-duration-human>${escapeHtml(formatDuration(Number(item.duration) || 30))}</span>
     </div>
 
     <div class="group-row">
       <span>Ends</span>
-      <span class="group-value" data-ends>${end === null ? '—' : escapeHtml(formatTime(end))}</span>
+      <span class="group-value" data-ends>${escapeHtml(formatTime(end))}</span>
     </div>
   </fieldset>`;
+}
+
+/** "2026-11-21T14:45" — flatpickr's own datetime format, seconds dropped. */
+function formatDateTimeLocal(date) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 export function activitySheet(payload, plan) {
   const creating = payload.mode === 'create';
   const item = payload.activity;
-  const scheduled = buildSchedule(plan).items.find(entry => entry.id === item.id) || null;
   const suggestions = suggestionsFrom(plan);
 
   return `<dialog id="activity-dialog" class="sheet-dialog">
@@ -120,7 +118,7 @@ export function activitySheet(payload, plan) {
           <input name="title" maxlength="120" value="${escapeHtml(item.title)}" autocomplete="off" ${creating ? 'autofocus' : ''}>
         </label>
 
-        ${timingBlock(item, scheduled, plan)}
+        ${timingBlock(item, plan, Number(item.start) || 0)}
 
         <label class="field">
           <span class="field-label">Location</span>
@@ -144,7 +142,15 @@ export function activitySheet(payload, plan) {
           <textarea name="notes" maxlength="1000" rows="4" placeholder="Optional planning notes">${escapeHtml(item.notes || '')}</textarea>
         </label>
 
-        ${creating ? '' : `<button id="delete-activity" class="danger-action" type="button">${icon('trash')}<span>Delete activity</span></button>`}
+        <label class="group-row">
+          <span>Lock against group moves</span>
+          <input name="locked" type="checkbox" ${item.locked ? 'checked' : ''}>
+        </label>
+
+        <div class="sheet-actions">
+          ${creating ? '' : `<button id="duplicate-activity" class="button button--quiet" type="button">${icon('copy')}<span>Duplicate</span></button>`}
+          ${creating ? '' : `<button id="delete-activity" class="danger-action" type="button">${icon('trash')}<span>Delete activity</span></button>`}
+        </div>
       </div>
     </form>
   </dialog>`;
@@ -315,7 +321,7 @@ function relativeTime(value) {
   return formatVersionDate(value);
 }
 
-export function settingsSheet(plan, ui = {}) {
+export function settingsSheet(plan) {
   return `<dialog id="settings-dialog" class="sheet-dialog">
     <form id="settings-form" class="sheet" method="dialog" novalidate>
       <header class="sheet-header">
@@ -328,33 +334,24 @@ export function settingsSheet(plan, ui = {}) {
           <legend class="field-label">Plan</legend>
           <label class="group-row"><span>Planner name</span><input name="coupleLabel" maxlength="60" value="${escapeHtml(plan.coupleLabel || 'Our Wedding')}"></label>
           <label class="group-row"><span>Day title</span><input name="title" maxlength="80" value="${escapeHtml(plan.title)}"></label>
-          <label class="group-row"><span>Date</span><input name="date" type="date" value="${escapeHtml(plan.date)}"></label>
+          <label class="group-row"><span>Date</span>
+            <span class="picker-field"><input name="date" data-picker="date" type="text" value="${escapeHtml(plan.date)}" readonly>${icon('clock', 'picker-icon')}</span>
+          </label>
+          <label class="group-row"><span>Sunset marker</span>
+            <span class="picker-field"><input name="sunset" data-picker="time" type="text" value="${escapeHtml(plan.sunset ?? '')}" placeholder="Not set" readonly>${icon('clock', 'picker-icon')}</span>
+          </label>
         </fieldset>
 
         <fieldset class="field-group settings-group">
-          <legend class="field-label">Schedule</legend>
-          <label class="group-row"><span>First activity starts</span><input name="dayStart" type="time" value="${escapeHtml(plan.dayStart)}"></label>
-          <label class="group-row"><span>Sunset marker</span><input name="sunset" type="time" value="${escapeHtml(plan.sunset ?? '')}"></label>
-        </fieldset>
-
-        <fieldset class="field-group settings-group">
-          <legend class="field-label">Timeline view</legend>
-          <label class="group-row"><span>Shows from</span><input name="timelineStart" type="time" value="${escapeHtml(plan.timelineStart ?? '')}"></label>
-          <label class="group-row"><span>Shows until</span><input name="timelineEnd" type="time" value="${escapeHtml(plan.timelineEnd ?? '')}">
-            ${nextDayNote(plan)}</label>
+          <legend class="field-label">Timeline</legend>
+          <label class="group-row"><span>Shows from</span>
+            <span class="picker-field"><input name="timelineStart" data-picker="time" type="text" value="${escapeHtml(plan.timelineStart ?? '')}" placeholder="Earliest activity" readonly>${icon('clock', 'picker-icon')}</span>
+          </label>
+          <label class="group-row"><span>Shows until</span>
+            <span class="picker-field"><input name="timelineEnd" data-picker="time" type="text" value="${escapeHtml(plan.timelineEnd ?? '')}" placeholder="Latest activity" readonly>${icon('clock', 'picker-icon')}</span>
+            ${nextDayNote(plan)}
+          </label>
           <p class="group-help">Only changes what you see. The view always grows to fit every activity.</p>
-        </fieldset>
-
-        <fieldset class="field-group settings-group">
-          <legend class="field-label">Appearance</legend>
-          <div class="group-row">
-            <span>Theme</span>
-            <span class="segmented" role="radiogroup" aria-label="Theme">
-              <label class="${ui.theme === 'dark' ? '' : 'is-on'}"><input type="radio" name="theme" value="light" ${ui.theme === 'dark' ? '' : 'checked'}>Light</label>
-              <label class="${ui.theme === 'dark' ? 'is-on' : ''}"><input type="radio" name="theme" value="dark" ${ui.theme === 'dark' ? 'checked' : ''}>Dark</label>
-            </span>
-          </div>
-          <p class="group-help">Remembered on this device.</p>
         </fieldset>
       </div>
     </form>
@@ -395,6 +392,6 @@ export function renderSheet(ui, plan) {
   if (dialog.type === 'stage') return stageSheet(dialog.item);
   if (dialog.type === 'conflict') return conflictSheet(dialog.latest);
   if (dialog.type === 'versions') return versionsSheet(ui.versions, { plan, updatedAt: dialog.updatedAt });
-  if (dialog.type === 'settings') return settingsSheet(plan, ui);
+  if (dialog.type === 'settings') return settingsSheet(plan);
   return '';
 }

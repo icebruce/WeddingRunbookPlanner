@@ -14,15 +14,16 @@ import {
 
 const T = (h, m = 0) => h * 60 + m;
 
-const activity = (id, duration, extra = {}) => ({
+const activity = (id, start, duration, extra = {}) => ({
   id,
   title: id,
+  start,
   duration,
   stage: 'preparation',
   location: '',
   people: [],
   notes: '',
-  lockedStart: null,
+  locked: false,
   ...extra
 });
 
@@ -31,7 +32,6 @@ const plan = (activities, extra = {}) => ({
   title: 'Wedding Day',
   coupleLabel: 'Our Wedding',
   date: '2026-11-21',
-  dayStart: '10:00',
   status: 'Working',
   activities,
   ...extra
@@ -62,92 +62,98 @@ test('durations read the way a person would say them', () => {
   assert.equal(clampDuration(42), 45);
 });
 
-test('flexible activities follow on from each other', () => {
-  const result = buildSchedule(plan([activity('a', 30), activity('b', 45), activity('c', 15)]));
-  assert.deepEqual(result.items.map(item => [item.start, item.end]), [[600, 630], [630, 675], [675, 690]]);
-  assert.equal(result.dayEnd, 690);
-  assert.equal(result.openTimes.length, 0);
-  assert.equal(result.conflicts.length, 0);
+test('every activity keeps the start it was given — nothing here moves it', () => {
+  const result = buildSchedule(plan([
+    activity('a', T(10), 30),
+    activity('b', T(11), 45),
+    activity('c', T(15), 15)
+  ]));
+  assert.deepEqual(result.items.map(item => [item.start, item.end]), [[T(10), T(10, 30)], [T(11), T(11, 45)], [T(15), T(15, 15)]]);
+  assert.equal(result.dayEnd, T(15, 15));
+  assert.equal(result.openTimes.length, 2);
+  assert.equal(result.overlaps.length, 0);
 });
 
-test('a fixed activity leaves open time in front of it', () => {
-  const result = buildSchedule(plan([activity('a', 30), activity('b', 60, { lockedStart: '12:00' })]));
-  assert.deepEqual(result.items.map(item => item.start), [600, 720]);
+test('activities come back sorted by start, whatever order they were stored in', () => {
+  const result = buildSchedule(plan([activity('late', T(14), 30), activity('early', T(9), 30)]));
+  assert.deepEqual(result.items.map(item => item.id), ['early', 'late']);
+});
+
+test('a gap between activities is exactly the space between them', () => {
+  const result = buildSchedule(plan([activity('a', T(10), 30), activity('b', T(11), 30)]));
   assert.equal(result.openTimes.length, 1);
   assert.deepEqual(
-    { ...result.openTimes[0], index: undefined },
-    { start: 630, end: 720, beforeId: 'b', beforeTitle: 'b', kind: 'fixed', index: undefined }
+    { start: result.openTimes[0].start, end: result.openTimes[0].end, beforeId: result.openTimes[0].beforeId },
+    { start: T(10, 30), end: T(11), beforeId: 'b' }
   );
-  assert.equal(result.summary.openMinutes, 90);
+  assert.equal(result.summary.openMinutes, 30);
 });
 
-test('a fixed activity does not move when earlier work runs into it', () => {
-  const result = buildSchedule(plan([activity('a', 200), activity('fixed', 60, { lockedStart: '12:00' })]));
-  const [first, fixed] = result.items;
-
-  assert.equal(first.start, 600);
-  assert.equal(first.end, 800, 'the overrunning activity keeps its real end');
-  assert.equal(fixed.start, 720, 'the fixed activity stays exactly where it was fixed');
-  // Two different numbers, and both are true. The fixed card says how far
-  // earlier work runs past its start (80 min: 10:00 + 200 = 1:20 PM against a
-  // 12:00 start). The overrunning card says how far it runs *into* that
-  // activity, which is bounded by how long the fixed activity itself lasts.
-  assert.equal(fixed.conflictMinutes, 80);
-  assert.equal(first.overrun.minutes, 60, 'the fixed activity only runs 12:00–1:00');
-
-  assert.equal(result.conflicts.length, 1);
-  assert.deepEqual(result.conflicts[0].overrunIds, ['a']);
-  assert.equal(first.overrun.intoTitle, 'fixed');
-  assert.equal(result.summary.conflictMinutes, 80, 'the summary counts time lost, as the mockup does');
+test('two activities that share time overlap — nothing here resolves it', () => {
+  const result = buildSchedule(plan([activity('a', T(10), 90), activity('b', T(10, 30), 30)]));
+  assert.equal(result.overlaps.length, 1);
+  assert.deepEqual(
+    { start: result.overlaps[0].start, end: result.overlaps[0].end, minutes: result.overlaps[0].minutes },
+    { start: T(10, 30), end: T(11), minutes: 30 }
+  );
+  assert.equal(result.items[0].overlaps.length, 1);
+  assert.equal(result.items[0].overlaps[0].withId, 'b');
+  assert.equal(result.items[1].overlapMinutes, 30);
+  assert.equal(result.summary.conflictMinutes, 30);
 });
 
-test('stored open time places a flexible activity later', () => {
-  const result = buildSchedule(plan([activity('a', 30), activity('b', 30, { gapBefore: 15 })]));
-  assert.deepEqual(result.items.map(item => item.start), [600, 645]);
-  assert.equal(result.openTimes[0].kind, 'stored');
-  assert.equal(result.openTimes[0].end - result.openTimes[0].start, 15);
-});
-
-test('stored open time is ignored on a fixed activity', () => {
-  const result = buildSchedule(plan([activity('a', 30), activity('b', 30, { lockedStart: '13:00', gapBefore: 45 })]));
-  assert.equal(result.items[1].start, T(13));
-});
-
-test('a fixed time after midnight belongs to the next day', () => {
+test('a locked activity overlapping earlier work is still just an overlap', () => {
   const result = buildSchedule(plan([
-    activity('evening', 120, { lockedStart: '23:00' }),
-    activity('afterparty', 60, { lockedStart: '01:15' })
-  ], { dayStart: '22:00' }));
+    activity('travel', T(10), 200),
+    activity('ceremony', T(12), 60, { locked: true })
+  ]));
+  assert.equal(result.items.find(item => item.id === 'travel').end, T(13, 20));
+  assert.equal(result.items.find(item => item.id === 'ceremony').start, T(12), 'a locked activity is never moved by anything here');
+  assert.equal(result.overlaps.length, 1);
+  assert.equal(result.overlaps[0].minutes, 60, 'the ceremony only lasts an hour, so that bounds the overlap');
+});
 
-  assert.equal(result.items[0].start, T(23));
-  assert.equal(result.items[1].start, T(25, 15), '1:15 AM the next morning, not this morning');
+test('three activities can overlap at once', () => {
+  const result = buildSchedule(plan([
+    activity('a', T(10), 60),
+    activity('b', T(10, 30), 60),
+    activity('c', T(10, 45), 30)
+  ]));
+  assert.equal(result.overlaps.length, 3, 'every pair that shares time counts');
+});
+
+test('an activity may start on the day after the plan date', () => {
+  const result = buildSchedule(plan([
+    activity('evening', T(23), 120),
+    activity('afterparty', T(25, 15), 60)
+  ]));
+  assert.equal(result.items[1].start, T(25, 15), 'stored exactly as given — no day-boundary guessing');
   assert.equal(result.items[1].startLabel, '1:15 AM');
-  assert.equal(result.conflicts.length, 0);
+  assert.equal(result.overlaps.length, 0);
 });
 
 test('an activity that itself crosses midnight keeps running', () => {
-  const result = buildSchedule(plan([activity('party', 180, { lockedStart: '23:00' })], { dayStart: '22:00' }));
+  const result = buildSchedule(plan([activity('party', T(23), 180)]));
   assert.equal(result.dayEnd, T(26));
   assert.equal(result.items[0].endLabel, '2:00 AM');
 });
 
-test('durations are normalised before anything is placed', () => {
-  const result = buildSchedule(plan([activity('a', 42), activity('b', 3)]));
+test('durations are normalised before anything else is computed', () => {
+  const result = buildSchedule(plan([activity('a', T(10), 42), activity('b', T(11), 3)]));
   assert.deepEqual(result.items.map(item => item.duration), [45, 5]);
-  assert.deepEqual(result.items.map(item => item.start), [600, 645]);
 });
 
 test('the summary describes the whole day', () => {
   const result = buildSchedule(plan([
-    activity('a', 30),
-    activity('b', 60, { lockedStart: '12:00' }),
-    activity('c', 30)
+    activity('a', T(10), 30),
+    activity('b', T(12), 60),
+    activity('c', T(13, 30), 30)
   ]));
   assert.deepEqual(result.summary, {
     count: 3,
-    start: 600,
-    end: 810,
-    openMinutes: 90,
+    start: T(10),
+    end: T(14),
+    openMinutes: 120,
     conflictMinutes: 0
   });
 });
@@ -155,17 +161,6 @@ test('the summary describes the whole day', () => {
 test('an empty plan still has a start and an end', () => {
   const result = buildSchedule(plan([]));
   assert.equal(result.items.length, 0);
-  assert.equal(result.dayStart, 600);
-  assert.equal(result.dayEnd, 600);
-});
-
-test('several activities can overrun one fixed activity', () => {
-  const result = buildSchedule(plan([
-    activity('a', 60),
-    activity('b', 180),
-    activity('fixed', 60, { lockedStart: '12:00' })
-  ]));
-  assert.deepEqual(result.conflicts[0].overrunIds, ['b'], 'only the ones still running when it starts');
-  assert.equal(result.items[0].overrun, undefined);
-  assert.equal(result.items[1].overrun.minutes, 60);
+  assert.equal(result.dayStart, 480);
+  assert.equal(result.dayEnd, 480);
 });

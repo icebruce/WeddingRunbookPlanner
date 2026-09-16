@@ -58,7 +58,7 @@ button, [role="button"], summary, .filter-chip, .stage-choice {
   transform: translate(-50%, -50%);
 }
 /* Tags and chips inside a card are not controls and keep their own height. */
-.tag, .stage-tag:not(.stage-tag--button), .card-dots, .now-tag, .mode-pill { min-height: 0; }
+.tag, .stage-tag:not(.stage-tag--button), .now-tag, .mode-pill { min-height: 0; }
 .card-controls button, .stepper button, .icon-button, .delete-version, .filter-clear,
 .person-remove, .people-add-trigger { min-height: 0; }
 

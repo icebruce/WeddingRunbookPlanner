@@ -4,13 +4,15 @@ import { isPhoneLayout, signIn, signInAndWaitForPlan } from './helpers.mjs';
 
 const card = (page, id) => page.locator(`.card[data-activity-id="${id}"]`);
 
+const T = (h, m = 0) => h * 60 + m;
+
 const plan = () => seedPlan({
   activities: [
-    activity('ready', 45, { title: 'Getting Ready', location: 'Getting-ready location', people: ['Bride', 'Mothers'] }),
-    activity('short', 5, { title: 'Bouquet handoff', people: ['Bride', 'Florist'] }),
-    activity('travel', 200, { title: 'Travel to Church', location: 'St. Peter and Paul Orthodox Sobor' }),
-    activity('ceremony', 60, { title: 'Ceremony', stage: 'ceremony', lockedStart: '14:45', notes: 'Rings', people: ['Bride', 'Groom'] }),
-    activity('party', 180, { title: 'Dancing & Party', stage: 'party', people: ['All Guests'] })
+    activity('ready', T(11, 30), 45, { title: 'Getting Ready', location: 'Getting-ready location', people: ['Bride', 'Mothers'] }),
+    activity('short', T(12, 15), 5, { title: 'Bouquet handoff', people: ['Bride', 'Florist'] }),
+    activity('travel', T(12, 20), 200, { title: 'Travel to Church', location: 'St. Peter and Paul Orthodox Sobor' }),
+    activity('ceremony', T(14, 45), 60, { title: 'Ceremony', stage: 'ceremony', locked: true, notes: 'Rings', people: ['Bride', 'Groom'] }),
+    activity('party', T(15, 45), 180, { title: 'Dancing & Party', stage: 'party', people: ['All Guests'] })
   ]
 });
 
@@ -78,8 +80,7 @@ for (const theme of THEMES) {
       await signInAndWaitForPlan(page);
       await setTheme(page, theme);
 
-      await card(page, 'ready').locator('.card-menu-toggle').click();
-      await page.locator('.card-menu [data-action="edit"]').click();
+      await card(page, 'ready').locator('.card-edit').click();
       await expect(page.locator('#activity-dialog')).toBeVisible();
       await page.waitForTimeout(250);
 
@@ -147,7 +148,7 @@ test('a card tells a screen reader what it is without reading the layout', async
   expect(label).toContain('2:45 PM to 3:45 PM');
   expect(label).toContain('1 hr');
   expect(label).toContain('Ceremony');
-  expect(label, 'colour is never the only signal').toContain('fixed');
+  expect(label, 'colour is never the only signal').toContain('locked');
 });
 
 test('a short card is still fully described, even though it shows one line', async ({ page, server }) => {
@@ -218,15 +219,16 @@ test('a whole plan can be changed with the keyboard alone', async ({ page, serve
   await expect(page.locator('.save-indicator')).toHaveText('Saved');
   expect((await server.read()).plan.activities[0].duration).toBe(50);
 
-  // Move it down the day, and take that back.
+  // Move it later in the day, and take that back.
+  const startBefore = (await server.read()).plan.activities.find(item => item.id === 'ready').start;
   await card(page, 'ready').focus();
   await page.keyboard.press('Alt+ArrowDown');
   await expect(page.locator('.save-indicator')).toHaveText('Saved');
-  expect((await server.read()).plan.activities.map(item => item.id).slice(0, 2)).toEqual(['short', 'ready']);
+  expect((await server.read()).plan.activities.find(item => item.id === 'ready').start).toBe(startBefore + 5);
 
   await page.keyboard.press('Control+z');
   await expect(page.locator('.save-indicator')).toHaveText('Saved');
-  expect((await server.read()).plan.activities.map(item => item.id).slice(0, 2)).toEqual(['ready', 'short']);
+  expect((await server.read()).plan.activities.find(item => item.id === 'ready').start).toBe(startBefore);
 
   // Open it, rename it, and commit with Enter. Escape first, so that the two
   // presses below are select-then-open whatever was selected before.

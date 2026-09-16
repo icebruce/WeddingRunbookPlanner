@@ -39,7 +39,10 @@ export const LIMITS = {
   personName: 80,
   durationMin: 5,
   durationMax: 720,
-  gapMax: 720,
+  // An activity's start, in minutes from midnight on the plan's date. The
+  // upper bound is two days out — enough for a wedding that runs well past
+  // midnight without opening the door to a multi-day plan.
+  startMax: 4 * 24 * 60,
   versionName: 80
 };
 
@@ -89,12 +92,6 @@ export function normalizeDuration(value) {
   return Math.min(LIMITS.durationMax, Math.max(LIMITS.durationMin, Math.ceil(number / 5) * 5));
 }
 
-export function normalizeGap(value) {
-  const number = Number(value);
-  if (!Number.isFinite(number) || number <= 0) return 0;
-  return Math.min(LIMITS.gapMax, Math.ceil(number / 5) * 5);
-}
-
 function text(value, { field, max, min = 0, label }) {
   if (value === undefined || value === null) value = '';
   if (typeof value !== 'string') fail('invalid_type', `${label} must be text.`, field);
@@ -109,6 +106,14 @@ function optionalTime(value, { field, label, fiveMinutes = true }) {
   if (!isTime(value)) fail('invalid_time', `${label} must be a time like 14:45.`, field);
   if (fiveMinutes && !isFiveMinuteTime(value)) fail('invalid_time', `${label} must fall on a 5-minute mark.`, field);
   return value;
+}
+
+/** An absolute start, in minutes from midnight, on the plan's date or a day after it. */
+function activityStart(value, { field }) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) fail('invalid_start', 'Start time must be a number of minutes from midnight.', field);
+  if (number < 0 || number > LIMITS.startMax) fail('invalid_start', 'Start time is out of range.', field);
+  return Math.round(number / 5) * 5;
 }
 
 /** A calendar date that actually exists — "2026-02-31" is rejected. */
@@ -157,14 +162,12 @@ export function validateActivity(input, { field = 'activity', seenIds } = {}) {
     people.push(person);
   }
 
-  const lockedStart = optionalTime(input.lockedStart, { field: `${field}.lockedStart`, label: 'Fixed start time' });
+  const start = activityStart(input.start, { field: `${field}.start` });
+  // Locked means one thing only: a group move (moving several activities
+  // together) leaves this one where it is. It has no effect on anything else.
+  const locked = Boolean(input.locked);
 
-  const activity = { id, title, duration, stage, location, people, notes, lockedStart };
-  // A fixed activity starts at its clock time, so any stored open time before
-  // it is meaningless; dropping it here keeps the two from disagreeing.
-  const gapBefore = lockedStart ? 0 : normalizeGap(input.gapBefore);
-  if (gapBefore) activity.gapBefore = gapBefore;
-  return activity;
+  return { id, title, duration, stage, location, people, notes, start, locked };
 }
 
 export function validatePlan(input) {
@@ -178,10 +181,6 @@ export function validatePlan(input) {
 
   const date = String(input.date ?? '');
   if (!isRealDate(date)) fail('invalid_date', 'Date must be a real date like 2026-11-21.', 'date');
-
-  const dayStart = String(input.dayStart ?? '');
-  if (!isTime(dayStart)) fail('invalid_time', 'First activity starts must be a time like 11:30.', 'dayStart');
-  if (!isFiveMinuteTime(dayStart)) fail('invalid_time', 'First activity starts must fall on a 5-minute mark.', 'dayStart');
 
   const status = String(input.status ?? 'Working');
   if (!PLAN_STATUSES.includes(status)) fail('invalid_status', 'That is not one of the plan statuses.', 'status');
@@ -198,7 +197,6 @@ export function validatePlan(input) {
     title,
     coupleLabel,
     date,
-    dayStart,
     status,
     activities
   };

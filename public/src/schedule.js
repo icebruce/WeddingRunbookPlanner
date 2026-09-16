@@ -2,19 +2,17 @@
  * Scheduling. Pure: every function takes a plan and returns new values, and
  * nothing here touches the DOM or the store.
  *
- * The rule the whole app rests on:
+ * The model: every activity stores its own `start`, in absolute minutes from
+ * midnight on the plan's date. Nothing here moves an activity that was not
+ * asked to move — this is a calendar, not a chain. Two activities can occupy
+ * the same minutes; that is drawn as an overlap, not silently prevented or
+ * silently resolved. `locked` means exactly one thing: this activity is not
+ * touched by a group move (see `moveGroup` in operations.js) — it is not a
+ * participant in "move these together."
  *
- *   cursor = first activity starts
- *   for each activity in order
- *     fixed    -> it starts at its clock time. Earlier space before it is open
- *                 time; work running past it is a conflict, and the fixed
- *                 activity does not move.
- *     flexible -> it starts when the previous one ended, plus any open time
- *                 stored against it.
- *     cursor = max(cursor, end)
- *
- * All times are absolute minutes from midnight on the plan's date, so an
- * activity that runs past midnight simply has a start above 1440.
+ * All times may run past 1440 (midnight): a plan that goes to 1:15 AM stores
+ * that activity's start as 1515, not 75, so ordering and duration math never
+ * have to guess which day a small number belongs to.
  */
 import { normalizeDuration } from './validate.js';
 
@@ -48,6 +46,7 @@ export function formatRange(start, end) {
   return `${formatTime(start, { meridiem: startMeridiem !== endMeridiem })} – ${formatTime(end)}`;
 }
 
+/** "1 hr 20 min" — minutes are always shown converted, never as a raw count over 60. */
 export function formatDuration(minutes) {
   if (minutes < 60) return `${minutes} min`;
   const hours = Math.floor(minutes / 60);
@@ -65,119 +64,114 @@ export function clampDuration(minutes) {
 }
 
 /**
- * A fixed time belongs to the next day when it would otherwise fall far behind
- * the work already scheduled — a 1:15 AM start after an activity that ended at
- * 11 PM means tomorrow morning, not fourteen hours ago.
+ * Merge every activity's [start, end) into the fewest non-overlapping blocks.
+ * This is the one piece of interval math everything else — open time,
+ * overlaps, the day's start and end — is built from.
  */
-function resolveFixedStart(lockedStart, cursor) {
-  let start = parseTime(lockedStart);
-  if (start === null) return null;
-  while (start < cursor - 12 * 60) start += MINUTES_PER_DAY;
-  return start;
+function mergeBlocks(items) {
+  const sorted = [...items].sort((a, b) => a.start - b.start || a.end - b.end);
+  const blocks = [];
+  for (const item of sorted) {
+    const last = blocks[blocks.length - 1];
+    if (last && item.start <= last.end) {
+      last.end = Math.max(last.end, item.end);
+      last.items.push(item);
+    } else {
+      blocks.push({ start: item.start, end: item.end, items: [item] });
+    }
+  }
+  return blocks;
 }
 
-export function buildSchedule(plan) {
-  const dayStart = parseTime(plan?.dayStart) ?? 8 * 60;
-  let cursor = dayStart;
-
-  const items = [];
-  const openTimes = [];
-  const conflicts = [];
-
-  for (const [index, activity] of (plan?.activities || []).entries()) {
-    const duration = normalizeDuration(activity.duration);
-    const fixedStart = activity.lockedStart ? resolveFixedStart(activity.lockedStart, cursor) : null;
-
-    let start;
-    let conflictMinutes = 0;
-
-    if (fixedStart !== null) {
-      start = fixedStart;
-      if (start > cursor) {
-        openTimes.push({ start: cursor, end: start, beforeId: activity.id, beforeTitle: activity.title, kind: 'fixed', index });
-      } else if (start < cursor) {
-        conflictMinutes = cursor - start;
-      }
-    } else {
-      const gap = Number(activity.gapBefore) || 0;
-      start = cursor + gap;
-      if (gap > 0) {
-        openTimes.push({ start: cursor, end: start, beforeId: activity.id, beforeTitle: activity.title, kind: 'stored', index });
-      }
+/**
+ * Every pair of activities whose times overlap, with the exact overlapping
+ * range — not "this card conflicts with something", but the minutes it
+ * actually shares with the other one.
+ */
+function findOverlaps(items) {
+  const sorted = [...items].sort((a, b) => a.start - b.start);
+  const overlaps = [];
+  for (let i = 0; i < sorted.length; i += 1) {
+    for (let j = i + 1; j < sorted.length; j += 1) {
+      if (sorted[j].start >= sorted[i].end) break;
+      const start = Math.max(sorted[i].start, sorted[j].start);
+      const end = Math.min(sorted[i].end, sorted[j].end);
+      if (end > start) overlaps.push({ aId: sorted[i].id, bId: sorted[j].id, start, end, minutes: end - start });
     }
+  }
+  return overlaps;
+}
 
+const DEFAULT_VIEW_START = 8 * 60;
+
+export function buildSchedule(plan) {
+  const activities = plan?.activities || [];
+
+  const items = activities.map(activity => {
+    const duration = normalizeDuration(activity.duration);
+    const start = Number.isFinite(activity.start) ? Math.max(0, Math.round(activity.start)) : 0;
     const end = start + duration;
-    items.push({
+    return {
       ...activity,
-      index,
       duration,
       start,
       end,
       startLabel: formatTime(start),
       endLabel: formatTime(end),
       rangeLabel: formatRange(start, end),
-      conflictMinutes,
-      isFixed: fixedStart !== null,
-      // Kept for the code that has not moved to isFixed yet.
-      isLocked: fixedStart !== null
-    });
+      locked: Boolean(activity.locked)
+    };
+  }).sort((a, b) => a.start - b.start || a.id.localeCompare(b.id));
 
-    cursor = Math.max(cursor, end);
+  const titleOf = new Map(items.map(item => [item.id, item.title]));
+  const overlaps = findOverlaps(items);
+  const overlapsById = new Map();
+  for (const item of items) overlapsById.set(item.id, []);
+  for (const pair of overlaps) {
+    overlapsById.get(pair.aId).push({ withId: pair.bId, withTitle: titleOf.get(pair.bId), start: pair.start, end: pair.end, minutes: pair.minutes });
+    overlapsById.get(pair.bId).push({ withId: pair.aId, withTitle: titleOf.get(pair.aId), start: pair.start, end: pair.end, minutes: pair.minutes });
+  }
+  for (const item of items) {
+    const mine = overlapsById.get(item.id);
+    item.overlaps = mine;
+    item.overlapMinutes = mine.reduce((total, entry) => total + entry.minutes, 0) > 0
+      ? Math.max(...mine.map(entry => entry.minutes))
+      : 0;
   }
 
-  // A conflict is a fixed activity plus everything still running when it
-  // starts. Both keep their true times; the overlap is what is drawn.
-  //
-  // Two numbers come out of this, and they are not the same. `conflictMinutes`
-  // on the fixed activity is how far earlier work runs past its start — the
-  // time the day has lost, and what the summary counts. `overrun.minutes` on
-  // an overrunning activity is how far it runs *into* the fixed one, which is
-  // bounded by how long the fixed activity lasts. A 3-hour overrun into a
-  // 1-hour ceremony is 180 minutes late but only 60 minutes on top of it.
-  for (const fixed of items) {
-    if (!fixed.conflictMinutes) continue;
-    const overrun = items.filter(item =>
-      item !== fixed && !item.isFixed && item.start < fixed.end && item.end > fixed.start);
-
-    for (const item of overrun) {
-      item.overrun = {
-        intoId: fixed.id,
-        intoTitle: fixed.title,
-        minutes: Math.min(item.end, fixed.end) - Math.max(item.start, fixed.start),
-        from: Math.max(item.start, fixed.start)
-      };
-    }
-    conflicts.push({
-      fixedId: fixed.id,
-      fixedTitle: fixed.title,
-      overrunIds: overrun.map(item => item.id),
-      minutes: fixed.conflictMinutes,
-      start: fixed.start
+  const blocks = mergeBlocks(items);
+  const openTimes = [];
+  for (let i = 1; i < blocks.length; i += 1) {
+    const before = blocks[i].items.reduce((min, item) => (item.start < min.start ? item : min), blocks[i].items[0]);
+    openTimes.push({
+      start: blocks[i - 1].end,
+      end: blocks[i].start,
+      beforeId: before.id,
+      beforeTitle: before.title,
+      index: i
     });
   }
+
+  const dayStart = blocks.length ? blocks[0].start : DEFAULT_VIEW_START;
+  const dayEnd = blocks.length ? blocks[blocks.length - 1].end : DEFAULT_VIEW_START;
 
   const openMinutes = openTimes.reduce((total, gap) => total + (gap.end - gap.start), 0);
-  const conflictMinutes = conflicts.reduce((total, conflict) => total + conflict.minutes, 0);
+  const conflictMinutes = overlaps.reduce((total, pair) => total + pair.minutes, 0);
 
   return {
     items,
     openTimes,
-    conflicts,
+    overlaps,
     dayStart,
-    dayEnd: cursor,
-    // Names the pre-redesign code uses.
-    end: cursor,
-    endLabel: formatTime(cursor),
+    dayEnd,
+    end: dayEnd,
+    endLabel: formatTime(dayEnd),
     summary: {
       count: items.length,
-      start: items.length ? Math.min(...items.map(item => item.start)) : dayStart,
-      end: cursor,
+      start: items.length ? dayStart : DEFAULT_VIEW_START,
+      end: dayEnd,
       openMinutes,
       conflictMinutes
     }
   };
-}
-
-export function gapBefore(activity) {
-  return activity.lockedStart ? 0 : (Number(activity.gapBefore) || 0);
 }

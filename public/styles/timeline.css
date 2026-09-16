@@ -50,7 +50,7 @@
 }
 .tick b {
   position: absolute;
-  right: calc(100% - var(--ruler-width) + 8px);
+  right: calc(100% - var(--ruler-width) + 12px);
   top: -8px;
   line-height: 16px;
   font-variant-numeric: tabular-nums;
@@ -62,7 +62,7 @@
 .tick--quarter::after { background: var(--grid-quarter); }
 .tick--five::after { background: var(--grid-five); }
 
-.tick--hour s { width: 14px; height: 1.5px; background: var(--tick-hour); }
+.tick--hour s { width: 10px; height: 1.5px; background: var(--tick-hour); }
 .tick--half s { width: 10px; background: var(--tick-half); }
 .tick--quarter s { width: 7px; background: var(--tick-quarter); }
 .tick--five s { width: 4px; background: var(--grid-hour); }
@@ -109,15 +109,6 @@
   font-variant-numeric: tabular-nums;
 }
 .sunset-pill .icon { width: 13px; height: 13px; }
-
-/* The overlap, marked in the ruler beside the cards it belongs to. */
-.conflict-rail {
-  position: absolute;
-  left: calc(var(--ruler-width) + 1px);
-  width: 3px;
-  border-radius: 2px;
-  background: var(--bad);
-}
 
 .timeline-end {
   position: absolute;

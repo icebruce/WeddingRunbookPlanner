@@ -15,20 +15,22 @@ const DATE = '2026-11-21';
 const at = (hours, minutes = 0, day = 21) =>
   new Date(`2026-11-${String(day).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`);
 
-const activity = (id, duration, extra = {}) => ({
-  id, title: id, duration, stage: 'preparation', location: '', people: [], notes: '', lockedStart: null, ...extra
+const T = (h, m = 0) => h * 60 + m;
+
+const activity = (id, start, duration, extra = {}) => ({
+  id, title: id, start, duration, stage: 'preparation', location: '', people: [], notes: '', locked: false, ...extra
 });
 
 const plan = (activities, extra = {}) => ({
   id: 'wedding-day', title: 'Wedding Day', coupleLabel: 'Our Wedding',
-  date: DATE, dayStart: '11:30', status: 'Working', activities, ...extra
+  date: DATE, status: 'Working', activities, ...extra
 });
 
 const day = () => plan([
-  activity('ready', 45, { title: 'Getting Ready' }),
-  activity('portraits', 30, { title: 'Portraits' }),
-  activity('ceremony', 60, { title: 'Ceremony', lockedStart: '14:45' }),
-  activity('party', 120, { title: 'Dancing & Party' })
+  activity('ready', T(11, 30), 45, { title: 'Getting Ready' }),
+  activity('portraits', T(12, 15), 30, { title: 'Portraits' }),
+  activity('ceremony', T(14, 45), 60, { title: 'Ceremony', locked: true }),
+  activity('party', T(15, 45), 120, { title: 'Dancing & Party' })
 ]);
 
 test('D1: the day-of view turns itself on on the day, and when the plan is Final', () => {
@@ -43,8 +45,8 @@ test('D1: the day-of view turns itself on on the day, and when the plan is Final
 
 test('a plan running past midnight is still today\'s plan at one in the morning', () => {
   const late = plan([
-    activity('party', 240, { title: 'Dancing & Party', lockedStart: '22:00' })
-  ], { dayStart: '22:00' });
+    activity('party', T(22), 240, { title: 'Dancing & Party', locked: true })
+  ]);
 
   assert.equal(shouldBeOn(late, at(1, 30, 22)), true, 'still running');
   assert.equal(shouldBeOn(late, at(3, 30, 22)), false, 'over by then');
@@ -81,17 +83,17 @@ test('during open time, the strip counts down to what is next', () => {
   assert.equal(state.next.title, 'Ceremony');
 });
 
-test('in a conflict, the fixed activity is the one that is really happening', () => {
-  const overrun = plan([
-    activity('travel', 240, { title: 'Travel to Church' }),
-    activity('ceremony', 60, { title: 'Ceremony', lockedStart: '14:45' })
-  ], { dayStart: '11:30' });
+test('when two things are happening at once, the locked one is what is really happening', () => {
+  const overlap = plan([
+    activity('travel', T(11, 30), 240, { title: 'Travel to Church' }),
+    activity('ceremony', T(14, 45), 60, { title: 'Ceremony', locked: true })
+  ]);
 
-  const state = stripState(overrun, at(15, 0));
+  const state = stripState(overlap, at(15, 0));
   assert.equal(state.kind, 'during');
   assert.equal(state.current.id, 'ceremony', 'the one with a promise attached');
   assert.equal(state.overrunning.id, 'travel');
-  assert.equal(state.detail, 'Travel to Church runs over');
+  assert.equal(state.detail, 'Also now: Travel to Church');
 });
 
 test('after the last activity, the day is complete', () => {
@@ -102,8 +104,8 @@ test('after the last activity, the day is complete', () => {
 
 test('the strip works at 23:59, at midnight and at 01:15', () => {
   const late = plan([
-    activity('party', 240, { title: 'Dancing & Party', lockedStart: '22:00' })
-  ], { dayStart: '22:00' });
+    activity('party', T(22), 240, { title: 'Dancing & Party', locked: true })
+  ]);
 
   const before = stripState(late, at(23, 59));
   assert.equal(before.kind, 'during');

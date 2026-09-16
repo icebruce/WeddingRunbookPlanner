@@ -43,18 +43,19 @@ const at = (hours, minutes = 0, day = 21) =>
 
 const card = (page, id) => page.locator(`.card[data-activity-id="${id}"]`);
 
+const T = (h, m = 0) => h * 60 + m;
+
 /** The day the mockups draw. */
 const plan = (extra = {}) => seedPlan({
   date: DATE,
-  dayStart: '11:30',
   sunset: '16:19',
   activities: [
-    activity('ready', 45, { title: 'Getting Ready', stage: 'preparation', location: 'Home', people: ['Bride', 'Mothers'] }),
-    activity('bouquet', 5, { title: 'Bouquet handoff', stage: 'preparation', people: ['Bride', 'Florist'] }),
-    activity('portraits', 30, { title: 'Getting-ready Portraits', stage: 'photography', people: ['Bride', 'Photographer'] }),
-    activity('travel', 35, { title: 'Travel to Church', stage: 'transition', location: 'St. Peter and Paul Sobor', gapBefore: 35 }),
-    activity('ceremony', 60, { title: 'Ceremony', stage: 'ceremony', lockedStart: '14:45', people: ['Bride', 'Groom', 'All Guests'] }),
-    activity('party', 120, { title: 'Dancing & Party', stage: 'party', people: ['All Guests'] })
+    activity('ready', T(11, 30), 45, { title: 'Getting Ready', stage: 'preparation', location: 'Home', people: ['Bride', 'Mothers'] }),
+    activity('bouquet', T(12, 15), 5, { title: 'Bouquet handoff', stage: 'preparation', people: ['Bride', 'Florist'] }),
+    activity('portraits', T(12, 20), 30, { title: 'Getting-ready Portraits', stage: 'photography', people: ['Bride', 'Photographer'] }),
+    activity('travel', T(13, 25), 35, { title: 'Travel to Church', stage: 'transition', location: 'St. Peter and Paul Sobor' }),
+    activity('ceremony', T(14, 45), 60, { title: 'Ceremony', stage: 'ceremony', locked: true, people: ['Bride', 'Groom', 'All Guests'] }),
+    activity('party', T(15, 45), 120, { title: 'Dancing & Party', stage: 'party', people: ['All Guests'] })
   ],
   ...extra
 });
@@ -106,10 +107,6 @@ const appMenu = async page => {
   await expect(page.locator('.menu-popover')).toBeVisible();
 };
 
-const cardMenu = async (page, id) => {
-  await card(page, id).locator('.card-menu-toggle').click();
-  await expect(page.locator('.card-menu')).toBeVisible();
-};
 
 /*
  * Each scene is one figure. `phone` and `desktop` say where the mockups show
@@ -145,8 +142,7 @@ const SCENES = [
   {
     name: 'editing-sheet',
     async run(page) {
-      await cardMenu(page, 'portraits');
-      await page.locator('.card-menu [data-action="edit"]').click();
+      await card(page, 'portraits').locator('.card-edit').click();
       await expect(page.locator('#activity-dialog')).toBeVisible();
     }
   },
@@ -169,7 +165,7 @@ const SCENES = [
     name: 'editing-conflict',
     plan: clash,
     async run(page) {
-      await expect(page.locator('.card.is-conflicted, .card.is-overrun').first()).toBeVisible();
+      await expect(page.locator('.card.is-overlap').first()).toBeVisible();
     }
   },
   {

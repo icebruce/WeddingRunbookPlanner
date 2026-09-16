@@ -24,7 +24,11 @@ svg.icon { width: 1.05em; height: 1.05em; fill: none; stroke: currentColor; stro
   top: 0;
   z-index: 40;
   min-height: var(--topbar-height);
-  padding: 4px 16px;
+  /* On a phone with a notch, a bar stuck to `top: 0` sits flush against the
+     status bar the moment the page scrolls. The safe-area inset keeps a real
+     gap above it instead of relying on whatever margin scroll happened to
+     leave. */
+  padding: calc(4px + var(--safe-top)) 16px 4px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -362,7 +366,7 @@ body.is-resizing { cursor: ns-resize; }
 .filter-chips {
   display: flex;
   gap: 8px;
-  margin: 14px 0 4px;
+  margin: 14px 0 16px;
   padding: 0 4px 4px;
   overflow-x: auto;
   scrollbar-width: none;

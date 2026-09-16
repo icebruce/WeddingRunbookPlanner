@@ -1,5 +1,7 @@
 import { test, expect, activity, seedPlan } from './fixtures.mjs';
-import { isPhoneLayout, signInAndWaitForPlan } from './helpers.mjs';
+import { isPhoneLayout, setPicker, signInAndWaitForPlan } from './helpers.mjs';
+
+const T = (h, m = 0) => h * 60 + m;
 
 const card = (page, id) => page.locator(`.card[data-activity-id="${id}"]`);
 const menu = async page => {
@@ -9,10 +11,10 @@ const menu = async page => {
 
 const crew = () => seedPlan({
   activities: [
-    activity('ready', 45, { title: 'Getting Ready', stage: 'preparation', location: 'Home', people: ['Bride', 'Mothers'] }),
-    activity('portraits', 30, { title: 'Portraits', stage: 'photography', people: ['Bride', 'Photographer'] }),
-    activity('travel', 35, { title: 'Travel', stage: 'transition', location: 'Church', people: ['Bride', 'Wedding Party'] }),
-    activity('ceremony', 60, { title: 'Ceremony', stage: 'ceremony', lockedStart: '14:45', people: ['Bride', 'Groom', 'All Guests'] })
+    activity('ready', T(11, 30), 45, { title: 'Getting Ready', stage: 'preparation', location: 'Home', people: ['Bride', 'Mothers'] }),
+    activity('portraits', T(12, 15), 30, { title: 'Portraits', stage: 'photography', people: ['Bride', 'Photographer'] }),
+    activity('travel', T(12, 45), 35, { title: 'Travel', stage: 'transition', location: 'Church', people: ['Bride', 'Wedding Party'] }),
+    activity('ceremony', T(14, 45), 60, { title: 'Ceremony', stage: 'ceremony', locked: true, people: ['Bride', 'Groom', 'All Guests'] })
   ]
 });
 
@@ -76,7 +78,7 @@ test.describe('the person filter', () => {
 test('the top bar takes over the title once it has scrolled away', async ({ page, server }) => {
   await server.seed({
     plan: seedPlan({
-      activities: Array.from({ length: 10 }, (_, i) => activity(`a${i}`, 60, { title: `Activity ${i + 1}` }))
+      activities: Array.from({ length: 10 }, (_, i) => activity(`a${i}`, T(9) + i * 60, 60, { title: `Activity ${i + 1}` }))
     })
   });
   await signInAndWaitForPlan(page);
@@ -95,7 +97,7 @@ test.describe('plan settings', () => {
 
     await menu(page);
     await page.locator('[data-menu-action="settings"]').click();
-    await page.locator('input[name="sunset"]').fill('17:05');
+    await setPicker(page, page.locator('input[name="sunset"]'), '17:05');
     await page.locator('#settings-form button[type="submit"]').click();
 
     await expect(page.locator('.sunset-pill')).toContainText('5:05');
@@ -111,8 +113,8 @@ test.describe('plan settings', () => {
 
     await menu(page);
     await page.locator('[data-menu-action="settings"]').click();
-    await page.locator('input[name="timelineStart"]').fill('09:00');
-    await page.locator('input[name="timelineEnd"]').fill('01:00');
+    await setPicker(page, page.locator('input[name="timelineStart"]'), '09:00');
+    await setPicker(page, page.locator('input[name="timelineEnd"]'), '01:00');
     await page.locator('#settings-form button[type="submit"]').click();
     await expect(page.locator('#settings-dialog')).toHaveCount(0);
 
@@ -132,7 +134,7 @@ test.describe('plan settings', () => {
 
     await menu(page);
     await page.locator('[data-menu-action="settings"]').click();
-    await page.locator('input[name="timelineStart"]').fill('09:00');
+    await setPicker(page, page.locator('input[name="timelineStart"]'), '09:00');
     await page.locator('#settings-form button[type="submit"]').click();
     await expect(page.locator('.save-indicator')).toHaveText('Saved');
 
@@ -150,6 +152,22 @@ test.describe('plan settings', () => {
 
     await expect(page.locator('#settings-dialog')).toBeVisible();
     await expect(page.locator('#settings-dialog .field-error')).toContainText("can't be empty");
+  });
+
+  test('settings never touch dayStart or a "how much moved" toast — there is no chain to move any more', async ({ page, server }) => {
+    await server.seed({ plan: crew() });
+    await signInAndWaitForPlan(page);
+
+    await menu(page);
+    await page.locator('[data-menu-action="settings"]').click();
+    await page.locator('input[name="title"]').fill('Renamed Day');
+    await page.locator('#settings-form button[type="submit"]').click();
+
+    await expect(page.locator('.toast')).toContainText('Changed plan settings');
+    await expect(page.locator('.toast')).not.toContainText('shifted');
+    await expect(page.locator('.save-indicator')).toHaveText('Saved');
+    expect((await server.read()).plan.title).toBe('Renamed Day');
+    expect('dayStart' in (await server.read()).plan).toBe(false);
   });
 });
 
@@ -183,6 +201,16 @@ test.describe('the menu', () => {
     const inMenu = await page.locator('[data-menu-action="status"]').isVisible();
     expect(inTopBar).not.toBe(inMenu);
   });
+
+  test('theme lives only in the menu, not in settings too', async ({ page, server }) => {
+    await server.seed();
+    await signInAndWaitForPlan(page);
+
+    await menu(page);
+    await page.locator('[data-menu-action="settings"]').click();
+    await expect(page.locator('#settings-dialog')).not.toContainText('Theme');
+    await expect(page.locator('#settings-dialog .segmented')).toHaveCount(0);
+  });
 });
 
 test.describe('print', () => {
@@ -198,7 +226,7 @@ test.describe('print', () => {
     await expect(page.locator('.print-row')).toHaveCount(4);
     await expect(page.locator('.print-sheet h1')).toHaveText('Wedding Day');
     await expect(page.locator('.print-sheet')).toContainText('Saturday, November 21, 2026');
-    await expect(page.locator('.print-row', { hasText: 'Ceremony' })).toContainText('Fixed');
+    await expect(page.locator('.print-row', { hasText: 'Ceremony' })).toContainText('Locked');
   });
 
   test('D18: it prints what the filter is showing', async ({ page, server }) => {
@@ -282,8 +310,8 @@ test('suggestions offer what the plan already uses', async ({ page, server }) =>
   await server.seed({ plan: crew() });
   await signInAndWaitForPlan(page);
 
-  await card(page, 'ready').locator('.card-menu-toggle').click();
-  await page.locator('.card-menu [data-action="edit"]').click();
+  await card(page, 'ready').locator('.card-edit').click();
+  await expect(page.locator('#activity-dialog')).toBeVisible();
 
   const places = await page.locator('#location-suggestions option').evaluateAll(nodes => nodes.map(node => node.value));
   const people = await page.locator('#people-suggestions option').evaluateAll(nodes => nodes.map(node => node.value));
@@ -300,8 +328,8 @@ test('an activity with notes says so on its card', async ({ page, server }) => {
   await server.seed({
     plan: seedPlan({
       activities: [
-        activity('with', 60, { title: 'With notes', notes: 'Bring the rings' }),
-        activity('without', 60, { title: 'Without notes' })
+        activity('with', T(9), 60, { title: 'With notes', notes: 'Bring the rings' }),
+        activity('without', T(10), 60, { title: 'Without notes' })
       ]
     })
   });
@@ -372,38 +400,23 @@ test.describe('D21: dark appearance', () => {
     await expect(page.locator('#main-plan')).toBeVisible();
     expect(await chrome(), 'and again on the next visit').toBe('#111214');
   });
-
-  test('settings offers the same switch, and the two agree', async ({ page, server }) => {
-    await server.seed();
-    await signInAndWaitForPlan(page);
-
-    await menu(page);
-    await page.locator('[data-menu-action="settings"]').click();
-    // The radio itself is hidden behind its label, which is what a finger hits.
-    await page.locator('#settings-dialog .segmented label', { hasText: 'Dark' }).click();
-    await page.locator('#settings-dialog .button--done').click();
-    await expect.poll(() => theme(page)).toBe('dark');
-
-    await menu(page);
-    await expect(page.locator('[data-menu-action="theme"] .menu-switch')).not.toHaveClass(/is-off/);
-  });
 });
 
 test('D4: eleven stages share six phase colours, and the icon says which stage', async ({ page, server }) => {
   await server.seed({
     plan: seedPlan({
       activities: [
-        activity('prep', 45, { title: 'Getting Ready', stage: 'preparation' }),
-        activity('look', 30, { title: 'First Look', stage: 'first-look' }),
-        activity('photos', 30, { title: 'Photos', stage: 'photography' }),
-        activity('drive', 30, { title: 'Drive', stage: 'transition' }),
-        activity('wait', 30, { title: 'Buffer', stage: 'buffer' }),
-        activity('rings', 60, { title: 'Ceremony', stage: 'ceremony' }),
-        activity('toast', 30, { title: 'Celebration', stage: 'celebration' }),
-        activity('drinks', 30, { title: 'Cocktail', stage: 'cocktail' }),
-        activity('sit', 30, { title: 'Reception', stage: 'reception' }),
-        activity('eat', 60, { title: 'Dinner', stage: 'dinner' }),
-        activity('dance', 60, { title: 'Party', stage: 'party' })
+        activity('prep', T(9), 45, { title: 'Getting Ready', stage: 'preparation' }),
+        activity('look', T(9, 45), 30, { title: 'First Look', stage: 'first-look' }),
+        activity('photos', T(10, 15), 30, { title: 'Photos', stage: 'photography' }),
+        activity('drive', T(10, 45), 30, { title: 'Drive', stage: 'transition' }),
+        activity('wait', T(11, 15), 30, { title: 'Buffer', stage: 'buffer' }),
+        activity('rings', T(11, 45), 60, { title: 'Ceremony', stage: 'ceremony' }),
+        activity('toast', T(12, 45), 30, { title: 'Celebration', stage: 'celebration' }),
+        activity('drinks', T(13, 15), 30, { title: 'Cocktail', stage: 'cocktail' }),
+        activity('sit', T(13, 45), 30, { title: 'Reception', stage: 'reception' }),
+        activity('eat', T(14, 15), 60, { title: 'Dinner', stage: 'dinner' }),
+        activity('dance', T(15, 15), 60, { title: 'Party', stage: 'party' })
       ]
     })
   });
@@ -429,31 +442,6 @@ test('D4: eleven stages share six phase colours, and the icon says which stage',
   expect(new Set(icons).size, 'eleven stages, eleven icons').toBe(11);
 });
 
-test('moving the first start time says how much of the day moved with it', async ({ page, server }) => {
-  await server.seed({
-    plan: seedPlan({
-      dayStart: '11:30',
-      activities: [
-        activity('a', 45, { title: 'Getting Ready' }),
-        activity('b', 30, { title: 'Portraits' }),
-        activity('c', 60, { title: 'Ceremony' })
-      ]
-    })
-  });
-  await signInAndWaitForPlan(page);
-
-  await menu(page);
-  await page.locator('[data-menu-action="settings"]').click();
-  await page.locator('#settings-dialog input[name="dayStart"]').fill('12:00');
-  await page.locator('#settings-dialog .button--done').click();
-
-  // Changing the first start is not a cosmetic setting: it moves the whole day.
-  await expect(page.locator('.toast')).toContainText('Changed plan settings');
-  await expect(page.locator('.toast')).toContainText('3 activities');
-  await expect(page.locator('.save-indicator')).toHaveText('Saved');
-  expect((await server.read()).plan.dayStart).toBe('12:00');
-});
-
 test('settings that change nothing are not a change', async ({ page, server }) => {
   await server.seed();
   await signInAndWaitForPlan(page);
@@ -475,7 +463,7 @@ test('a sunset marker that is cleared stays cleared', async ({ page, server }) =
 
   await menu(page);
   await page.locator('[data-menu-action="settings"]').click();
-  await page.locator('#settings-dialog input[name="sunset"]').fill('');
+  await setPicker(page, page.locator('input[name="sunset"]'), '');
   await page.locator('#settings-dialog .button--done').click();
   await expect(page.locator('.save-indicator')).toHaveText('Saved');
   await expect(page.locator('.sunset-line')).toHaveCount(0);

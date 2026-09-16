@@ -1,23 +1,24 @@
 import { test, expect, activity, seedPlan } from './fixtures.mjs';
-import { isPhoneLayout, openActivityEditor, signInAndWaitForPlan, trackToasts } from './helpers.mjs';
+import { isPhoneLayout, openActivityEditor, setPicker, signInAndWaitForPlan, trackToasts } from './helpers.mjs';
+
+const T = (h, m = 0) => h * 60 + m;
 
 const card = (page, id) => page.locator(`.card[data-activity-id="${id}"]`);
 const editor = page => page.locator('#activity-dialog');
 const saved = page => expect(page.locator('.save-indicator')).toHaveText('Saved');
 
 const base = () => seedPlan({
-  dayStart: '11:30',
   activities: [
-    activity('ready', 45, { title: 'Getting Ready', location: 'Getting-ready location', people: ['Bride'] }),
-    activity('portraits', 30, { title: 'Getting-ready Portraits', people: ['Bride', 'Photographer'] }),
-    activity('travel', 35, { title: 'Travel to Church' }),
-    activity('ceremony', 60, { title: 'Ceremony', lockedStart: '14:45' }),
-    activity('cocktail', 75, { title: 'Cocktail Hour' })
+    activity('ready', T(11, 30), 45, { title: 'Getting Ready', location: 'Getting-ready location', people: ['Bride'] }),
+    activity('portraits', T(12, 15), 30, { title: 'Getting-ready Portraits', people: ['Bride', 'Photographer'] }),
+    activity('travel', T(12, 45), 35, { title: 'Travel to Church' }),
+    activity('ceremony', T(14, 45), 60, { title: 'Ceremony', locked: true }),
+    activity('cocktail', T(15, 45), 75, { title: 'Cocktail Hour' })
   ]
 });
 
 async function select(page, id) {
-  await card(page, id).click({ position: { x: 40, y: 10 } });
+  await card(page, id).click({ position: { x: 60, y: 10 } });
   await expect(card(page, id)).toHaveClass(/is-selected/);
 }
 
@@ -28,14 +29,16 @@ async function act(page, id, action) {
     await page.locator(`.toolbar [data-action="${action}"]`).click();
     return;
   }
-  // The wide layout keeps lock on the card itself; the rest are in its menu.
+  // The wide layout keeps lock on the card itself; edit, delete and
+  // duplicate live inside the editor now, not a popover on the card.
   if (action === 'lock') {
     await card(page, id).hover();
     await card(page, id).locator('.lock-button').click();
     return;
   }
-  await card(page, id).locator('.card-menu-toggle').click();
-  await page.locator(`.card-menu [data-action="${action}"]`).click();
+  await openActivityEditor(page, card(page, id));
+  if (action === 'delete') return page.locator('#delete-activity').click();
+  if (action === 'duplicate') return page.locator('#duplicate-activity').click();
 }
 
 test('the editor asks for things in the order the spec gives', async ({ page, server }) => {
@@ -46,6 +49,7 @@ test('the editor asks for things in the order the spec gives', async ({ page, se
   const labels = await editor(page).locator('.field-label').allTextContents();
   expect(labels).toEqual(['Name', 'Timing', 'Location', 'Stage', 'People', 'Notes']);
   await expect(editor(page).locator('#delete-activity')).toBeVisible();
+  await expect(editor(page).locator('#duplicate-activity')).toBeVisible();
 });
 
 test('the timing block works out the end as you change the duration', async ({ page, server }) => {
@@ -62,20 +66,29 @@ test('the timing block works out the end as you change the duration', async ({ p
   await expect(editor(page).locator('[data-ends]')).toHaveText('12:40 PM');
 });
 
-test('switching to Fixed offers the time it already starts at', async ({ page, server }) => {
+test('duration shows the hours-and-minutes reading beside the minute count', async ({ page, server }) => {
+  await server.seed({ plan: base() });
+  await signInAndWaitForPlan(page);
+  await openActivityEditor(page, card(page, 'cocktail'));
+
+  await expect(editor(page).locator('[data-duration-human]')).toHaveText('1 hr 15 min');
+  await editor(page).locator('input[name="duration"]').fill('80');
+  await editor(page).locator('input[name="duration"]').dispatchEvent('input');
+  await expect(editor(page).locator('[data-duration-human]')).toHaveText('1 hr 20 min');
+});
+
+test('the editor opens on the start an activity already has, and a new one can be set', async ({ page, server }) => {
   await server.seed({ plan: base() });
   await signInAndWaitForPlan(page);
   await openActivityEditor(page, card(page, 'portraits'));
 
-  await expect(editor(page).locator('.timing-flexible')).toContainText('Follows the activity before it');
-  await editor(page).locator('.segmented label', { hasText: 'Fixed' }).click();
+  await expect(editor(page).locator('input[name="start"]')).toHaveValue('2026-11-21 12:15');
 
-  await expect(editor(page).locator('.timing-fixed')).toBeVisible();
-  await expect(editor(page).locator('input[name="lockedStart"]')).toHaveValue('12:15');
-
+  await setPicker(page, editor(page).locator('input[name="start"]'), '2026-11-21 09:00');
   await editor(page).locator('button[type="submit"]').click();
   await saved(page);
-  expect((await server.read()).plan.activities[1].lockedStart).toBe('12:15');
+
+  expect((await server.read()).plan.activities.find(a => a.id === 'portraits').start).toBe(T(9));
 });
 
 test('Cancel asks before throwing away typing, and only then', async ({ page, server }) => {
@@ -122,7 +135,7 @@ test('D7: deleting does not ask, and offers Undo instead', async ({ page, server
     ['ready', 'portraits', 'travel', 'ceremony', 'cocktail']);
 });
 
-test('D15: duplicating puts the copy after the original, without its fixed time', async ({ page, server }) => {
+test('D15: duplicating puts the copy right after the original, unlocked', async ({ page, server }) => {
   await server.seed({ plan: base() });
   await signInAndWaitForPlan(page);
 
@@ -133,41 +146,43 @@ test('D15: duplicating puts the copy after the original, without its fixed time'
   expect(stored[3].id).toBe('ceremony');
   expect(stored[4].title).toBe('Ceremony');
   expect(stored[4].id).not.toBe('ceremony');
-  expect(stored[4].lockedStart, 'two activities cannot own the same clock time').toBeNull();
+  expect(stored[4].start, 'right after the original ends').toBe(T(15, 45));
+  expect(stored[4].locked, 'a copy is never locked').toBe(false);
 });
 
-test('fixing and unfixing say what it cost the rest of the day', async ({ page, server }) => {
+test('locking and unlocking toggles in place, with nothing else moving', async ({ page, server }) => {
   await server.seed({ plan: base() });
   await signInAndWaitForPlan(page);
 
-  await act(page, 'ceremony', 'lock');
+  await act(page, 'travel', 'lock');
   await saved(page);
+  await expect(page.locator('.toast')).toContainText('Locked Travel to Church');
+  expect((await server.read()).plan.activities.find(a => a.id === 'travel').locked).toBe(true);
+  expect((await server.read()).plan.activities.find(a => a.id === 'travel').start).toBe(T(12, 45));
 
-  await expect(page.locator('.toast')).toContainText('Ceremony now starts');
-  await expect(page.locator('.toast')).toContainText('shifted');
-  expect((await server.read()).plan.activities[3].lockedStart).toBeNull();
-
-  await page.locator('.toast-action').click();
+  await act(page, 'travel', 'lock');
   await saved(page);
-  expect((await server.read()).plan.activities[3].lockedStart).toBe('14:45');
+  await expect(page.locator('.toast')).toContainText('Unlocked Travel to Church');
+  expect((await server.read()).plan.activities.find(a => a.id === 'travel').locked).toBe(false);
 });
 
-test('D3: a fixed activity shows a solid dark lock, not a red one', async ({ page, server }) => {
+test('D3: a locked activity shows a solid dark lock, not a red one', async ({ page, server }) => {
   await server.seed({ plan: base() });
   await signInAndWaitForPlan(page);
 
-  const colour = await card(page, 'ceremony').locator('.glyph--fixed').evaluate(node => getComputedStyle(node).color);
+  await card(page, 'ceremony').hover();
+  const colour = await card(page, 'ceremony').locator('.lock-button').evaluate(node => getComputedStyle(node).backgroundColor);
   const [r, g, b] = colour.match(/\d+/g).map(Number);
   expect(r, 'the lock is ink, not red').toBeLessThan(90);
   expect(Math.abs(r - g), 'and it is not tinted').toBeLessThan(20);
+  expect(Math.abs(g - b), 'and it is not tinted').toBeLessThan(20);
 });
 
 test.describe('open time', () => {
   const withGap = () => seedPlan({
-    dayStart: '13:00',
     activities: [
-      activity('arrive', 30, { title: 'Arrival & Buffer', location: 'Church' }),
-      activity('ceremony', 60, { title: 'Ceremony', lockedStart: '14:45' })
+      activity('arrive', T(13), 30, { title: 'Arrival & Buffer', location: 'Church' }),
+      activity('ceremony', T(14, 45), 60, { title: 'Ceremony', locked: true })
     ]
   });
 

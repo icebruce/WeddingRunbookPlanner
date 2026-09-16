@@ -22,13 +22,14 @@ import { SAVE_STATES, createSavePipeline } from './save.js';
 import { createStore } from './state.js';
 import { renderHeader } from './render/header.js';
 import { discardSheet, emptyState, peopleChips, renderSheet } from './render/sheets.js';
-import { buildSchedule, formatTime } from './schedule.js';
+import { buildSchedule, formatDuration, formatTime } from './schedule.js';
 import { renderFilterBar, renderFilters } from './render/filters.js';
+import { initPickers } from './render/pickers.js';
 import { renderPrint } from './render/print.js';
 import { renderStrip } from './render/strip.js';
 import { renderHeading, renderSummary, renderTimeline } from './render/timeline.js';
 import { fitCards, hiddenDetails, watchFit } from './render/fit.js';
-import { createToaster, shiftMessage } from './render/toast.js';
+import { createToaster } from './render/toast.js';
 import { renderToolbar } from './render/toolbar.js';
 import { checkPlan, normalizeDuration, roundTimeUp, validateActivity } from './validate.js';
 
@@ -337,8 +338,7 @@ const gestures = createGestures({
  *
  * Every change that a person made deliberately can be taken back for six
  * seconds, which is why deleting does not ask first (D7): the answer to "are
- * you sure?" is being able to say no afterwards. A change that also moved the
- * rest of the day says so in the same toast.
+ * you sure?" is being able to say no afterwards.
  */
 function commit(action, payload, options = {}) {
   // One gate for every change, whatever raised it — a gesture, a keyboard
@@ -354,10 +354,7 @@ function commit(action, payload, options = {}) {
   writeDeviceCopy(store.plan, { revision: store.revision, dirty: true });
 
   if (options.silent) return result;
-  const shift = shiftMessage(result.shifted);
-  toast(shift ? `${result.label} · ${shift}` : result.label, {
-    action: { label: 'Undo', run: undo }
-  });
+  toast(result.label, { action: { label: 'Undo', run: undo } });
   return result;
 }
 
@@ -521,18 +518,13 @@ function bindSheet(dialog) {
       store.setUi({ selectedId: null }, { regions: ['timeline', 'toolbar'] });
     });
 
-    // Flexible and Fixed are one choice, so picking one shows what that means.
-    for (const radio of dialog.querySelectorAll('input[name="timing"]')) {
-      radio.addEventListener('change', () => {
-        const fixed = dialog.querySelector('input[name="timing"][value="fixed"]').checked;
-        dialog.querySelector('.timing-fixed')?.classList.toggle('is-hidden', !fixed);
-        dialog.querySelector('.timing-flexible')?.classList.toggle('is-hidden', fixed);
-        for (const label of dialog.querySelectorAll('.segmented label')) {
-          label.classList.toggle('is-on', label.querySelector('input').checked);
-        }
-        updateEnds(dialog);
-      });
-    }
+    dialog.querySelector('#duplicate-activity')?.addEventListener('click', () => {
+      const id = store.ui.dialog.activity.id;
+      editorBaseline = null;
+      closeSheet();
+      const result = commit('activity.duplicate', { id, newId: uid() });
+      if (result) store.setUi({ selectedId: null }, { regions: ['timeline', 'toolbar'] });
+    });
 
     for (const button of dialog.querySelectorAll('[data-duration-step]')) {
       button.addEventListener('click', () => {
@@ -548,7 +540,8 @@ function bindSheet(dialog) {
       updateEnds(dialog);
     });
     duration?.addEventListener('input', () => updateEnds(dialog));
-    dialog.querySelector('input[name="lockedStart"]')?.addEventListener('input', () => updateEnds(dialog));
+
+    void initPickers(dialog, { onChange: () => updateEnds(dialog) });
 
     bindPeopleEditor(dialog);
     // What the form looked like on open, so Cancel knows whether to ask.
@@ -569,32 +562,36 @@ function bindSheet(dialog) {
 
   if (dialog.id === 'settings-dialog') {
     dialog.querySelector('#settings-form').addEventListener('submit', submitSettings);
+    void initPickers(dialog);
   }
 
 }
 
+/** flatpickr's own "Y-m-d H:i" back into a Date, read from the hidden input it keeps in sync. */
+function parseDateTimeLocal(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/.exec(value || '');
+  if (!match) return null;
+  const [, year, month, day, hour, minute] = match.map(Number);
+  return new Date(year, month - 1, day, hour, minute);
+}
+
+/** An activity's start, in minutes from midnight on the plan's date. */
+function minutesFromPlanDate(date) {
+  const planMidnight = new Date(`${store.plan.date}T00:00:00`);
+  return Math.round((date - planMidnight) / 60_000);
+}
+
 /** "Ends" is worked out from the start and the duration, and shown live. */
 function updateEnds(dialog) {
-  const node = dialog.querySelector('[data-ends]');
-  if (!node) return;
-
-  const fixed = dialog.querySelector('input[name="timing"][value="fixed"]')?.checked;
+  const endNode = dialog.querySelector('[data-ends]');
+  const humanNode = dialog.querySelector('[data-duration-human]');
   const duration = normalizeDuration(Number(dialog.querySelector('input[name="duration"]').value));
-  const startText = fixed
-    ? roundTimeUp(dialog.querySelector('input[name="lockedStart"]').value)
-    : null;
+  if (humanNode) humanNode.textContent = formatDuration(duration);
 
-  let start;
-  if (startText) {
-    start = Number(startText.slice(0, 2)) * 60 + Number(startText.slice(3));
-  } else {
-    const scheduled = buildSchedule(store.plan).items.find(item => item.id === store.ui.dialog?.activity?.id);
-    start = scheduled ? scheduled.start : null;
-  }
-
-  node.textContent = start === null ? '—' : formatTime(start + duration);
-  const flexibleStart = dialog.querySelector('.timing-flexible .group-value');
-  if (flexibleStart && start !== null && !fixed) flexibleStart.textContent = formatTime(start);
+  if (!endNode) return;
+  const startDate = parseDateTimeLocal(dialog.querySelector('input[name="start"]').value);
+  if (!startDate) { endNode.textContent = '—'; return; }
+  endNode.textContent = formatTime(minutesFromPlanDate(startDate) + duration);
 }
 
 /** A stable description of the form, for telling "changed" from "untouched". */
@@ -611,7 +608,7 @@ function submitActivity(event) {
   clearFieldErrors(form);
 
   const data = new FormData(form);
-  const locked = data.get('timing') === 'fixed';
+  const startDate = parseDateTimeLocal(String(data.get('start') || ''));
   const candidate = {
     id: String(data.get('id')),
     title: String(data.get('title')).trim(),
@@ -620,8 +617,8 @@ function submitActivity(event) {
     location: String(data.get('location')).trim(),
     people: peopleValues(form),
     notes: String(data.get('notes')).trim(),
-    // A typed time rounds up to the next 5 minutes instead of being refused.
-    lockedStart: locked ? (roundTimeUp(String(data.get('lockedStart') || '')) || store.plan.dayStart) : null
+    start: startDate ? minutesFromPlanDate(startDate) : 0,
+    locked: data.get('locked') === 'on'
   };
 
   let activity;
@@ -662,7 +659,6 @@ function submitSettings(event) {
     coupleLabel: text('coupleLabel'),
     title: text('title'),
     date: text('date'),
-    dayStart: roundTimeUp(text('dayStart')) || '',
     // Sunset is display-only, so it keeps whatever minute it is given, and an
     // empty field means "no marker" rather than "the default".
     sunset: text('sunset') || null,
@@ -682,15 +678,10 @@ function submitSettings(event) {
     return;
   }
 
-  // The theme is about this device and is never part of the plan.
-  const theme = String(data.get('theme') || 'light');
-  if (theme !== store.ui.theme) setTheme(theme);
-
   const applied = {
     coupleLabel: result.plan.coupleLabel,
     title: result.plan.title,
     date: result.plan.date,
-    dayStart: result.plan.dayStart,
     sunset: result.plan.sunset ?? null
   };
   applied.timelineStart = result.plan.timelineStart ?? null;
@@ -813,6 +804,14 @@ function openEditor(id) {
   store.setUi({ dialog: { type: 'activity', mode: 'edit', activity: structuredClone(activity) }, openMenu: null });
 }
 
+/** Where a new activity starts: right after whatever is selected, or after the last activity, or 8 AM on an empty plan. */
+function defaultStart() {
+  const items = buildSchedule(store.plan).items;
+  const selected = store.ui.selectedId && items.find(item => item.id === store.ui.selectedId);
+  if (selected) return selected.end;
+  return items.length ? Math.max(...items.map(item => item.end)) : 8 * 60;
+}
+
 function blankActivity() {
   return {
     id: uid(),
@@ -822,7 +821,8 @@ function blankActivity() {
     location: '',
     people: [],
     notes: '',
-    lockedStart: null
+    start: defaultStart(),
+    locked: false
   };
 }
 
@@ -850,23 +850,10 @@ const ACTION_HANDLERS = {
   },
   lock(_, element) {
     const id = element.dataset.id;
-    const activity = store.plan.activities.find(item => item.id === id);
-    const unfixing = Boolean(activity?.lockedStart);
     // The menu closes before the plan changes: closing it afterwards would be
     // undone by the repaint the change triggers.
     store.setUi({ selectedId: id, openMenu: null }, { regions: [] });
-
-    const result = commit(unfixing ? 'activity.unfix' : 'activity.fix', { id },
-      { regions: ['timeline', 'toolbar'], silent: unfixing });
-
-    // Unfixing moves the activity, so the toast says where it went as well as
-    // what it cost the rest of the day.
-    if (result && unfixing) {
-      const moved = buildSchedule(store.plan).items.find(entry => entry.id === id);
-      const shift = shiftMessage(result.shifted);
-      const where = moved ? `${activity.title} now starts ${moved.startLabel}` : result.label;
-      toast(shift ? `${where} · ${shift}` : where, { action: { label: 'Undo', run: undo } });
-    }
+    commit('activity.toggleLock', { id }, { regions: ['timeline', 'toolbar'] });
   },
   'set-stage'(_, element) {
     const id = element.dataset.id;
@@ -983,13 +970,13 @@ const ACTION_HANDLERS = {
         openTime,
         // Pre-filled with the length of the gap, which is what it will be if
         // the field is left alone.
-        activity: { ...blankActivity(), duration: normalizeDuration(openTime.end - openTime.start) }
+        activity: { ...blankActivity(), start: openTime.start, duration: normalizeDuration(openTime.end - openTime.start) }
       }
     });
   },
   jump(_, element) {
     const target = element.dataset.target === 'conflict'
-      ? app.querySelector('.card.is-conflicted, .card.is-overrun')
+      ? app.querySelector('.card.is-overlap')
       : app.querySelector('.open-time');
     if (!target) return;
     target.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -1168,12 +1155,15 @@ document.addEventListener('keydown', event => {
     else store.setUi({ selectedId: card.dataset.id, openMenu: null }, { regions: ['timeline', 'toolbar'] });
   }
 
-  // Every gesture has a keyboard alternative: Alt and the arrows move a card,
-  // and the arrows on a focused handle move that edge five minutes.
+  // Every gesture has a keyboard alternative: Alt and the arrows move a card
+  // five minutes earlier or later, and the arrows on a focused handle move
+  // that edge by the same amount.
   if (card && event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
     event.preventDefault();
-    const index = Number(card.dataset.index);
-    commit('activity.move', { id: card.dataset.id, toIndex: index + (event.key === 'ArrowUp' ? -1 : 1) }, { regions: ['timeline', 'toolbar'] });
+    const item = buildSchedule(store.plan).items.find(entry => entry.id === card.dataset.id);
+    if (!item || item.locked) return;
+    const delta = event.key === 'ArrowUp' ? -5 : 5;
+    commit('activity.moveTo', { id: card.dataset.id, start: item.start + delta }, { regions: ['timeline', 'toolbar'] });
     focusByKey(app, `card:${card.dataset.id}`);
     return;
   }

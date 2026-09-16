@@ -317,6 +317,15 @@
   gap: 8px;
 }
 .action-group { border-radius: 14px; background: var(--surface); overflow: hidden; }
+/* The stage list can run to eleven rows — taller than a phone screen has room
+   for above the Cancel button. The list scrolls in place, inside its own
+   rounded box, so Cancel (and, on the activity editor, Done) never end up
+   pushed off the top of the screen with no way back down to them. */
+.action-group:has(.action-option--row) {
+  max-height: min(58vh, 460px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
 .action-header { padding: 12px 16px; text-align: center; border-bottom: .5px solid var(--hair); }
 .action-header strong { display: block; font-size: 14px; font-weight: 600; }
 .action-header small { display: block; margin-top: 2px; color: var(--soft); font-size: 13px; }
@@ -430,9 +439,11 @@
 }
 .toast--layered.is-visible { transform: translateX(-50%) translateY(0); }
 
-/* Menu rows, in the order of the specification. A group separator is a band
-   of background rather than a line, so the groups read as groups. */
-.menu-popover button.is-grouped { border-top: 6px solid var(--fill); }
+/* Menu rows, in the order of the specification. A group separator is a thin
+   line with room either side of it, not a band of background — a band the
+   width of the popover collided with the row's own rounded corners and read
+   as an overlap rather than a divider. */
+.menu-popover button.is-grouped { margin-top: 7px; padding-top: 16px; border-top: 1px solid var(--hair); }
 .menu-popover button small { margin-left: auto; color: var(--soft); font-size: 15px; }
 .menu-popover button .menu-switch { margin-left: auto; }
 

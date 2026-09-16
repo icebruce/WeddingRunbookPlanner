@@ -65,7 +65,7 @@ export function renderPrint({ plan, ui }) {
           <span>${escapeHtml(formatDuration(item.duration))}</span>
         </div>
         <div class="print-details">
-          <h3>${escapeHtml(item.title)}${item.isFixed ? '<span class="print-fixed">Fixed</span>' : ''}</h3>
+          <h3>${escapeHtml(item.title)}${item.locked ? '<span class="print-fixed">Locked</span>' : ''}</h3>
           <p class="print-stage">${escapeHtml(stageLabel(item.stage))}${item.location ? ` · ${escapeHtml(item.location)}` : ''}</p>
           ${item.people?.length ? `<p class="print-people">${escapeHtml(item.people.join(', '))}</p>` : ''}
           ${item.notes ? `<p class="print-notes">${escapeHtml(item.notes)}</p>` : ''}

@@ -83,13 +83,14 @@ export function stripState(plan, now = new Date()) {
     return { kind: 'after', minute, headline: 'Day complete', detail: null, progress: 1 };
   }
 
-  // A conflict means two things are true at once. The fixed activity is the
-  // one that is really happening: it is the one with a promise attached.
+  // Two things can be true at once. The locked activity is the one that is
+  // really happening — it is the one with a promise attached — and anything
+  // else running alongside it is named rather than hidden.
   const running = items.filter(item => item.start <= minute && item.end > minute);
-  const current = running.find(item => item.isFixed) || running[0];
+  const current = running.find(item => item.locked) || running[0];
 
   if (current) {
-    const overrunning = running.find(item => item !== current && item.overrun);
+    const alsoRunning = running.find(item => item !== current);
     return {
       kind: 'during',
       minute,
@@ -99,8 +100,8 @@ export function stripState(plan, now = new Date()) {
       remainingLabel: `${formatCountdown(current.end - minute)} left`,
       progress: (minute - current.start) / current.duration,
       next: nextAfter(items, current),
-      overrunning: overrunning || null,
-      detail: overrunning ? `${overrunning.title} runs over` : null
+      overrunning: alsoRunning || null,
+      detail: alsoRunning ? `Also now: ${alsoRunning.title}` : null
     };
   }
 

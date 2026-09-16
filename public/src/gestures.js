@@ -1,30 +1,32 @@
 /**
- * Direct manipulation: select, long-press, resize and reorder.
+ * Direct manipulation: select, long-press, resize and drag.
  *
  * The rule that shapes all of it: a swipe that starts anywhere on a card
  * scrolls the day. Cards carry `touch-action: pan-y` and nothing here calls
  * preventDefault before a gesture has actually begun, so the browser is free to
- * take the touch as a scroll. Only the handles — which exist only on the
- * selected card — opt out with `touch-action: none`. The old build put a
- * full-width resize strip with `touch-action: none` on every card, so a swipe
- * down the timeline silently changed a duration (F5).
+ * take the touch as a scroll. Only the handles and the grip — which is always
+ * visible, left edge only — opt out with `touch-action: none`.
+ *
+ * A drag moves an activity to wherever it is dropped: there is no list to
+ * reorder into, because clock time *is* position. Ctrl/Cmd-click adds a card
+ * to a group selection; dragging any member of that group carries the whole
+ * group by the same number of minutes, and a locked card in the group simply
+ * does not move.
  *
  * One gesture at a time. Pointer positions are read in `pointermove` and every
  * write to the DOM happens in one `requestAnimationFrame`, so an edge follows
  * the finger without the layout being rebuilt per event (F7).
  */
-import { PX_PER_MIN, buildLayout } from './layout.js';
+import { PX_PER_MIN, buildLayout, laneStyle } from './layout.js';
 import { buildSchedule, formatDuration, formatTime } from './schedule.js';
-import { resizeBottom, resizeTop, move } from './operations.js';
+import { resizeBottom, resizeTop, moveTo, moveGroup } from './operations.js';
 import { cssEscape } from './dom.js';
 
 /** Movement thresholds, in CSS pixels. */
 const TAP_SLOP = 6;
 const LONG_PRESS_CANCEL = 10;
 const LONG_PRESS_MS = 500;
-const REORDER_HOLD_MS = 150;
-/** Enough to stop the slot flickering between two positions. */
-const SLOT_HYSTERESIS = 8;
+const MOVE_HOLD_MS = 150;
 const AUTOSCROLL_EDGE = 64;
 const AUTOSCROLL_STEP = 12;
 
@@ -64,7 +66,7 @@ export function createGestures({ root, store, commit, repaint, onLongPress }) {
     const card = event.target.closest('.card');
     if (!card) return;
     // Controls and handles run their own gestures.
-    if (event.target.closest('button, .handle, .card-grip, .card-reorder, .card-menu, .stage-menu')) return;
+    if (event.target.closest('button, .handle, .card-grip, .stage-menu')) return;
 
     const id = card.dataset.activityId;
     card.classList.add('is-pressed');
@@ -76,6 +78,7 @@ export function createGestures({ root, store, commit, repaint, onLongPress }) {
       x: event.clientX,
       y: event.clientY,
       touch: event.pointerType !== 'mouse',
+      groupPick: event.ctrlKey || event.metaKey,
       longPress: null
     };
 
@@ -105,10 +108,23 @@ export function createGestures({ root, store, commit, repaint, onLongPress }) {
   function onCardPointerUp(event) {
     if (!candidate || candidate.pointerId !== event.pointerId) return;
     const moved = Math.hypot(event.clientX - candidate.x, event.clientY - candidate.y);
-    const { id } = candidate;
+    const { id, groupPick } = candidate;
     clearCandidate();
     if (moved > TAP_SLOP) return;
-    store.setUi({ selectedId: id, openMenu: null }, { regions: ['timeline', 'toolbar'] });
+
+    if (groupPick) {
+      const current = new Set(store.ui.groupSelection.length ? store.ui.groupSelection : (store.ui.selectedId ? [store.ui.selectedId] : []));
+      if (current.has(id)) current.delete(id); else current.add(id);
+      const next = [...current];
+      store.setUi({
+        groupSelection: next.length > 1 ? next : [],
+        selectedId: next.length ? next[next.length - 1] : null,
+        openMenu: null
+      }, { regions: ['timeline', 'toolbar'] });
+      return;
+    }
+
+    store.setUi({ selectedId: id, groupSelection: [], openMenu: null }, { regions: ['timeline', 'toolbar'] });
   }
 
   function clearCandidate() {
@@ -127,7 +143,7 @@ export function createGestures({ root, store, commit, repaint, onLongPress }) {
 
     const item = scheduleOf(store.plan).items.find(entry => entry.id === id);
     if (!item) return;
-    if (edge === 'top' && item.isFixed) return;
+    if (item.locked) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -180,10 +196,7 @@ export function createGestures({ root, store, commit, repaint, onLongPress }) {
   }
 
   function clampStart(item, deltaMinutes) {
-    // Dragging up stops where the previous activity ends: resizing never
-    // creates an overlap.
-    const earliest = item.start - (Number(item.gapBefore) || 0);
-    return Math.max(earliest, Math.min(item.end - 5, item.start + deltaMinutes));
+    return Math.max(0, Math.min(item.end - 5, item.start + deltaMinutes));
   }
 
   function previewPlanForResize() {
@@ -219,17 +232,21 @@ export function createGestures({ root, store, commit, repaint, onLongPress }) {
       edge === 'bottom' ? { id, newEnd: value } : { id, newStart: value });
   }
 
-  // --------------------------------------------------------------- reorder
+  // ------------------------------------------------------------------ move
 
-  function startReorder(event, id, { hold }) {
+  /** Every id that should travel with this one: the group it belongs to, or just itself. */
+  function groupFor(id) {
+    const selection = store.ui.groupSelection;
+    return selection.length > 1 && selection.includes(id) ? selection : [id];
+  }
+
+  function startMove(event, id, { hold }) {
     if (active || event.button > 0) return;
     const card = cardFor(id);
     if (!card) return;
 
     const item = scheduleOf(store.plan).items.find(entry => entry.id === id);
-    // A fixed activity starts at its clock time whatever its position in the
-    // list, so there is nothing for a drag to change.
-    if (!item || item.isFixed) return;
+    if (!item || item.locked) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -238,28 +255,29 @@ export function createGestures({ root, store, commit, repaint, onLongPress }) {
     const handle = event.currentTarget;
     handle.setPointerCapture(event.pointerId);
 
+    const ids = groupFor(id);
+
     const begin = () => {
       active = {
-        kind: 'reorder',
+        kind: 'move',
         id,
+        ids,
         card,
         handle,
         pointerId: event.pointerId,
-        pointerY: event.clientY,
-        offsetY: event.clientY - card.getBoundingClientRect().top,
-        fromIndex: Number(card.dataset.index),
-        slot: Number(card.dataset.index),
+        originY: event.clientY,
+        delta: 0,
         plan: store.plan,
-        started: false,
-        clone: null,
-        slotNode: null,
-        autoscroll: null
+        item,
+        bubble: createBubble()
       };
-      document.body.classList.add('is-reordering');
+      document.body.classList.add('is-moving');
+      card.classList.add('is-drag-source');
+      drawMove();
     };
 
     if (hold) {
-      // A short hold before the card lifts, so a finger resting on the handle
+      // A short hold before the card lifts, so a finger resting on the grip
       // while scrolling does not start a drag (D23). The hold has to be still:
       // moving before it completes means this was a scroll, not a drag, and
       // the timer is abandoned.
@@ -282,81 +300,30 @@ export function createGestures({ root, store, commit, repaint, onLongPress }) {
         timer = null;
         handle.removeEventListener('pointermove', watch);
         begin();
-        liftCard();
-      }, REORDER_HOLD_MS);
+      }, MOVE_HOLD_MS);
 
       handle.addEventListener('pointermove', watch);
       handle.addEventListener('pointerup', abort);
       handle.addEventListener('pointercancel', abort);
     } else {
       begin();
-      liftCard();
     }
 
-    handle.addEventListener('pointermove', onReorderMove);
-    handle.addEventListener('pointerup', onReorderEnd, { once: true });
+    handle.addEventListener('pointermove', onMoveMove);
+    handle.addEventListener('pointerup', onMoveEnd, { once: true });
     handle.addEventListener('pointercancel', cancelGesture, { once: true });
   }
 
-  function liftCard() {
-    if (active?.kind !== 'reorder') return;
-    const rect = active.card.getBoundingClientRect();
-
-    const clone = active.card.cloneNode(true);
-    clone.classList.add('is-lifted');
-    clone.style.position = 'fixed';
-    clone.style.left = `${rect.left}px`;
-    clone.style.top = `${rect.top}px`;
-    clone.style.width = `${rect.width}px`;
-    clone.style.height = `${rect.height}px`;
-    clone.style.zIndex = '90';
-    clone.setAttribute('aria-hidden', 'true');
-    clone.querySelectorAll('button, [tabindex]').forEach(node => { node.tabIndex = -1; });
-    document.body.append(clone);
-
-    const slotNode = document.createElement('div');
-    slotNode.className = 'drop-slot';
-    root.querySelector('.timeline-plan')?.append(slotNode);
-
-    active.clone = clone;
-    active.slotNode = slotNode;
-    active.started = true;
-    active.card.classList.add('is-drag-source');
-    drawReorder();
-  }
-
-  function onReorderMove(event) {
-    if (active?.kind !== 'reorder' || active.pointerId !== event.pointerId) return;
+  function onMoveMove(event) {
+    if (active?.kind !== 'move' || active.pointerId !== event.pointerId) return;
     active.pointerY = event.clientY;
-    if (!active.started) return;
-
-    const next = slotFromPointer(event.clientY);
-    if (next !== active.slot) active.slot = next;
+    const deltaMinutes = Math.round((event.clientY - active.originY) / PX_PER_MIN / 5) * 5;
+    if (deltaMinutes === active.delta) { runAutoscroll(); return; }
+    active.delta = deltaMinutes;
     runAutoscroll();
-    schedulePaint(drawReorder);
+    schedulePaint(drawMove);
   }
 
-  /**
-   * The slot changes only once the pointer has passed the midpoint of the next
-   * position by a few pixels, which stops it flickering back and forth on the
-   * boundary.
-   */
-  function slotFromPointer(clientY) {
-    const others = [...root.querySelectorAll('.card')].filter(card => card !== active.card);
-    let slot = others.length;
-    for (let i = 0; i < others.length; i += 1) {
-      const rect = others[i].getBoundingClientRect();
-      const midpoint = rect.top + rect.height / 2;
-      const bias = i < active.slot ? -SLOT_HYSTERESIS : SLOT_HYSTERESIS;
-      if (clientY < midpoint + bias) {
-        slot = i;
-        break;
-      }
-    }
-    return slot;
-  }
-
-  /** Near the top or bottom of the screen, the page follows the drag. */
   function runAutoscroll() {
     const distanceTop = active.pointerY;
     const distanceBottom = window.innerHeight - active.pointerY;
@@ -372,7 +339,7 @@ export function createGestures({ root, store, commit, repaint, onLongPress }) {
     if (active.autoscroll) return;
 
     const step = () => {
-      if (active?.kind !== 'reorder') return;
+      if (active?.kind !== 'move') return;
       const top = active.pointerY;
       const bottom = window.innerHeight - active.pointerY;
       const way = top < AUTOSCROLL_EDGE ? -1 : bottom < AUTOSCROLL_EDGE ? 1 : 0;
@@ -381,42 +348,43 @@ export function createGestures({ root, store, commit, repaint, onLongPress }) {
         return;
       }
       window.scrollBy(0, way * AUTOSCROLL_STEP);
-      active.slot = slotFromPointer(active.pointerY);
-      drawReorder();
       active.autoscroll = requestAnimationFrame(step);
     };
     active.autoscroll = requestAnimationFrame(step);
   }
 
-  function drawReorder() {
-    if (active?.kind !== 'reorder' || !active.started) return;
+  function previewPlanForMove() {
+    if (active.ids.length > 1) {
+      const result = moveGroup(active.plan, active.ids, active.delta);
+      return result ? result.plan : active.plan;
+    }
+    const result = moveTo(active.plan, active.id, active.item.start + active.delta);
+    return result ? result.plan : active.plan;
+  }
 
-    const rect = active.card.getBoundingClientRect();
-    active.clone.style.top = `${active.pointerY - active.offsetY}px`;
-    active.clone.style.left = `${rect.left}px`;
+  function drawMove() {
+    if (active?.kind !== 'move') return;
+    const plan = previewPlanForMove();
+    const layout = applyPreview(plan);
 
-    const preview = move(active.plan, active.id, active.slot);
-    const plan = preview ? preview.plan : active.plan;
-    const layout = applyPreview(plan, { skipId: active.id, animate: true });
-
-    // The slot shows where the card will land, and says when that is.
     const landing = layout.cards.find(entry => entry.item.id === active.id);
     if (landing) {
-      active.slotNode.style.top = `${landing.top}px`;
-      active.slotNode.style.height = `${landing.height}px`;
-      active.slotNode.textContent = `Lands at ${formatTime(landing.item.start)}`;
+      active.bubble.textContent = active.ids.length > 1
+        ? `Starts ${formatTime(landing.item.start)} · ${active.ids.length} activities`
+        : `Starts ${formatTime(landing.item.start)}`;
+      active.bubble.style.left = `${Math.max(12, active.card.getBoundingClientRect().left)}px`;
+      active.bubble.style.top = `${landing.top - 40}px`;
     }
   }
 
-  function onReorderEnd() {
-    if (active?.kind !== 'reorder') return;
-    const { id, slot, fromIndex, started } = active;
+  function onMoveEnd() {
+    if (active?.kind !== 'move') return;
+    const { id, ids, delta, item } = active;
     finishGesture();
 
-    // Dropping a card back where it started changes nothing, so it is not
-    // saved and does not become an undo step.
-    if (!started || slot === fromIndex) return repaint(['timeline']);
-    commit('activity.move', { id, toIndex: slot });
+    if (!delta) return repaint(['timeline']);
+    if (ids.length > 1) commit('activity.moveGroup', { ids, deltaMinutes: delta });
+    else commit('activity.moveTo', { id, start: item.start + delta });
   }
 
   // ---------------------------------------------------------------- shared
@@ -425,7 +393,7 @@ export function createGestures({ root, store, commit, repaint, onLongPress }) {
    * Draws a plan without changing it. Positions are written directly so the
    * preview is exactly the geometry that will be committed.
    */
-  function applyPreview(plan, { skipId = null, animate = false } = {}) {
+  function applyPreview(plan) {
     const schedule = scheduleOf(plan);
     const layout = buildLayout(plan, schedule);
 
@@ -436,19 +404,9 @@ export function createGestures({ root, store, commit, repaint, onLongPress }) {
       const card = cardFor(entry.item.id);
       if (!card) continue;
 
-      if (entry.item.id === skipId) {
-        card.style.visibility = 'hidden';
-        continue;
-      }
-      // Neighbours move by transform, which the browser can animate without
-      // laying the page out again.
-      if (animate) {
-        card.classList.add('is-settling');
-        card.style.transform = `translateY(${entry.top - parseFloat(card.style.top || '0')}px)`;
-      } else {
-        card.style.top = `${entry.top}px`;
-        card.style.height = `${entry.height}px`;
-      }
+      card.style.top = `${entry.top}px`;
+      card.style.height = `${entry.height}px`;
+      card.style.cssText += laneStyle(entry.lane, entry.totalLanes);
 
       const time = card.querySelector('.card-time span');
       const duration = card.querySelector('.card-time strong');
@@ -514,18 +472,16 @@ export function createGestures({ root, store, commit, repaint, onLongPress }) {
       active.handle.removeEventListener('pointermove', onResizeMove);
       document.body.classList.remove('is-resizing');
     }
-    if (active.kind === 'reorder') {
+    if (active.kind === 'move') {
       if (active.autoscroll) cancelAnimationFrame(active.autoscroll);
-      active.clone?.remove();
-      active.slotNode?.remove();
+      active.bubble.remove();
       active.card.classList.remove('is-drag-source');
-      active.handle.removeEventListener('pointermove', onReorderMove);
-      document.body.classList.remove('is-reordering');
+      active.handle.removeEventListener('pointermove', onMoveMove);
+      document.body.classList.remove('is-moving');
     }
     for (const card of root.querySelectorAll('.card')) {
       card.style.transform = '';
       card.style.visibility = '';
-      card.classList.remove('is-settling');
     }
     active = null;
   }
@@ -555,12 +511,9 @@ export function createGestures({ root, store, commit, repaint, onLongPress }) {
       for (const handle of root.querySelectorAll('[data-role="resize-top"]')) {
         handle.addEventListener('pointerdown', event => startResize(event, handle.dataset.id, 'top'));
       }
-      // A mouse on the grip drags at once; a finger on the handle holds first.
-      for (const grip of root.querySelectorAll('.card-grip[data-role="reorder"]')) {
-        grip.addEventListener('pointerdown', event => startReorder(event, grip.dataset.id, { hold: event.pointerType !== 'mouse' }));
-      }
-      for (const handle of root.querySelectorAll('.card-reorder[data-role="reorder"]')) {
-        handle.addEventListener('pointerdown', event => startReorder(event, handle.dataset.id, { hold: event.pointerType !== 'mouse' }));
+      // A mouse on the grip drags at once; a finger on the grip holds first.
+      for (const grip of root.querySelectorAll('.card-grip[data-role="move"]')) {
+        grip.addEventListener('pointerdown', event => startMove(event, grip.dataset.id, { hold: event.pointerType !== 'mouse' }));
       }
     },
     get active() { return Boolean(active); },

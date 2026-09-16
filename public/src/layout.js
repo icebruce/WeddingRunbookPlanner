@@ -14,8 +14,13 @@ import { parseTime } from './schedule.js';
 /** 20 px per 5 minutes. The one scale, at every width. */
 export const PX_PER_MIN = 4;
 
-/** Cards sit one pixel inside their lines so neighbours never touch. */
-export const CARD_INSET = 1;
+/**
+ * Cards sit inside their lines rather than touching them, so two activities
+ * that meet exactly — one ending at 4:00, the next starting at 4:00 — read as
+ * card, gap, the hour line, gap, card, instead of two borders pressed
+ * together.
+ */
+export const CARD_INSET = 2;
 
 export const MINUTES_PER_DAY = 24 * 60;
 
@@ -88,30 +93,75 @@ export function ticks(from, to) {
   return out;
 }
 
-/**
- * Columns for conflicts.
- *
- * When work truly overlaps a fixed activity, the two are placed side by side
- * for the whole of their cards rather than drawn on top of each other: the
- * overrunning work on the left, the fixed activity on the right, both still on
- * their real times. Everything else spans the full width.
- */
-export const LANE_LEFT_PERCENT = 55;
 export const LANE_GAP_PX = 6;
 
-export function lanes(schedule) {
-  const assigned = new Map();
-  for (const conflict of schedule.conflicts) {
-    assigned.set(conflict.fixedId, 1);
-    for (const id of conflict.overrunIds) assigned.set(id, 0);
+/**
+ * How many activities overlap at once, and which slot each takes.
+ *
+ * This is ordinary interval-graph colouring: walking activities in start
+ * order, each goes in the first lane whose last activity has already ended;
+ * if none is free, it opens a new one. Activities that never overlap anything
+ * share lane 0 and never learn a lane count was computed at all — only a
+ * genuine overlap costs width.
+ */
+export function lanes(items) {
+  const sorted = [...items].sort((a, b) => a.start - b.start || a.end - b.end);
+  const laneEnds = [];
+  const laneOf = new Map();
+
+  // Clusters of mutually-touching activities share one lane count, so a lane
+  // opened for a three-way overlap does not shrink the unrelated activity
+  // that happens to follow it.
+  let clusterEnd = -Infinity;
+  let clusterItems = [];
+  const clusters = [];
+
+  for (const item of sorted) {
+    if (item.start >= clusterEnd && clusterItems.length) {
+      clusters.push(clusterItems);
+      clusterItems = [];
+      laneEnds.length = 0;
+    }
+    let lane = laneEnds.findIndex(end => end <= item.start);
+    if (lane === -1) {
+      lane = laneEnds.length;
+      laneEnds.push(item.end);
+    } else {
+      laneEnds[lane] = item.end;
+    }
+    laneOf.set(item.id, lane);
+    clusterItems.push(item);
+    clusterEnd = Math.max(clusterEnd, item.end);
   }
-  return assigned;
+  if (clusterItems.length) clusters.push(clusterItems);
+
+  const totalLanesOf = new Map();
+  for (const cluster of clusters) {
+    const count = Math.max(...cluster.map(item => laneOf.get(item.id))) + 1;
+    for (const item of cluster) totalLanesOf.set(item.id, count);
+  }
+
+  return { laneOf, totalLanesOf };
 }
 
-export function laneStyle(lane) {
-  if (lane === 0) return `right:calc(${100 - LANE_LEFT_PERCENT}% + ${LANE_GAP_PX / 2}px);`;
-  if (lane === 1) return `left:calc(${LANE_LEFT_PERCENT}% + ${LANE_GAP_PX / 2}px);`;
-  return '';
+/** A card's horizontal slice when it shares its width with others. */
+export function laneStyle(lane, totalLanes) {
+  if (totalLanes <= 1) return '';
+  const width = `calc(${100 / totalLanes}% - ${LANE_GAP_PX * (totalLanes - 1) / totalLanes}px)`;
+  const left = `calc((100% + ${LANE_GAP_PX}px) / ${totalLanes} * ${lane})`;
+  return `left:${left};width:${width};right:auto;`;
+}
+
+/**
+ * The exact minutes an activity overlaps with any other — not the card's
+ * whole height, just the part that truly collides — expressed as a top/height
+ * relative to the card's own top.
+ */
+export function overlapBox(item) {
+  if (!item.overlaps?.length) return null;
+  const start = Math.min(...item.overlaps.map(entry => entry.start));
+  const end = Math.max(...item.overlaps.map(entry => entry.end));
+  return { top: (start - item.start) * PX_PER_MIN, height: (end - start) * PX_PER_MIN };
 }
 
 /**
@@ -128,28 +178,25 @@ export function density(duration) {
 /** Everything a renderer needs, in one pass. */
 export function buildLayout(plan, schedule) {
   const { from, to, height } = range(plan, schedule);
-  const laneOf = lanes(schedule);
+  const { laneOf, totalLanesOf } = lanes(schedule.items);
 
-  const cards = schedule.items.map(item => ({
-    item,
-    ...box(item, from),
-    lane: laneOf.has(item.id) ? laneOf.get(item.id) : null,
-    density: density(item.duration),
-    // The hatched part of an overrunning card, in pixels from its own top.
-    overrunHeight: item.overrun ? Math.min(item.duration, item.overrun.minutes) * PX_PER_MIN : 0
-  }));
+  const cards = schedule.items.map(item => {
+    const totalLanes = totalLanesOf.get(item.id) || 1;
+    return {
+      item,
+      ...box(item, from),
+      lane: laneOf.get(item.id) || 0,
+      totalLanes,
+      density: density(item.duration),
+      overlapBox: overlapBox(item)
+    };
+  });
 
   const openTimes = schedule.openTimes.map(gap => ({
     ...gap,
     top: y(gap.start, from) + CARD_INSET,
     height: (gap.end - gap.start) * PX_PER_MIN - CARD_INSET * 2,
     minutes: gap.end - gap.start
-  }));
-
-  const conflictRails = schedule.conflicts.map(conflict => ({
-    ...conflict,
-    top: y(conflict.start, from),
-    height: conflict.minutes * PX_PER_MIN
   }));
 
   const sunsetMinutes = parseTime(plan?.sunset === undefined ? '16:19' : plan?.sunset);
@@ -160,7 +207,6 @@ export function buildLayout(plan, schedule) {
     height,
     cards,
     openTimes,
-    conflictRails,
     ticks: ticks(from, to),
     endTop: y(schedule.dayEnd, from),
     sunset: sunsetMinutes === null || sunsetMinutes < from || sunsetMinutes > to
