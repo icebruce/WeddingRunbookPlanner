@@ -161,10 +161,10 @@ Pinned filter row: 44 px, `--sel-tint` glass, `Showing **Photographer** · 2 of 
 | State | Treatment |
 |---|---|
 | Rest | Rest elevation |
-| Hover (desktop) | Hover elevation; controls `#5F6269`; resize handles 28×12 hollow `--sel` capsule at top (unless locked) and bottom |
+| Hover (desktop) | Hover elevation; controls `#5F6269`; resize handles 34×9 hollow `--sel` capsule at top (unless locked) and bottom |
 | Pressed (touch) | Scale 0.99, 100 ms |
 | Focus | 2 px `--sel` ring offset 2 px |
-| Selected | 2 px `--sel` ring + `0 8px 22px rgba(10,108,255,.14)`; handles 28×12 hollow `--sel` capsule top (unless locked) and bottom; grip (not a selection-only reorder icon — see above); body right padding 44 px |
+| Selected | 2 px `--sel` ring + `0 8px 22px rgba(10,108,255,.14)`; handles 34×9 hollow `--sel` capsule top (unless locked) and bottom; grip (not a selection-only reorder icon — see above); body right padding 44 px |
 | Resizing | Selected + snap line/label + bubble (`--ink` background, white 13/600, 10 px radius) |
 | Dragging (move) | Lifted elevation; the card itself follows the pointer with a live snap line/label at its new time, same treatment as resizing; a group move (§5.6 of `FUNCTIONAL_SPEC.md`) animates the other selected, unlocked cards to their new positions on release |
 | Live | 1.5 px `--live` outline + soft green shadow; `● Now` tag; green progress |
@@ -242,7 +242,7 @@ Motion happens after release, never during. `prefers-reduced-motion: reduce` rem
 ## 7. Touch and pointer
 
 - Touch targets ≥ 44 × 44 pt; visible glyphs may be smaller.
-- Handles: visible 28×12 hollow `--sel` capsule (`--surface` fill, 2 px border), centered astride the card's top/bottom edge line, not inset from it; hit area 44 px tall × 120 px wide, centered on the edge, extending outward only on the selected card.
+- Handles: visible 34×9 hollow `--sel` capsule (`--surface` fill, 2 px border), centered astride the card's top/bottom edge line, not inset from it; hit area 44 px tall × 120 px wide, centered on the edge, extending outward only on the selected card.
 - Long-press 500 ms with immediate pressed state; reorder hold 150 ms.
 - Movement thresholds: 6 px for tap vs drag, 10 px to cancel long-press.
 - `-webkit-touch-callout: none` and `user-select: none` on cards and handles; text in sheets remains selectable.
