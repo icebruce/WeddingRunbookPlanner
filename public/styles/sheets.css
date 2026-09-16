@@ -322,3 +322,53 @@
   width: min(360px, calc(100vw - 32px));
 }
 .toast--layered.is-visible { transform: translateX(-50%) translateY(0); }
+
+/* Menu rows, in the order of the specification. A group separator is a band
+   of background rather than a line, so the groups read as groups. */
+.menu-popover button.is-grouped { border-top: 6px solid var(--fill); }
+.menu-popover button small { margin-left: auto; color: var(--soft); font-size: 15px; }
+.menu-popover button .menu-switch { margin-left: auto; }
+
+/* The status control lives in the phone menu and in the wide top bar, not
+   both (D24). */
+@media (min-width: 721px) {
+  .menu-popover button.is-phone-only { display: none; }
+}
+@media (max-width: 720px) {
+  .status-control { display: none; }
+}
+
+.settings-group { margin-bottom: 22px; border-radius: var(--radius); background: var(--surface-2); overflow: hidden; }
+.settings-group > .field-label { padding: 12px 14px 6px; margin: 0; }
+.settings-group .group-row input[type="time"],
+.settings-group .group-row input[type="date"],
+.settings-group .group-row input[type="text"],
+.settings-group .group-row input:not([type]) {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: right;
+}
+.group-help { margin: 8px 14px 12px; color: var(--soft); font-size: 13px; line-height: 1.4; }
+.group-badge { margin-left: 8px; padding: 2px 7px; border-radius: 9px; background: var(--fill-strong); color: var(--soft); font-size: 12px; }
+
+/* ---- the empty plan ------------------------------------------------------ */
+
+.empty-plan {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 36px 24px 32px;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  text-align: center;
+}
+.empty-glyph { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: var(--fill); color: var(--brand); }
+.empty-glyph .icon { width: 26px; height: 26px; }
+.empty-plan h2 { margin: 6px 0 0; font-size: 20px; font-weight: 650; }
+.empty-plan p { margin: 0 0 8px; max-width: 34ch; color: var(--soft); font-size: 15px; line-height: 1.45; }
+.empty-plan .button { width: min(280px, 100%); min-height: 50px; }

@@ -62,6 +62,7 @@ export const api = {
   logout: () => request('/api/logout', { method: 'POST', body: '{}' }),
   load: since => request(since === undefined || since === null ? '/api/plan' : `/api/plan?since=${encodeURIComponent(since)}`),
   save: (plan, revision, deviceId) => request('/api/plan', { method: 'PUT', body: JSON.stringify({ plan, revision, deviceId }) }),
+  template: () => request('/api/template'),
   versions: () => request('/api/versions'),
   version: id => request(`/api/versions?id=${encodeURIComponent(id)}`),
   createVersion: (name, extra = {}) => request('/api/versions', { method: 'POST', body: JSON.stringify({ name, ...extra }) }),

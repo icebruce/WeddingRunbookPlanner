@@ -1,0 +1,77 @@
+/*
+ * Printing.
+ *
+ * On screen this is hidden; on paper it is the only thing. No timeline
+ * drawing, no controls, and no colour beyond the small square that names each
+ * phase — a plan printed at a venue is read in whatever light the venue has.
+ */
+.print-sheet { display: none; }
+
+@media print {
+  /* Everything that is for interacting with goes. */
+  .topbar, .toolbar, .mobile-add, .live-strip, .pinned-bar, .timeline,
+  .filter-chips, .planner-add-wrap, .toast-region, #sheet-root, #alert-root,
+  .summary-link { display: none !important; }
+
+  html, body { background: #fff; color: #000; }
+  .planner { padding: 0; }
+  .print-sheet { display: block; }
+
+  @page { margin: 14mm; }
+
+  .print-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    padding-bottom: 12px;
+    border-bottom: 1.5px solid #000;
+  }
+  .print-planner { margin: 0; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+  .print-header h1 { margin: 4px 0 2px; font-size: 26px; }
+  .print-date { margin: 0; font-size: 13px; }
+  .print-facts { display: grid; gap: 2px; margin: 0; font-size: 11px; text-align: right; }
+  .print-facts div { display: flex; gap: 6px; justify-content: flex-end; }
+  .print-facts dt { font-weight: 700; }
+  .print-facts dt::after { content: ':'; }
+  .print-facts dd { margin: 0; }
+
+  .print-group { margin-top: 16px; break-inside: auto; }
+  .print-group h2 {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 0 0 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  .print-swatch { width: 10px; height: 10px; border-radius: 2px; }
+
+  /* An activity is never split across a page: half an instruction is worse
+     than a page turn. */
+  .print-row {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    gap: 16px;
+    padding: 7px 0;
+    border-top: .5px solid #999;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .print-time strong { display: block; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .print-time span { font-size: 11px; }
+  .print-details h3 { margin: 0; font-size: 13px; font-weight: 700; }
+  .print-fixed {
+    margin-left: 7px;
+    padding: 1px 5px;
+    border: .5px solid #000;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .print-details p { margin: 2px 0 0; font-size: 11px; }
+  .print-notes { font-style: italic; }
+}

@@ -205,6 +205,8 @@ export function validatePlan(input) {
 
   // The view range only changes what is drawn. `timelineEnd` may be at or
   // before `timelineStart`, which means the view runs into the next day.
+  // null and an empty string both mean "not set", which is how clearing the
+  // field in settings reaches here.
   const timelineStart = optionalTime(input.timelineStart, { field: 'timelineStart', label: 'Timeline shows from' });
   const timelineEnd = optionalTime(input.timelineEnd, { field: 'timelineEnd', label: 'Timeline shows until' });
   if (timelineStart) plan.timelineStart = timelineStart;

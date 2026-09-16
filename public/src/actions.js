@@ -129,3 +129,13 @@ defineAction('plan.status', (plan, { status }) => {
   plan.status = status;
   return { plan, label: `Set status to ${status}` };
 });
+
+/**
+ * Replacing the whole day at once, which only the wedding template does. It is
+ * one undoable step: "use the template" should be as easy to take back as it
+ * was to take.
+ */
+defineAction('plan.replaceActivities', (plan, { activities }) => {
+  plan.activities = structuredClone(activities);
+  return { plan, label: 'Used the wedding template' };
+});

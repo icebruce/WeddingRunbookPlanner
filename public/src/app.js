@@ -11,7 +11,7 @@
  */
 import './actions.js';
 import { api } from './api.js';
-import { STAGES, deviceId } from './config.js';
+import { PLAN_STATUSES, STAGES, deviceId } from './config.js';
 import { clearDeviceCopy, readDeviceCopy, writeDeviceCopy } from './device.js';
 import { cssEscape, escapeHtml, focusByKey, paint, uid } from './dom.js';
 import { AUTO_VIEW_ONLY_MS, cardStateAt, createClock, minutesNow, readOverride, shouldBeOn, stripState, writeOverride } from './dayof.js';
@@ -20,8 +20,10 @@ import { icon } from './icons.js';
 import { SAVE_STATES, createSavePipeline } from './save.js';
 import { createStore } from './state.js';
 import { renderHeader } from './render/header.js';
-import { discardSheet, peopleChips, renderSheet } from './render/sheets.js';
+import { discardSheet, emptyState, peopleChips, renderSheet } from './render/sheets.js';
 import { buildSchedule, formatTime } from './schedule.js';
+import { renderFilterBar, renderFilters } from './render/filters.js';
+import { renderPrint } from './render/print.js';
 import { renderStrip } from './render/strip.js';
 import { renderHeading, renderSummary, renderTimeline } from './render/timeline.js';
 import { fitCards, hiddenDetails, watchFit } from './render/fit.js';
@@ -76,13 +78,16 @@ function renderOfflineBar({ ui }) {
 
 const SHELL = `
   <header class="topbar" data-region="header"></header>
-  <div data-region="offline"></div>
   <div data-region="strip"></div>
+  <div data-region="offline"></div>
+  <div data-region="filterbar"></div>
   <main id="main-plan" class="planner">
     <section class="planner-heading" data-region="heading"></section>
     <section data-region="summary"></section>
+    <section data-region="filters"></section>
     <section class="timeline" aria-label="Wedding day timeline" data-region="timeline"></section>
   </main>
+  <div data-region="print" aria-hidden="true"></div>
   <div data-region="toolbar"></div>`;
 
 const REGIONS = {
@@ -91,7 +96,11 @@ const REGIONS = {
   strip: ({ ui }) => renderStrip({ ui, strip: ui.strip }),
   heading: ({ plan }) => renderHeading({ plan }),
   summary: ({ plan, ui }) => renderSummary({ plan, ui }),
-  timeline: ({ plan, ui }) => renderTimeline({ plan, ui }),
+  filters: ({ plan, ui }) => renderFilters({ plan, ui }),
+  filterbar: ({ plan, ui }) => renderFilterBar({ plan, ui }),
+  timeline: ({ plan, ui }) => plan.activities.length ? renderTimeline({ plan, ui }) : emptyState(),
+  // Built from the same plan and the same filter, and only ever seen on paper.
+  print: ({ plan, ui }) => renderPrint({ plan, ui }),
   // The toolbar's second line repeats what the selected card had to hide, so
   // it is drawn after the cards have been measured.
   toolbar: ({ plan, ui }) => renderToolbar({
@@ -183,6 +192,7 @@ function paintRegions(names) {
   for (const name of names) {
     paint(app.querySelector(`[data-region="${name}"]`), REGIONS[name](context));
   }
+  if (names.includes('heading')) refreshCollapsedTitle();
   if (names.includes('timeline')) {
     gestures.bind();
     scrollToNow();
@@ -628,21 +638,50 @@ function submitSettings(event) {
   clearFieldErrors(form);
 
   const data = new FormData(form);
+  const text = name => String(data.get(name) || '').trim();
+
   const changes = {
-    coupleLabel: String(data.get('coupleLabel')).trim(),
-    title: String(data.get('title')).trim(),
-    date: String(data.get('date')),
-    dayStart: roundTimeUp(String(data.get('dayStart') || '')) || ''
+    coupleLabel: text('coupleLabel'),
+    title: text('title'),
+    date: text('date'),
+    dayStart: roundTimeUp(text('dayStart')) || '',
+    // Sunset is display-only, so it keeps whatever minute it is given, and an
+    // empty field means "no marker" rather than "the default".
+    sunset: text('sunset') || null,
+    // The view range only changes what is drawn. An end at or before the start
+    // is a plan that runs into the next day, not a mistake.
+    timelineStart: text('timelineStart') ? roundTimeUp(text('timelineStart')) : undefined,
+    timelineEnd: text('timelineEnd') ? roundTimeUp(text('timelineEnd')) : undefined
   };
 
-  const result = checkPlan({ ...structuredClone(store.plan), ...changes });
+  const candidate = { ...structuredClone(store.plan), ...changes };
+  if (changes.timelineStart === undefined) delete candidate.timelineStart;
+  if (changes.timelineEnd === undefined) delete candidate.timelineEnd;
+
+  const result = checkPlan(candidate);
   if (!result.ok) {
     showFieldError(form, result.error.field, result.error.message);
     return;
   }
 
+  // The theme is about this device and is never part of the plan.
+  const theme = String(data.get('theme') || 'light');
+  if (theme !== store.ui.theme) setTheme(theme);
+
+  const applied = {
+    coupleLabel: result.plan.coupleLabel,
+    title: result.plan.title,
+    date: result.plan.date,
+    dayStart: result.plan.dayStart,
+    sunset: result.plan.sunset ?? null
+  };
+  applied.timelineStart = result.plan.timelineStart ?? null;
+  applied.timelineEnd = result.plan.timelineEnd ?? null;
+
   closeSheet();
-  commit('plan.settings', { changes: { coupleLabel: result.plan.coupleLabel, title: result.plan.title, date: result.plan.date, dayStart: result.plan.dayStart } });
+  commit('plan.settings', { changes: applied });
+  // The date decides whether the day-of view belongs on.
+  clock.tick();
 }
 
 async function createVersion(event) {
@@ -842,6 +881,30 @@ const ACTION_HANDLERS = {
       clock.tick();
       return;
     }
+    if (action === 'print') {
+      store.setUi({ openMenu: null });
+      // The print layout is already on the page; the browser decides what to
+      // do with it.
+      requestAnimationFrame(() => window.print());
+      return;
+    }
+    if (action === 'export') {
+      store.setUi({ openMenu: null });
+      window.location.href = '/api/export';
+      return;
+    }
+    if (action === 'status') {
+      const next = PLAN_STATUSES[(PLAN_STATUSES.indexOf(store.plan.status) + 1) % PLAN_STATUSES.length];
+      store.setUi({ openMenu: null }, { regions: [] });
+      commit('plan.status', { status: next }, { regions: ['header'] });
+      clock.tick();
+      return;
+    }
+    if (action === 'theme') {
+      setTheme(store.ui.theme === 'dark' ? 'light' : 'dark');
+      store.setUi({ openMenu: null });
+      return;
+    }
     if (action === 'versions') return void openVersions();
     if (action === 'settings') {
       rememberOpener('menu-app');
@@ -901,6 +964,16 @@ const ACTION_HANDLERS = {
   },
   'day-of-done'() {
     returnToViewOnly();
+  },
+  filter(_, element) {
+    const person = element.dataset.person || null;
+    // The print layout is filtered too — "print my part" is the reason to
+    // print at all — so it repaints with everything else.
+    store.setUi({ filter: person === store.ui.filter ? null : person },
+      { regions: ['filters', 'filterbar', 'timeline', 'print'] });
+  },
+  'use-template'() {
+    void useTemplate();
   },
   'save-retry'() {
     void saver.retry();
@@ -1140,6 +1213,73 @@ function returnToViewOnly() {
   store.setUi({ editingOnDay: false, selectedId: null, openMenu: null }, { regions: ['header', 'timeline', 'toolbar'] });
 }
 
+/**
+ * The theme is a choice about this device, not about the plan, so it is stored
+ * here and never saved. Light is the default and the app does not follow the
+ * system setting (D21): a plan read in a dark room at a venue and the same
+ * plan on a laptop should look like the same plan.
+ */
+const THEME_KEY = 'wrp:theme';
+
+function setTheme(theme) {
+  const next = theme === 'dark' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = next;
+  try {
+    localStorage.setItem(THEME_KEY, next);
+  } catch {
+    // Without storage the choice lasts as long as the tab, which is better
+    // than refusing to make it.
+  }
+  store.setUi({ theme: next }, { regions: ['header'] });
+}
+
+function readTheme() {
+  try {
+    return localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light';
+  } catch {
+    return 'light';
+  }
+}
+
+/** Starting from a wedding that already exists, rather than a blank page. */
+async function useTemplate() {
+  try {
+    const { activities } = await api.template();
+    const plan = structuredClone(store.plan);
+    plan.activities = activities.map((activity, index) => ({ ...activity, id: uid(`t${index}`) }));
+
+    const result = store.dispatch('plan.replaceActivities', { activities: plan.activities });
+    if (!result) return;
+    saver.markDirty();
+    writeDeviceCopy(store.plan, { revision: store.revision, dirty: true });
+    toast(`Added ${plan.activities.length} activities`, { action: { label: 'Undo', run: undo } });
+  } catch (error) {
+    toast(error.message || 'Could not load the template.', { tone: 'error' });
+  }
+}
+
+/**
+ * Once the large title has scrolled past, the top bar takes it over. Watched
+ * rather than measured on every scroll event, so it costs nothing while
+ * scrolling a long day.
+ */
+function watchCollapsedTitle() {
+  let observer = null;
+  return () => {
+    observer?.disconnect();
+    const heading = app.querySelector('.planner-heading h1');
+    const topbar = app.querySelector('.topbar');
+    if (!heading || !topbar) return;
+
+    observer = new IntersectionObserver(([entry]) => {
+      topbar.classList.toggle('is-collapsed', !entry.isIntersecting);
+    }, { rootMargin: '-56px 0px 0px 0px', threshold: 0 });
+    observer.observe(heading);
+  };
+}
+
+const refreshCollapsedTitle = watchCollapsedTitle();
+
 watchFit(app);
 window.addEventListener('online', () => void saver.handleOnline());
 window.addEventListener('offline', () => repaint(['header', 'offline']));
@@ -1234,6 +1374,10 @@ async function loadPlan() {
 }
 
 async function init() {
+  const theme = readTheme();
+  document.documentElement.dataset.theme = theme;
+  store.setUi({ theme }, { regions: [] });
+
   repaint();
   clock.start();
   try {

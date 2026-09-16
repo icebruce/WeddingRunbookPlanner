@@ -2,6 +2,7 @@ import { escapeHtml } from '../dom.js';
 import { icon } from '../icons.js';
 import { STAGES } from '../config.js';
 import { buildSchedule, formatDuration, formatTime, minutesToTime } from '../schedule.js';
+import { DEFAULT_SUNSET } from '../validate.js';
 
 /**
  * Sheets on a phone, dialogs on a laptop — the same content and the same
@@ -315,7 +316,7 @@ function relativeTime(value) {
   return formatVersionDate(value);
 }
 
-export function settingsSheet(plan) {
+export function settingsSheet(plan, ui = {}) {
   return `<dialog id="settings-dialog" class="sheet-dialog">
     <form id="settings-form" class="sheet" method="dialog" novalidate>
       <header class="sheet-header">
@@ -324,13 +325,61 @@ export function settingsSheet(plan) {
         <button class="button button--text button--done" type="submit">Done</button>
       </header>
       <div class="sheet-body">
-        <div class="field"><span class="field-label">Planner name</span><input name="coupleLabel" maxlength="60" value="${escapeHtml(plan.coupleLabel || 'Our Wedding')}"></div>
-        <div class="field"><span class="field-label">Day title</span><input name="title" maxlength="80" value="${escapeHtml(plan.title)}"></div>
-        <div class="field"><span class="field-label">Date</span><input name="date" type="date" value="${escapeHtml(plan.date)}"></div>
-        <div class="field"><span class="field-label">First activity starts</span><input name="dayStart" type="time" value="${escapeHtml(plan.dayStart)}"><small>Flexible activities follow on from this time until they meet a fixed one.</small></div>
+        <fieldset class="field-group settings-group">
+          <legend class="field-label">Plan</legend>
+          <div class="group-row"><span>Planner name</span><input name="coupleLabel" maxlength="60" value="${escapeHtml(plan.coupleLabel || 'Our Wedding')}"></div>
+          <div class="group-row"><span>Day title</span><input name="title" maxlength="80" value="${escapeHtml(plan.title)}"></div>
+          <div class="group-row"><span>Date</span><input name="date" type="date" value="${escapeHtml(plan.date)}"></div>
+        </fieldset>
+
+        <fieldset class="field-group settings-group">
+          <legend class="field-label">Schedule</legend>
+          <div class="group-row"><span>First activity starts</span><input name="dayStart" type="time" value="${escapeHtml(plan.dayStart)}"></div>
+          <div class="group-row"><span>Sunset marker</span><input name="sunset" type="time" value="${escapeHtml(plan.sunset ?? DEFAULT_SUNSET)}"></div>
+        </fieldset>
+
+        <fieldset class="field-group settings-group">
+          <legend class="field-label">Timeline view</legend>
+          <div class="group-row"><span>Shows from</span><input name="timelineStart" type="time" value="${escapeHtml(plan.timelineStart ?? '')}"></div>
+          <div class="group-row"><span>Shows until</span><input name="timelineEnd" type="time" value="${escapeHtml(plan.timelineEnd ?? '')}">
+            ${nextDayNote(plan)}</div>
+          <p class="group-help">Only changes what you see. The view always grows to fit every activity.</p>
+        </fieldset>
+
+        <fieldset class="field-group settings-group">
+          <legend class="field-label">Appearance</legend>
+          <div class="group-row">
+            <span>Theme</span>
+            <span class="segmented" role="radiogroup" aria-label="Theme">
+              <label class="${ui.theme === 'dark' ? '' : 'is-on'}"><input type="radio" name="theme" value="light" ${ui.theme === 'dark' ? '' : 'checked'}>Light</label>
+              <label class="${ui.theme === 'dark' ? 'is-on' : ''}"><input type="radio" name="theme" value="dark" ${ui.theme === 'dark' ? 'checked' : ''}>Dark</label>
+            </span>
+          </div>
+          <p class="group-help">Remembered on this device.</p>
+        </fieldset>
       </div>
     </form>
   </dialog>`;
+}
+
+/** An end at or before the start means the view runs into the next day. */
+function nextDayNote(plan) {
+  if (!plan.timelineEnd || !plan.timelineStart) return '';
+  return plan.timelineEnd <= plan.timelineStart ? '<small class="group-badge">next day</small>' : '';
+}
+
+/**
+ * The first thing anybody sees. Two ways forward: build the day one activity
+ * at a time, or start from a wedding that already exists and change it.
+ */
+export function emptyState() {
+  return `<div class="empty-plan">
+    <div class="empty-glyph">${icon('rings')}</div>
+    <h2>Nothing planned yet</h2>
+    <p>Add activities one at a time, or start from a wedding timeline and adjust it.</p>
+    <button type="button" class="button button--primary" data-action="add">${icon('plus')}<span>Add first activity</span></button>
+    <button type="button" class="button button--quiet" data-action="use-template">Use wedding template</button>
+  </div>`;
 }
 
 export function formatVersionDate(value) {
@@ -347,6 +396,6 @@ export function renderSheet(ui, plan) {
   if (dialog.type === 'stage') return stageSheet(dialog.item);
   if (dialog.type === 'conflict') return conflictSheet(dialog.latest);
   if (dialog.type === 'versions') return versionsSheet(ui.versions, { plan, updatedAt: dialog.updatedAt });
-  if (dialog.type === 'settings') return settingsSheet(plan);
+  if (dialog.type === 'settings') return settingsSheet(plan, ui);
   return '';
 }

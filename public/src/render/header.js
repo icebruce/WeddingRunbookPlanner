@@ -31,6 +31,30 @@ function statusControl(plan) {
   </label>`;
 }
 
+const MENU_ITEMS = [
+  { action: 'day-of', label: 'Day-of view', glyph: 'live', switch: true },
+  { action: 'theme', label: 'Dark appearance', glyph: 'moon', switch: true },
+  { action: 'status', label: 'Status', glyph: 'flag', phoneOnly: true },
+  { action: 'print', label: 'Print or save PDF', glyph: 'print', group: true },
+  { action: 'export', label: 'Export backup', glyph: 'download' },
+  { action: 'versions', label: 'Version history', glyph: 'history' },
+  { action: 'settings', label: 'Plan settings', glyph: 'settings' },
+  { action: 'logout', label: 'Sign out', glyph: 'logout', group: true }
+];
+
+function menuRow(item, plan, ui) {
+  const on = item.action === 'day-of' ? Boolean(ui.dayOf) : item.action === 'theme' ? ui.theme === 'dark' : false;
+  const trailing = item.switch
+    ? `<span class="menu-switch ${on ? '' : 'is-off'}"></span>`
+    : item.action === 'status'
+      ? `<small>${escapeHtml(plan.status)}</small>`
+      : '';
+
+  return `<button type="button" role="menuitem" class="${item.group ? 'is-grouped' : ''} ${item.phoneOnly ? 'is-phone-only' : ''}"
+    data-action="menu-action" data-menu-action="${item.action}" ${item.switch ? `aria-pressed="${on}"` : ''}>
+    ${icon(item.glyph)}<span>${escapeHtml(item.label)}</span>${trailing}</button>`;
+}
+
 function appMenu(open, openMenuUi) {
   // A <details> element cannot be closed from the outside, which is why Escape
   // and a click elsewhere used to leave the menu open (F26). A plain button
@@ -38,13 +62,7 @@ function appMenu(open, openMenuUi) {
   return `<div class="app-menu ${open ? 'is-open' : ''}">
     <button type="button" class="icon-button icon-button--outlined" data-action="menu" data-menu="app" data-focus-key="menu-app" aria-label="Open menu" aria-haspopup="menu" aria-expanded="${open}">${icon('menu')}</button>
     ${open ? `<div class="menu-popover" role="menu">
-      <button type="button" role="menuitem" data-action="menu-action" data-menu-action="day-of" aria-pressed="${Boolean(openMenuUi?.dayOf)}">
-        ${icon('live')}<span>Day-of view</span><span class="menu-switch ${openMenuUi?.dayOf ? '' : 'is-off'}"></span></button>
-      <div class="menu-divider"></div>
-      <button type="button" role="menuitem" data-action="menu-action" data-menu-action="versions">${icon('history')}<span>Version history</span></button>
-      <button type="button" role="menuitem" data-action="menu-action" data-menu-action="settings">${icon('settings')}<span>Plan settings</span></button>
-      <div class="menu-divider"></div>
-      <button type="button" role="menuitem" data-action="menu-action" data-menu-action="logout">${icon('logout')}<span>Sign out</span></button>
+      ${MENU_ITEMS.map(item => menuRow(item, openMenuUi.plan, openMenuUi)).join('')}
     </div>` : ''}
   </div>`;
 }
@@ -63,18 +81,30 @@ function dayOfControls(ui) {
     <button type="button" class="button button--text" data-action="day-of-edit" data-focus-key="day-of-edit">Edit</button>`;
 }
 
+/**
+ * Once the large title has scrolled away the top bar takes it over, so that
+ * "which day is this?" is answerable from anywhere in a long plan.
+ */
+function collapsedTitle(plan) {
+  const date = new Date(`${plan.date}T12:00:00`);
+  const short = Number.isNaN(date.getTime())
+    ? plan.date
+    : new Intl.DateTimeFormat('en-CA', { weekday: 'short', month: 'short', day: 'numeric' }).format(date);
+  return `<span class="collapsed-title" aria-hidden="true"><b>${escapeHtml(plan.title)}</b><small>${escapeHtml(short)}</small></span>`;
+}
+
 export function renderHeader({ plan, ui }) {
-  const brand = `<a href="#main-plan" class="brand" aria-label="${escapeHtml(plan.coupleLabel || 'Our Wedding')} planner">${icon('heart')}<span>${escapeHtml(plan.coupleLabel || 'Our Wedding')}</span></a>`;
+  const brand = `<a href="#main-plan" class="brand" aria-label="${escapeHtml(plan.coupleLabel || 'Our Wedding')} planner">${icon('heart')}<span>${escapeHtml(plan.coupleLabel || 'Our Wedding')}</span></a>${collapsedTitle(plan)}`;
 
   if (ui.dayOf) {
-    return `${brand}<div class="topbar-actions">${dayOfControls(ui)}${appMenu(ui.openMenu === 'app', ui)}</div>`;
+    return `${brand}<div class="topbar-actions">${dayOfControls(ui)}${appMenu(ui.openMenu === 'app', { ...ui, plan })}</div>`;
   }
 
   return `${brand}
     <div class="topbar-actions">
       ${saveIndicator(ui.saveState)}
       ${statusControl(plan)}
-      ${appMenu(ui.openMenu === 'app', ui)}
+      ${appMenu(ui.openMenu === 'app', { ...ui, plan })}
     </div>`;
 }
 

@@ -12,7 +12,9 @@ export async function signIn(page, password = TEST_PASSWORD) {
 
 export async function signInAndWaitForPlan(page, password = TEST_PASSWORD) {
   await signIn(page, password);
-  await expect(page.locator('.timeline-grid')).toBeVisible();
+  // The planner shell, not the timeline: an empty plan has no timeline to
+  // wait for, and waiting for one would make every empty-state test hang.
+  await expect(page.locator('#main-plan')).toBeVisible();
 }
 
 /**
@@ -27,7 +29,7 @@ export async function openPlanner(page, password = TEST_PASSWORD) {
     await field.fill(password);
     await page.locator('#login-form button[type="submit"]').click();
   }
-  await expect(page.locator('.timeline-grid')).toBeVisible();
+  await expect(page.locator('#main-plan')).toBeVisible();
 }
 
 /**

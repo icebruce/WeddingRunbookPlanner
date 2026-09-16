@@ -354,3 +354,46 @@ body.is-resizing { cursor: ns-resize; }
 @media (prefers-reduced-motion: reduce) {
   .live-dot { animation: none; }
 }
+
+/* ---- the person filter --------------------------------------------------- */
+
+.filter-chips {
+  display: flex;
+  gap: 8px;
+  margin: 14px 0 4px;
+  padding: 0 4px 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.filter-chips::-webkit-scrollbar { display: none; }
+.filter-chip {
+  flex: none;
+  height: 36px;
+  padding: 0 14px;
+  border: .5px solid var(--hair);
+  border-radius: 18px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  white-space: nowrap;
+}
+.filter-chip.is-on { background: var(--ink); border-color: var(--ink); color: var(--bg); font-weight: 600; }
+
+.pinned-bar--filter {
+  justify-content: space-between;
+  background: color-mix(in srgb, var(--sel-tint) 95%, transparent);
+  color: var(--ink-2);
+  border-bottom: .5px solid rgba(10, 108, 255, .18);
+}
+.pinned-bar--filter b { color: var(--sel); font-weight: 650; }
+.filter-clear { width: 44px; height: 44px; display: grid; place-items: center; border: 0; background: none; color: var(--sel); }
+.filter-clear .icon { width: 16px; height: 16px; }
+
+/* ---- the collapsed title ------------------------------------------------- */
+
+.collapsed-title { display: none; flex-direction: column; line-height: 1.15; }
+.collapsed-title b { font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
+.collapsed-title small { color: var(--soft); font-size: 12px; }
+.topbar.is-collapsed .brand { display: none; }
+.topbar.is-collapsed .collapsed-title { display: flex; }

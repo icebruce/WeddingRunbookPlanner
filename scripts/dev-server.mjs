@@ -9,6 +9,7 @@ import session from '../api/session.js';
 import plan from '../api/plan.js';
 import versions from '../api/versions.js';
 import exportPlan from '../api/export.js';
+import template from '../api/template.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -24,7 +25,8 @@ const apiRoutes = new Map([
   ['/api/session', session],
   ['/api/plan', plan],
   ['/api/versions', versions],
-  ['/api/export', exportPlan]
+  ['/api/export', exportPlan],
+  ['/api/template', template]
 ]);
 
 const mime = new Map([
