@@ -1,5 +1,5 @@
 import { test, expect, activity, seedPlan } from './fixtures.mjs';
-import { boxInView, centreOf, isPhoneLayout, signInAndWaitForPlan, supportsTouchDrag, touchDrag, touchTap } from './helpers.mjs';
+import { boxInView, cardPoint, centreOf, isPhoneLayout, pairInView, signInAndWaitForPlan, supportsTouchDrag, touchDrag, touchTap } from './helpers.mjs';
 
 const PX_PER_MIN = 4;
 
@@ -127,8 +127,7 @@ test.describe('long press', () => {
     await server.seed({ plan: dense() });
     await signInAndWaitForPlan(page);
 
-    const box = await card(page, 'ready').boundingBox();
-    await touchTap(page, centreOf(box), { holdMs: 700 });
+    await touchTap(page, await cardPoint(page, card(page, 'ready')), { holdMs: 700 });
 
     await expect(page.locator('#activity-dialog')).toBeVisible();
     await expect(page.locator('#activity-dialog input[name="title"]')).toHaveValue('Getting Ready');
@@ -139,8 +138,7 @@ test.describe('long press', () => {
     await server.seed({ plan: dense() });
     await signInAndWaitForPlan(page);
 
-    const box = await card(page, 'ready').boundingBox();
-    const from = centreOf(box);
+    const from = await cardPoint(page, card(page, 'ready'));
     // Hold briefly, then move: this is a scroll, not a press.
     await touchDrag(page, from, { x: from.x, y: from.y - 200 }, { steps: 8, holdMs: 200 });
     await page.waitForTimeout(700);
@@ -283,8 +281,8 @@ test.describe('reorder', () => {
     await server.seed({ plan: dense() });
     await signInAndWaitForPlan(page);
 
+    const [, target] = await pairInView(page, card(page, 'travel'), card(page, 'ready'));
     const grip = await card(page, 'travel').locator('.card-grip').boundingBox();
-    const target = await card(page, 'ready').boundingBox();
 
     await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
     await page.mouse.down();
@@ -303,8 +301,8 @@ test.describe('reorder', () => {
     await server.seed({ plan: dense() });
     await signInAndWaitForPlan(page);
 
+    const [, target] = await pairInView(page, card(page, 'buffer'), card(page, 'portraits'));
     const grip = await card(page, 'buffer').locator('.card-grip').boundingBox();
-    const target = await card(page, 'portraits').boundingBox();
 
     await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
     await page.mouse.down();
@@ -326,6 +324,7 @@ test.describe('reorder', () => {
     await server.seed({ plan: dense() });
     await signInAndWaitForPlan(page);
 
+    await boxInView(page, card(page, 'travel'));
     const grip = await card(page, 'travel').locator('.card-grip').boundingBox();
     await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
     await page.mouse.down();
@@ -341,8 +340,8 @@ test.describe('reorder', () => {
     await server.seed({ plan: dense() });
     await signInAndWaitForPlan(page);
 
+    const [, target] = await pairInView(page, card(page, 'travel'), card(page, 'ready'));
     const grip = await card(page, 'travel').locator('.card-grip').boundingBox();
-    const target = await card(page, 'ready').boundingBox();
 
     await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
     await page.mouse.down();

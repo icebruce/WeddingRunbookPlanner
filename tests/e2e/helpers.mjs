@@ -156,6 +156,33 @@ export function centreOf(box) {
 }
 
 /**
+ * A point on a card that a finger can press without pressing a control.
+ *
+ * A card carries a lock, a menu button and a stage tag, and where those land
+ * depends on how wide the card is — so the geometric centre is not bare card
+ * on every screen. On a 390 px phone the stage tag sits exactly there, and a
+ * press that starts on a button is a press on that button, not on the card.
+ * This scans the card's own column for the first point that is bare.
+ */
+export async function cardPoint(page, locator) {
+  const box = await locator.boundingBox();
+  const point = await page.evaluate(({ x, y, width, height }) => {
+    const controls = 'button, a, input, select, textarea, summary, [role="button"]';
+    for (let fy = 0.5; fy < 0.95; fy += 0.06) {
+      for (const fx of [0.5, 0.35, 0.25, 0.65]) {
+        const px = Math.round(x + width * fx);
+        const py = Math.round(y + height * fy);
+        const el = document.elementFromPoint(px, py);
+        if (el && el.closest('.card') && !el.closest(controls)) return { x: px, y: py };
+      }
+    }
+    return null;
+  }, box);
+  if (!point) throw new Error('no part of the card is free of controls');
+  return point;
+}
+
+/**
  * Brings a target to the middle of the viewport and returns its box there.
  *
  * A touch point outside the visual viewport lands on the document, not on the
@@ -177,6 +204,29 @@ export async function boxInView(page, locator) {
     return locator.boundingBox();
   }
   return box;
+}
+
+/**
+ * Scrolls until two elements are on screen together, and returns both boxes.
+ *
+ * A drag from one card to another needs both ends reachable. A point outside
+ * the viewport lands on the document rather than on the element, so a box read
+ * without scrolling first is only usable while the day happens to be short
+ * enough and the page above the timeline happens to be small enough — which is
+ * exactly the kind of thing a type change quietly breaks.
+ */
+export async function pairInView(page, first, second) {
+  const height = page.viewportSize().height;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const a = await first.boundingBox();
+    const b = await second.boundingBox();
+    const top = Math.min(a.y, b.y);
+    const bottom = Math.max(a.y + a.height, b.y + b.height);
+    if (top >= 8 && bottom <= height - 8) return [a, b];
+    await page.evaluate(by => window.scrollBy(0, by), (top + bottom) / 2 - height / 2);
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+  }
+  return [await first.boundingBox(), await second.boundingBox()];
 }
 
 /**
