@@ -180,3 +180,150 @@ test('a custom action can still be registered directly', () => {
   const result = s.dispatch('test.custom', {});
   assert.equal(result.label, 'Custom');
 });
+
+test('activity.update replaces the activity whole and records a readable label', () => {
+  const s = store();
+  const before = s.plan;
+  const edited = { ...before.activities[0], title: 'Getting Ready — Updated', duration: 90 };
+
+  const result = s.dispatch('activity.update', { activity: edited });
+
+  assert.equal(s.plan.activities[0].title, 'Getting Ready — Updated');
+  assert.equal(s.plan.activities[0].duration, 90);
+  assert.equal(result.label, 'Edited Getting Ready — Updated');
+  assert.equal(s.undoLabel, 'Edited Getting Ready — Updated');
+  assert.equal(before.activities[0].title, 'a', 'the previous plan is untouched');
+});
+
+test('activity.resizeBottom moves the end and records a readable label', () => {
+  const s = store();
+  const before = s.plan;
+
+  const result = s.dispatch('activity.resizeBottom', { id: 'a', newEnd: T(12, 30) });
+
+  assert.equal(s.plan.activities[0].duration, 60);
+  assert.equal(result.label, 'Resized a');
+  assert.notEqual(s.plan, before);
+
+  const noop = s.dispatch('activity.resizeBottom', { id: 'a', newEnd: T(12, 30) });
+  assert.equal(noop, null, 'resizing to the same edge is not a change');
+});
+
+test('activity.resizeTop moves the start, keeps the end, and records a readable label', () => {
+  const s = store();
+  const before = s.plan;
+
+  const result = s.dispatch('activity.resizeTop', { id: 'b', newStart: T(12, 10) });
+
+  assert.equal(s.plan.activities[1].start, T(12, 10));
+  assert.equal(result.label, 'Resized b');
+  assert.notEqual(s.plan, before);
+
+  const noop = s.dispatch('activity.resizeTop', { id: 'b', newStart: T(12, 10) });
+  assert.equal(noop, null, 'resizing to the same edge is not a change');
+});
+
+test('activity.duplicate copies the activity right after the original', () => {
+  const s = store();
+  const before = s.plan;
+
+  const result = s.dispatch('activity.duplicate', { id: 'a', newId: 'a-copy' });
+
+  assert.deepEqual(s.plan.activities.map(x => x.id), ['a', 'a-copy', 'b', 'c']);
+  assert.equal(s.plan.activities[1].locked, false);
+  assert.equal(result.label, 'Duplicated a');
+  assert.equal(before.activities.length, 3, 'the previous plan is untouched');
+});
+
+test('openTime.buffer turns open time into a real Buffer activity', () => {
+  const s = store(activity('a', T(10), { duration: 30 }), activity('fixed', T(12), { duration: 30 }));
+  const openTime = { beforeId: 'fixed', start: T(10, 30), end: T(12) };
+
+  const result = s.dispatch('openTime.buffer', { openTime, newId: 'buffer-1' });
+
+  const buffer = s.plan.activities.find(a => a.id === 'buffer-1');
+  assert.equal(buffer.title, 'Buffer');
+  assert.equal(buffer.duration, 90);
+  assert.equal(result.label, 'Added Buffer');
+
+  const stale = { ...openTime, start: T(9) };
+  assert.equal(s.dispatch('openTime.buffer', { openTime: stale, newId: 'buffer-2' }), null, 'gone open time is a no-op');
+});
+
+test('openTime.extend stretches the previous activity to close the gap', () => {
+  const s = store(activity('a', T(10), { duration: 30 }), activity('fixed', T(12), { duration: 30 }));
+  const openTime = { beforeId: 'fixed', start: T(10, 30), end: T(12) };
+
+  const result = s.dispatch('openTime.extend', { openTime });
+
+  assert.equal(s.plan.activities.find(x => x.id === 'a').duration, 120);
+  assert.equal(result.label, 'Extended the previous activity');
+
+  const stale = { ...openTime, start: T(9) };
+  assert.equal(s.dispatch('openTime.extend', { openTime: stale }), null, 'gone open time is a no-op');
+});
+
+test('openTime.add fills the gap with a new activity', () => {
+  const s = store(activity('a', T(10), { duration: 30 }), activity('fixed', T(12), { duration: 30 }));
+  const openTime = { beforeId: 'fixed', start: T(10, 30), end: T(12) };
+  const newActivity = activity('new', 0);
+  delete newActivity.duration;
+
+  const result = s.dispatch('openTime.add', { openTime, activity: newActivity });
+
+  const created = s.plan.activities.find(x => x.id === 'new');
+  assert.equal(created.duration, 90, 'takes the whole gap by default');
+  assert.equal(result.label, 'Added new');
+});
+
+test('plan.settings applies the changed fields and records one undo step', () => {
+  const s = store();
+  const before = s.plan;
+
+  const result = s.dispatch('plan.settings', { changes: { title: 'Our Big Day', sunset: '17:05' } });
+
+  assert.equal(s.plan.title, 'Our Big Day');
+  assert.equal(s.plan.sunset, '17:05');
+  assert.equal(result.label, 'Changed plan settings');
+  assert.equal(before.title, 'Wedding Day', 'the previous plan is untouched');
+});
+
+test('plan.settings with only unchanged values records nothing', () => {
+  const s = store();
+  const noop = s.dispatch('plan.settings', { changes: { title: s.plan.title, status: s.plan.status } });
+  assert.equal(noop, null);
+  assert.equal(s.canUndo, false);
+});
+
+test('plan.status changes the status and records a readable label', () => {
+  const s = store();
+  const before = s.plan;
+
+  const result = s.dispatch('plan.status', { status: 'Final' });
+
+  assert.equal(s.plan.status, 'Final');
+  assert.equal(result.label, 'Set status to Final');
+  assert.equal(before.status, 'Working', 'the previous plan is untouched');
+});
+
+test('plan.status set to the status it already has records nothing', () => {
+  const s = store();
+  assert.equal(s.dispatch('plan.status', { status: 'Working' }), null);
+  assert.equal(s.canUndo, false);
+});
+
+test('plan.replaceActivities swaps the whole day in as one undoable step', () => {
+  const s = store();
+  const before = s.plan;
+  const replacement = [activity('x', T(9)), activity('y', T(10))];
+
+  const result = s.dispatch('plan.replaceActivities', { activities: replacement });
+
+  assert.deepEqual(s.plan.activities.map(a => a.id), ['x', 'y']);
+  assert.equal(result.label, 'Used the wedding template');
+  assert.equal(s.canUndo, true);
+  assert.deepEqual(before.activities.map(a => a.id), ['a', 'b', 'c'], 'the previous plan is untouched');
+
+  s.undo();
+  assert.deepEqual(s.plan.activities.map(a => a.id), ['a', 'b', 'c']);
+});
