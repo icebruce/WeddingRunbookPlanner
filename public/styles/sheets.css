@@ -1,0 +1,481 @@
+/* Sheets, dialogs, menus, forms and toasts. */
+
+.app-menu { position: relative; }
+
+.app-menu summary { list-style: none; }
+
+.app-menu summary::-webkit-details-marker { display: none; }
+
+.menu-popover { position: absolute; right: 0; top: calc(100% + 8px); width: 210px; padding: 7px; border: 1px solid var(--hair); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-float); }
+
+.menu-popover button { width: 100%; border: 0; background: transparent; display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 9px; text-align: left; font-size: 13px; }
+
+.menu-popover button:hover { background: var(--surface-2); }
+
+.sheet-dialog { width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; }
+
+.sheet-dialog::backdrop { background: rgba(0, 0, 0, .3); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
+
+/*
+ * A sheet rises from the bottom of a phone and a dialog settles in the middle
+ * of a desktop; the scrim fades with either.
+ *
+ * Only the way in is animated. A <dialog> leaves the top layer the moment it
+ * closes, so animating the way out means keeping a closed sheet on the page
+ * for another fifth of a second, over the thing the person has just gone back
+ * to. That is a worse answer than closing at once.
+ */
+@keyframes sheet-in { from { transform: translateY(100%); } }
+@keyframes scrim-in { from { opacity: 0; } }
+.sheet-dialog[open] .sheet { animation: sheet-in 240ms cubic-bezier(.2, .8, .2, 1); }
+.sheet-dialog[open]::backdrop { animation: scrim-in 240ms cubic-bezier(.2, .8, .2, 1); }
+
+.sheet { position: absolute; inset: auto 0 0; max-height: 92dvh; overflow: hidden; border-radius: 16px 16px 0 0; background: var(--surface); box-shadow: var(--shadow-float); display: flex; flex-direction: column; padding-top: 16px; padding-bottom: var(--safe-bottom); }
+
+.sheet-header { height: 52px; padding: 0 12px; border-bottom: 1px solid var(--hair); display: grid; grid-template-columns: 64px 1fr 64px; align-items: center; flex: 0 0 auto; }
+
+.sheet-header .sheet-close { justify-self: start; }
+
+.sheet-header h2 { margin: 0; text-align: center; font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+
+.sheet-header .button, .sheet-header-spacer { justify-self: end; }
+
+/* Cancel and Done are the sheet's two words; they are read at arm's length. */
+.sheet-header .button--text { font-size: 17px; }
+
+/*
+ * The grabber. A sheet that rises from the bottom of a phone says so with a
+ * bar at the top, and drawing it here keeps it out of six pieces of markup.
+ */
+.sheet::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: 36px;
+  height: 5px;
+  margin-left: -18px;
+  border-radius: 3px;
+  background: var(--fill-strong);
+}
+
+.sheet-body { overflow-y: auto; overscroll-behavior: contain; padding: 20px 16px 26px; }
+
+.form-stack { display: flex; flex-direction: column; gap: 16px; }
+
+.field { display: flex; flex-direction: column; gap: 7px; }
+
+.field > span { color: var(--soft); font-size: 12px; font-weight: 620; }
+
+/* No font-size here: a11y.css sets one floor for every field on the page, and
+   a 14 px box is what makes iOS Safari zoom in on focus and never zoom back. */
+.field input, .field select, .field textarea { width: 100%; border: 1px solid var(--spine); border-radius: 10px; background: var(--surface); padding: 10px 11px; outline: 0; transition: border-color .15s, box-shadow .15s; }
+
+.field input, .field select { min-height: 42px; }
+
+.field textarea { resize: vertical; line-height: 1.45; }
+
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--sel); box-shadow: 0 0 0 3px var(--sel-tint); }
+
+.field input[readonly] { background: var(--surface-2); color: var(--soft); }
+
+.stepper { display: grid; grid-template-columns: 38px 1fr 38px; }
+
+.stepper button, .stepper input { min-width: 0; min-height: 42px; border: 1px solid var(--spine); background: var(--surface); text-align: center; }
+
+.stepper button:first-child { border-radius: 10px 0 0 10px; }
+
+.stepper button:last-child { border-radius: 0 10px 10px 0; }
+
+.stepper input { border-left: 0; border-right: 0; border-radius: 0; padding: 4px; }
+
+.stepper input::-webkit-inner-spin-button { appearance: none; }
+
+.switch input { position: absolute; opacity: 0; pointer-events: none; }
+
+.switch span { width: 44px; height: 26px; border-radius: 999px; background: var(--fill-strong); display: block; position: relative; transition: background .18s; }
+
+/* The knob stays white in both themes: it rides on the track colour, not on
+   the page. */
+.switch span::after { content: ''; position: absolute; width: 22px; height: 22px; left: 2px; top: 2px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.2); transition: transform .18s; }
+
+.switch input:checked + span { background: var(--live); }
+
+.switch input:checked + span::after { transform: translateX(18px); }
+
+/*
+ * The People field.
+ *
+ * It had no stylesheet at all: the chips and the Add button were raw form
+ * controls, which look like whatever the browser feels like and, in a dark
+ * appearance in Safari, put grey text on a grey button at 1.82:1.
+ */
+.people-editor { display: flex; flex-direction: column; gap: 10px; }
+
+.people-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.person-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 34px;
+  padding: 0 4px 0 13px;
+  border-radius: 17px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.person-remove {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--faint);
+}
+.person-remove .icon { width: 13px; height: 13px; }
+
+.people-add-trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 17px;
+  background: none;
+  color: var(--sel-text);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+}
+.people-add-trigger .icon { width: 15px; height: 15px; }
+
+.people-add-row { display: flex; align-items: center; gap: 8px; }
+.people-add-row[hidden] { display: none; }
+.people-add-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--spine);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 10px 11px;
+  outline: 0;
+}
+.people-add-confirm { flex: none; }
+
+.danger-action { width: 100%; min-height: 44px; margin-top: 4px; border: 0; border-radius: 10px; background: var(--bad-tint); color: var(--bad-text); display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 650; }
+
+.version-create { display: grid; gap: 10px; padding-bottom: 20px; border-bottom: 1px solid var(--hair); }
+
+.version-create .button { min-height: 42px; }
+
+.version-list { display: flex; flex-direction: column; }
+
+.version-item { padding: 13px 0; border-bottom: 1px solid var(--hair); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+.version-item > div { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+
+.version-item strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+
+.version-item span { color: var(--soft); font-size: 10px; }
+
+.empty-state { padding: 30px 0; text-align: center; color: var(--soft); font-size: 12px; }
+
+.form-error { margin: -8px 0 0; color: var(--bad-text); font-size: 13px; }
+
+.field-error { margin: 6px 0 0; color: var(--bad-text); font-size: 13px; line-height: 1.4; }
+
+[aria-invalid="true"] { outline: 1.5px solid var(--bad); outline-offset: 1px; }
+
+.toast-region { position: fixed; z-index: 2000; left: 50%; bottom: calc(96px + var(--safe-bottom)); transform: translateX(-50%); display: grid; gap: 8px; width: min(360px, calc(100% - 32px)); pointer-events: none; }
+
+
+
+
+
+@media (min-width: 721px) {
+  .sheet-dialog { padding: 24px; display: none; }
+  .sheet-dialog[open] { display: block; }
+  .sheet { inset: 50% auto auto 50%; transform: translate(-50%, -50%); width: min(580px, calc(100vw - 48px)); max-height: min(760px, calc(100dvh - 48px)); border-radius: 16px; padding-bottom: 0; }
+  .sheet-dialog--wide .sheet { width: min(640px, calc(100vw - 48px)); }
+  .sheet { padding-top: 0; }
+  @keyframes dialog-in { from { opacity: 0; transform: translate(-50%, -48%) scale(.98); } }
+  .sheet-dialog[open] .sheet { animation: dialog-in 240ms cubic-bezier(.2, .8, .2, 1); }
+  .sheet::before { display: none; }
+  .sheet-header { border-radius: 16px 16px 0 0; }
+  .sheet-header h2 { font-size: 16px; }
+  .sheet-header .button--text { font-size: 15px; }
+  .sheet-body { padding: 24px; }
+  .version-create { grid-template-columns: 1fr auto; align-items: end; }
+  .version-create .button { margin-bottom: 0; }
+  .toast-region { bottom: 28px; }
+}
+
+/* ---- the editor, restructured -------------------------------------------- */
+
+.sheet-body > .field + .field,
+.sheet-body > .field + .field-group,
+.sheet-body > .field-group + .field { margin-top: 22px; }
+
+.field-label { display: block; margin-bottom: 8px; color: var(--soft); font-size: 13px; font-weight: 600; }
+
+/*
+ * Grouped rows: a label on the left, its value or control on the right. The
+ * timing block uses them so "Starts", "Duration" and "Ends" read as one
+ * answer to one question rather than three unrelated fields.
+ */
+.field-group { margin: 0; padding: 0; border: 0; }
+.field-group .field-label { margin-bottom: 8px; }
+.timing { border-radius: var(--radius); background: var(--surface-2); overflow: hidden; }
+.timing > .field-label { padding: 0 14px; margin: 12px 0 6px; }
+.group-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 50px;
+  padding: 0 14px;
+  font-size: 17px;
+}
+.group-row + .group-row { border-top: .5px solid var(--hair); }
+.group-row.is-hidden { display: none; }
+.group-value, .group-note { color: var(--soft); font-variant-numeric: tabular-nums; }
+.group-note { font-size: 15px; }
+.group-row input[type="time"] { border: 0; background: none; color: var(--ink); font: inherit; text-align: right; font-variant-numeric: tabular-nums; }
+
+.segmented { display: inline-flex; padding: 2px; border-radius: 9px; background: var(--fill-strong); }
+.segmented label {
+  display: grid;
+  place-items: center;
+  min-width: 78px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 550;
+  cursor: pointer;
+}
+.segmented label.is-on { background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.segmented input { position: absolute; opacity: 0; pointer-events: none; }
+
+.stepper { display: inline-flex; align-items: center; height: 36px; border-radius: 9px; background: var(--fill-strong); }
+.stepper button { width: 44px; height: 36px; display: grid; place-items: center; border: 0; background: none; color: var(--ink); }
+.stepper .icon { width: 16px; height: 16px; }
+.stepper input { width: 58px; border: 0; background: none; color: var(--ink); font: inherit; font-size: 16px; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; }
+
+/* The stage picker is a grid of the real tags, so the choice looks like the
+   result. */
+.stage-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.stage-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 17px;
+  background: var(--phase-tint);
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 550;
+  cursor: pointer;
+}
+.stage-choice .icon { width: 16px; height: 16px; color: var(--phase); }
+:root[data-theme="dark"] .stage-choice { background: color-mix(in srgb, var(--phase) 22%, var(--surface)); }
+:root[data-theme="dark"] .stage-choice .icon { color: color-mix(in srgb, var(--phase) 70%, #fff); }
+.stage-choice input { position: absolute; opacity: 0; pointer-events: none; }
+.stage-choice.is-current { box-shadow: inset 0 0 0 1.5px var(--phase); font-weight: 650; }
+.stage-choice:focus-within { outline: 2px solid var(--sel); outline-offset: 2px; }
+
+/* ---- action sheets ------------------------------------------------------- */
+
+/* A dialog whose only child is fixed-positioned collapses to nothing, so
+   the dialog itself covers the viewport. */
+.action-sheet-dialog { position: fixed; inset: 0; width: 100%; max-width: 100%; height: 100%; max-height: 100%; border: 0; background: none; padding: 0; }
+.action-sheet-dialog::backdrop { background: rgba(0, 0, 0, .3); }
+.action-sheet {
+  position: fixed;
+  left: 10px;
+  right: 10px;
+  bottom: calc(10px + var(--safe-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.action-group { border-radius: 14px; background: var(--surface); overflow: hidden; }
+.action-header { padding: 12px 16px; text-align: center; border-bottom: .5px solid var(--hair); }
+.action-header strong { display: block; font-size: 14px; font-weight: 600; }
+.action-header small { display: block; margin-top: 2px; color: var(--soft); font-size: 13px; }
+.action-option {
+  display: block;
+  width: 100%;
+  min-height: 62px;
+  padding: 10px 16px;
+  border: 0;
+  background: none;
+  text-align: center;
+  font: inherit;
+}
+.action-option + .action-option { border-top: .5px solid var(--hair); }
+.action-option b { display: block; color: var(--sel-text); font-size: 18px; font-weight: 500; }
+.action-option small { display: block; margin-top: 2px; color: var(--soft); font-size: 13px; }
+.action-option--row { display: flex; align-items: center; gap: 12px; min-height: 52px; text-align: left; }
+.action-option--row .icon { width: 20px; height: 20px; color: var(--phase); flex: none; }
+.action-option--row b { color: var(--ink); font-size: 17px; }
+.action-option--row .icon:last-child { margin-left: auto; color: var(--sel); }
+.action-option--row.is-current { background: var(--fill); }
+.action-cancel { width: 100%; min-height: 58px; border: 0; background: none; color: var(--sel-text); font: inherit; font-size: 18px; font-weight: 650; }
+
+/* ---- the one alert ------------------------------------------------------- */
+
+.alert-dialog { border: 0; padding: 0; border-radius: 18px; background: none; }
+.alert-dialog::backdrop { background: rgba(0, 0, 0, .3); }
+.alert {
+  width: min(320px, calc(100vw - 72px));
+  padding: 22px 20px 16px;
+  border-radius: 18px;
+  background: var(--surface);
+  text-align: center;
+}
+.alert h2 { margin: 0 0 6px; font-size: 17px; font-weight: 650; }
+.alert p { margin: 0 0 18px; color: var(--soft); font-size: 14px; line-height: 1.45; }
+.alert .button { width: 100%; min-height: 46px; }
+.alert .button + .button { margin-top: 8px; }
+
+/* ---- toasts -------------------------------------------------------------- */
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 50px;
+  padding: 10px 14px;
+  border-radius: var(--radius-lg);
+  /* Dark in both themes: a toast is a notice, not part of the page. */
+  background: rgba(28, 28, 30, .96);
+  color: #fff;
+  font-size: 14px;
+  /* The region ignores pointers so it never blocks the timeline; the toast
+     itself accepts them, because Undo has to be pressable. */
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
+}
+.toast.is-visible { opacity: 1; transform: translateY(0); }
+.toast-action { border: 0; background: none; color: #7FB3FF; font: inherit; font-size: 15px; font-weight: 650; margin-left: auto; }
+.toast--error { background: rgba(120, 28, 24, .97); }
+
+@media (min-width: 721px) {
+  .group-row { min-height: 42px; font-size: 15px; }
+  .action-sheet { left: auto; right: 24px; bottom: 24px; width: 340px; }
+}
+
+/* ---- version history ----------------------------------------------------- */
+
+.version-create { padding-bottom: 18px; border-bottom: .5px solid var(--hair); }
+.version-create .button { margin-top: 12px; }
+.version-list { display: grid; gap: 2px; padding-top: 14px; }
+.version-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.version-item > div { display: grid; gap: 2px; min-width: 0; }
+.version-item strong { font-size: 15px; font-weight: 600; }
+.version-item span { color: var(--soft); font-size: 13px; }
+.version-summary { font-variant-numeric: tabular-nums; }
+.version-item--current { background: var(--sel-tint); }
+.version-item--current strong { color: var(--sel-text); }
+.version-badge {
+  flex: none;
+  padding: 3px 10px;
+  border-radius: 11px;
+  background: var(--sel);
+  color: var(--bg);
+  font-size: 12px;
+  font-weight: 650;
+}
+.version-actions { display: flex; align-items: center; gap: 4px; flex: none; }
+.delete-version { width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 10px; background: none; color: var(--bad); }
+.delete-version .icon { width: 18px; height: 18px; }
+
+/* A toast shown inside an open sheet, so that it is in the same top layer and
+   can actually be pressed. */
+.toast--layered {
+  position: fixed;
+  z-index: 10;
+  left: 50%;
+  bottom: calc(24px + var(--safe-bottom));
+  transform: translateX(-50%) translateY(8px);
+  width: min(360px, calc(100vw - 32px));
+}
+.toast--layered.is-visible { transform: translateX(-50%) translateY(0); }
+
+/* Menu rows, in the order of the specification. A group separator is a band
+   of background rather than a line, so the groups read as groups. */
+.menu-popover button.is-grouped { border-top: 6px solid var(--fill); }
+.menu-popover button small { margin-left: auto; color: var(--soft); font-size: 15px; }
+.menu-popover button .menu-switch { margin-left: auto; }
+
+/* The status control lives in the phone menu and in the wide top bar, not
+   both (D24). */
+@media (min-width: 721px) {
+  .menu-popover button.is-phone-only { display: none; }
+}
+@media (max-width: 720px) {
+  .status-control { display: none; }
+}
+
+.settings-group { margin-bottom: 22px; border-radius: var(--radius); background: var(--surface-2); overflow: hidden; }
+.settings-group > .field-label { padding: 12px 14px 6px; margin: 0; }
+.settings-group .group-row input[type="time"],
+.settings-group .group-row input[type="date"],
+.settings-group .group-row input[type="text"],
+.settings-group .group-row input:not([type]) {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: right;
+}
+.group-help { margin: 8px 14px 12px; color: var(--soft); font-size: 13px; line-height: 1.4; }
+.group-badge { margin-left: 8px; padding: 2px 7px; border-radius: 9px; background: var(--fill-strong); color: var(--soft); font-size: 12px; }
+
+/* ---- the empty plan ------------------------------------------------------ */
+
+.empty-plan {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 36px 24px 32px;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  text-align: center;
+}
+.empty-glyph { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: var(--fill); color: var(--brand); }
+.empty-glyph .icon { width: 26px; height: 26px; }
+.empty-plan h2 { margin: 6px 0 0; font-size: 20px; font-weight: 650; }
+.empty-plan p { margin: 0 0 8px; max-width: 34ch; color: var(--soft); font-size: 15px; line-height: 1.45; }
+.empty-plan .button { width: min(280px, 100%); min-height: 50px; }

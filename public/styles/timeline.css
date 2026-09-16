@@ -1,0 +1,257 @@
+/*
+ * The time grid.
+ *
+ * 4 px per minute — 20 px per five minutes — at every width. A line every five
+ * minutes, strongest at the hour, and labels only where a label is readable.
+ * Nothing here has a minimum height: vertical position is clock time, and a
+ * minimum would push a card off its own time.
+ */
+
+.timeline {
+  position: relative;
+  padding: 0 var(--plan-right) 0 0;
+
+  /* Phone: 56 px of ruler, the plan starts at 64 px, 12 px to spare. */
+  --ruler-width: 56px;
+  --plan-left: 64px;
+  --plan-right: 12px;
+}
+
+.timeline-grid { position: relative; }
+
+/* The spine: one line down the right edge of the label column. */
+.timeline-grid::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 38px;
+  left: calc(var(--ruler-width) - 1px);
+  width: 1px;
+  background: var(--spine);
+}
+
+.timeline-ruler { position: absolute; inset: 0; pointer-events: none; }
+
+.tick { position: absolute; left: 0; right: 0; height: 0; }
+.tick::after {
+  content: '';
+  position: absolute;
+  left: var(--ruler-width);
+  right: 0;
+  top: 0;
+  height: 1px;
+}
+.tick s {
+  position: absolute;
+  top: 0;
+  height: 1px;
+  right: calc(100% - var(--ruler-width));
+  text-decoration: none;
+}
+.tick b {
+  position: absolute;
+  right: calc(100% - var(--ruler-width) + 8px);
+  top: -8px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tick--hour::after { background: var(--grid-hour); }
+.tick--half::after { background: var(--grid-half); }
+.tick--quarter::after { background: var(--grid-quarter); }
+.tick--five::after { background: var(--grid-five); }
+
+.tick--hour s { width: 14px; height: 1.5px; background: var(--tick-hour); }
+.tick--half s { width: 10px; background: var(--tick-half); }
+.tick--quarter s { width: 7px; background: var(--tick-quarter); }
+.tick--five s { width: 4px; background: var(--grid-hour); }
+
+.tick--hour b { font-size: 14px; font-weight: 700; color: var(--ink); }
+.tick--half b { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.tick--quarter b { font-size: 12px; font-weight: 500; color: var(--soft); }
+
+/* The live snap label while an edge is being dragged. */
+.tick--snap::after { background: var(--sel); height: 1.5px; }
+.tick--snap b {
+  color: var(--bg);
+  background: var(--sel);
+  border-radius: 5px;
+  padding: 0 5px;
+  font-size: 11px;
+  font-weight: 650;
+  right: calc(100% - var(--ruler-width) + 4px);
+}
+
+.timeline-plan { position: absolute; top: 0; bottom: 0; left: var(--plan-left); right: var(--plan-right); }
+
+/* Sunset: a pill in the label column, and a dotted line behind the cards. */
+.sunset-line {
+  position: absolute;
+  left: var(--ruler-width);
+  right: 0;
+  height: 0;
+  border-top: 1px dashed color-mix(in srgb, var(--amber) 45%, transparent);
+}
+.sunset-pill {
+  position: absolute;
+  left: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 11px;
+  background: var(--amber-tint);
+  color: var(--amber);
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.sunset-pill .icon { width: 13px; height: 13px; }
+
+/* The overlap, marked in the ruler beside the cards it belongs to. */
+.conflict-rail {
+  position: absolute;
+  left: calc(var(--ruler-width) + 1px);
+  width: 3px;
+  border-radius: 2px;
+  background: var(--bad);
+}
+
+.timeline-end {
+  position: absolute;
+  left: var(--plan-left);
+  right: var(--plan-right);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--soft);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.timeline-end i { flex: 1; height: 1px; background: var(--hair); }
+
+/* Open time: quiet, dashed, and tappable. */
+.open-time {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 12px;
+  border: 1.5px dashed var(--spine);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 35%, transparent);
+  color: var(--ink-2);
+  text-align: center;
+  overflow: hidden;
+  cursor: pointer;
+}
+.open-time strong { font-size: 16px; font-weight: 600; }
+.open-time small { color: var(--soft); font-size: 14px; }
+.open-time-add {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-top: 2px;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink-2);
+  box-shadow: var(--shadow-card);
+}
+/* Under about 70 px there is no room for more than one line. */
+.open-time--thin {
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  padding: 0 12px;
+}
+.open-time--thin strong { font-size: 13px; font-weight: 600; }
+.open-time:focus-visible,
+.open-time:active {
+  border-color: var(--sel);
+  background: var(--sel-tint);
+  color: var(--sel);
+  outline: none;
+}
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 10px 0 0;
+  color: var(--soft);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.summary-sep { color: var(--soft); }
+.summary-break { flex-basis: 100%; height: 0; }
+.summary-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--sel-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.summary-link--bad { color: var(--bad-text); }
+.summary-link .icon { width: 13px; height: 13px; }
+
+.planner-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; padding: 0 4px 18px; }
+.planner-heading h1 { margin: 0; font-size: 34px; line-height: 37px; letter-spacing: -.025em; font-weight: 700; }
+.planner-date { margin: 6px 0 0; color: var(--soft); font-size: 15px; }
+
+/* Narrow phones: the ruler gives up eight pixels rather than the plan. */
+@media (max-width: 360px) {
+  .timeline { --ruler-width: 48px; --plan-left: 54px; }
+}
+
+@media (min-width: 721px) {
+  .timeline { --ruler-width: 80px; --plan-left: 92px; --plan-right: 16px; }
+  .planner-heading h1 { font-size: 44px; line-height: 46px; }
+  .timeline-end { font-size: 14px; }
+}
+
+/* ---- the day itself ------------------------------------------------------ */
+
+.now-line {
+  position: absolute;
+  left: var(--ruler-width);
+  right: 0;
+  height: 0;
+  border-top: 1.5px solid var(--live);
+}
+.now-line::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: -3.5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--live);
+}
+.now-pill {
+  position: absolute;
+  left: 2px;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 11px;
+  background: var(--live);
+  color: var(--bg);
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}

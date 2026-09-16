@@ -1,0 +1,401 @@
+/* Page shell, top bar, sign-in, buttons and everything not specific
+   to the timeline, a card or a sheet. */
+
+* { box-sizing: border-box; }
+
+html { background: var(--bg); }
+
+body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--bg); color: var(--ink); -webkit-font-smoothing: antialiased; }
+
+button, input, select, textarea { font: inherit; color: inherit; }
+
+button, select { -webkit-tap-highlight-color: transparent; }
+
+button { cursor: pointer; }
+
+button:disabled { cursor: not-allowed; opacity: .45; }
+
+svg.icon { width: 1.05em; height: 1.05em; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+
+.sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  min-height: var(--topbar-height);
+  padding: 4px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  -webkit-backdrop-filter: saturate(1.4) blur(20px);
+  backdrop-filter: saturate(1.4) blur(20px);
+  border-bottom: 1px solid var(--hair);
+}
+
+.brand { display: inline-flex; align-items: center; gap: 9px; color: var(--ink); text-decoration: none; font-family: ui-serif, Georgia, "Times New Roman", serif; font-size: 18px; letter-spacing: -.015em; }
+
+.brand .icon { width: 21px; height: 21px; color: var(--brand); stroke-width: 1.45; }
+
+.topbar-actions { display: flex; align-items: center; gap: 8px; }
+
+/* The save state is the one place the app admits it has not stored something,
+   so it is shown at every width. It used to be hidden below 760 px (F23). */
+.save-indicator { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--ink-2); font: inherit; font-size: 13px; font-weight: 560; white-space: nowrap; }
+
+.save-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); flex: none; }
+
+.save-indicator--saving .save-dot { background: var(--amber); animation: pulse 1s ease-in-out infinite; }
+
+.save-indicator--offline .save-dot { background: var(--faint); }
+
+.save-indicator--not-saved { color: var(--bad-text); cursor: pointer; min-height: 44px; }
+
+.save-indicator--not-saved .save-dot { background: var(--bad); }
+
+@keyframes pulse { 50% { opacity: .35; } }
+
+.status-control { height: 36px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px 0 10px; border-radius: 999px; background: var(--fill); color: var(--ink-2); position: relative; }
+
+/* The select fills the pill, so the ring goes round the pill: an outline on
+   the select alone would be a rectangle inside a rounded shape (F25). */
+.status-control select { appearance: none; border: 0; outline: 0; background: transparent; padding: 0 18px 0 0; font-size: 12px; font-weight: 650; cursor: pointer; }
+
+.status-control:has(select:focus-visible) { outline: 2px solid var(--sel); outline-offset: 2px; }
+
+.status-control > .icon { position: absolute; right: 8px; width: 12px; height: 12px; pointer-events: none; }
+
+.status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--live); box-shadow: 0 0 0 3px var(--live-tint); }
+
+.icon-button { width: 36px; height: 36px; border: 0; border-radius: 10px; display: inline-grid; place-items: center; background: transparent; color: var(--soft); }
+
+.icon-button:hover { background: var(--surface-2); color: var(--ink); }
+
+.icon-button--outlined { border: 1px solid var(--hair); background: color-mix(in srgb, var(--surface) 70%, transparent); }
+
+.eyebrow { margin: 0 0 7px; color: var(--soft); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .11em; }
+
+.button { min-height: 44px; padding: 0 16px; border: 1px solid var(--hair); border-radius: 10px; background: var(--surface); display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 15px; font-weight: 650; box-shadow: 0 1px 0 transparent; }
+
+.button:hover { background: color-mix(in srgb, var(--ink) 4%, var(--surface)); }
+
+.button--primary { border-color: var(--ink); background: var(--ink); color: var(--bg); }
+
+.button--primary:hover { background: color-mix(in srgb, var(--ink) 88%, var(--bg)); }
+
+.button--quiet { background: var(--surface-2); border-color: transparent; }
+
+.button--text { border: 0; background: transparent; color: var(--sel-text); padding: 0 8px; box-shadow: none; }
+
+.button--wide { width: 100%; }
+
+/* The header add button belongs to the desktop layout; phones get the
+   floating + instead. */
+.planner-add { display: none; }
+.planner-add-wrap { display: none; }
+
+body.is-reordering { user-select: none; cursor: grabbing; }
+
+.mobile-add { position: fixed; z-index: 35; right: 18px; bottom: calc(18px + var(--safe-bottom)); width: 58px; height: 58px; border: 0; border-radius: 50%; display: grid; place-items: center; background: var(--ink); color: var(--bg); box-shadow: var(--shadow-float); }
+
+.mobile-add .icon { width: 26px; height: 26px; }
+
+.is-hidden { display: none !important; }
+
+.login-view, .loading-view, .fatal-view { min-height: 100dvh; display: grid; place-items: center; padding: 24px; }
+
+.login-card { width: min(400px, 100%); padding: 28px 22px; border: 1px solid var(--hair); border-radius: 20px; background: color-mix(in srgb, var(--surface) 94%, transparent); box-shadow: var(--shadow-card); }
+
+.brand--login { margin-bottom: 38px; }
+
+.login-copy h1 { margin: 0; font-size: 36px; letter-spacing: -.04em; line-height: 1; }
+
+.login-copy > p:last-child { margin: 12px 0 24px; color: var(--soft); font-size: 13px; line-height: 1.5; }
+
+.loading-view { align-content: center; gap: 10px; color: var(--soft); font-size: 13px; }
+
+.loading-mark .icon { width: 32px; height: 32px; color: var(--brand); animation: pulse 1.2s ease-in-out infinite; }
+
+.fatal-view { text-align: center; align-content: center; }
+
+.fatal-view > div { color: var(--bad-text); font-size: 30px; }
+
+.fatal-view h1 { margin: 10px 0 8px; font-size: 24px; }
+
+.fatal-view p { max-width: 420px; color: var(--soft); font-size: 13px; line-height: 1.5; }
+
+@media (min-width: 721px) {
+  .topbar { padding: 9px 28px; }
+  .planner-add { display: inline-flex; }
+  .planner-add-wrap { display: block; text-align: right; }
+  .mobile-add { display: none; }
+}
+
+/* The desktop add button says where the new activity will land, because
+   "after the selected one" is not guessable from the button alone. */
+.add-hint { margin: 6px 0 0; color: var(--soft); font-size: 13px; }
+
+/* Highlight after a summary link scrolls to open time or a conflict. */
+.is-highlighted { animation: highlight 1.6s ease-out; }
+@keyframes highlight {
+  0%, 60% { box-shadow: 0 0 0 3px var(--sel-tint), 0 0 0 4px var(--sel); }
+  100% { box-shadow: none; }
+}
+
+/* The bubble beside an edge being dragged. */
+.resize-bubble {
+  position: fixed;
+  z-index: 95;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.card.is-drag-source { opacity: .25; }
+.card.is-lifted {
+  box-shadow: var(--shadow-lifted), 0 0 0 1px var(--sel);
+  transform: rotate(-.6deg) scale(1.02);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .is-highlighted { animation: none; box-shadow: 0 0 0 3px var(--sel); }
+}
+
+/*
+ * The selection toolbar replaces the floating + while a card is selected. Its
+ * second line repeats whatever that card had to hide, so selecting a short card
+ * is how you read the rest of it.
+ */
+.toolbar {
+  position: fixed;
+  z-index: 40;
+  left: 12px;
+  right: 12px;
+  bottom: calc(18px + var(--safe-bottom));
+  padding: 10px 12px 12px;
+  border-radius: 24px;
+  /* It arrives from below, as the + it replaces did. */
+  animation: toolbar-in 180ms ease-out;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  box-shadow: var(--shadow-float);
+}
+.toolbar-context { padding: 0 6px 8px; font-size: 13px; color: var(--ink-2); }
+.toolbar-context strong { font-weight: 650; }
+.toolbar-hidden {
+  display: block;
+  margin-top: 2px;
+  color: var(--soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.toolbar-buttons { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; }
+/* One button, one column. */
+.toolbar--view-only .toolbar-buttons { grid-template-columns: 1fr; }
+.toolbar-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 54px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+}
+.toolbar-button .icon { width: 22px; height: 22px; }
+.toolbar-button--danger { color: var(--bad-text); }
+
+/* While a card is selected the + is not offered: the toolbar has taken its place. */
+.toolbar ~ .mobile-add { display: none; }
+
+/* Where the card will land, and when. */
+.drop-slot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: flex-start;
+  padding: 6px 10px;
+  border: 1.5px solid var(--sel);
+  border-radius: var(--radius);
+  background: var(--sel-tint);
+  color: var(--sel);
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+@keyframes toolbar-in { from { opacity: 0; transform: translateY(12px); } }
+
+/* Neighbours settle into place after the drop, never during it. */
+.card.is-settling { transition: transform 180ms ease-out; }
+.card.is-pressed { transform: scale(.99); transition: transform 100ms ease-out; }
+
+/* Nothing selects text or shows a callout while a gesture is running. */
+body.is-reordering, body.is-resizing { user-select: none; -webkit-user-select: none; }
+body.is-resizing { cursor: ns-resize; }
+
+@media (min-width: 721px) {
+  .toolbar { display: none; }
+}
+
+/*
+ * The bars that stick under the top bar are each painted into a region of
+ * their own, and a region is a <div> exactly as tall as the bar inside it — so
+ * `position: sticky` had nowhere to stick and they scrolled away with the page.
+ * The wrappers are not boxes; they are places to paint into.
+ */
+[data-region="strip"],
+[data-region="offline"],
+[data-region="filterbar"] { display: contents; }
+
+/* Pinned bars sit under the top bar and stay there: the offline one, and the
+   filter one. They are statements of fact, not alerts. */
+.pinned-bar {
+  position: sticky;
+  top: var(--topbar-height);
+  z-index: 34;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 18px;
+  font-size: 14px;
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+.pinned-bar--offline {
+  background: color-mix(in srgb, var(--fill-strong) 94%, transparent);
+  color: var(--ink-2);
+  border-bottom: .5px solid var(--hair);
+}
+
+/* ---- the live strip ------------------------------------------------------ */
+
+.live-strip {
+  position: sticky;
+  top: var(--topbar-height);
+  z-index: 35;
+  padding: 8px 18px 10px;
+  background: color-mix(in srgb, var(--live-tint) 94%, transparent);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border-bottom: .5px solid rgba(30, 158, 82, .18);
+}
+.live-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.live-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--live-dot);
+  animation: live-pulse 1.8s ease-out infinite;
+}
+.live-label { flex: none; color: var(--live-text); font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.live-activity { flex: 1; min-width: 0; font-size: 16px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.live-remaining { flex: none; color: var(--live-text); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.live-second { margin: 2px 0 0 16px; color: var(--soft); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.live-second b { color: var(--ink-2); font-weight: 650; }
+.live-over { color: var(--bad-text); font-weight: 600; }
+.live-progress { margin: 8px -18px -10px; height: 2px; background: color-mix(in srgb, var(--live) 12%, transparent); }
+.live-progress i { display: block; height: 100%; background: var(--live-dot); }
+
+/* The top bar says which mode the day is in. */
+.mode-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 15px;
+  font-size: 13px;
+  font-weight: 650;
+}
+.mode-pill .icon { width: 14px; height: 14px; }
+.mode-pill--view { background: var(--fill-strong); color: var(--ink-2); }
+.mode-pill--editing { background: var(--amber-tint); color: var(--amber); }
+.mode-pill--editing i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+.menu-switch { margin-left: auto; width: 40px; height: 24px; border-radius: 12px; background: var(--live-dot); position: relative; flex: none; }
+/* White in both themes, for the same reason as .switch. */
+.menu-switch::after { content: ''; position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+.menu-switch.is-off { background: var(--fill-strong); }
+.menu-switch.is-off::after { right: auto; left: 2px; }
+
+/* One line on a wide screen: there is room for what is next beside what is now. */
+/*
+ * The global reduced-motion rule shortens every animation to nothing, which is
+ * the right blanket answer but leaves the pulse still named and still running.
+ * The pulse is called out by name in the design guide, so it is turned off by
+ * name here.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .live-dot { animation: none; }
+}
+
+@media (min-width: 721px) {
+  .live-strip { display: flex; align-items: center; gap: 18px; padding: 10px 28px; }
+  .live-line { flex: 1.25; }
+  .live-second { flex: 1; margin: 0; text-align: right; }
+  .live-progress { position: absolute; left: 0; right: 0; bottom: 0; margin: 0; }
+}
+
+/* ---- the person filter --------------------------------------------------- */
+
+.filter-chips {
+  display: flex;
+  gap: 8px;
+  margin: 14px 0 4px;
+  padding: 0 4px 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.filter-chips::-webkit-scrollbar { display: none; }
+.filter-chip {
+  flex: none;
+  height: 36px;
+  padding: 0 14px;
+  border: .5px solid var(--hair);
+  border-radius: 18px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  white-space: nowrap;
+}
+.filter-chip.is-on { background: var(--ink); border-color: var(--ink); color: var(--bg); font-weight: 600; }
+
+.pinned-bar--filter {
+  justify-content: space-between;
+  background: color-mix(in srgb, var(--sel-tint) 95%, transparent);
+  color: var(--ink-2);
+  border-bottom: .5px solid rgba(10, 108, 255, .18);
+}
+.pinned-bar--filter b { color: var(--sel-text); font-weight: 650; }
+.filter-clear { width: 44px; height: 44px; display: grid; place-items: center; border: 0; background: none; color: var(--sel); }
+.filter-clear .icon { width: 16px; height: 16px; }
+
+/* ---- the collapsed title ------------------------------------------------- */
+
+.collapsed-title { display: none; flex-direction: column; line-height: 1.15; }
+.collapsed-title b { font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
+.collapsed-title small { color: var(--soft); font-size: 12px; }
+.topbar.is-collapsed .brand { display: none; }
+.topbar.is-collapsed .collapsed-title { display: flex; }

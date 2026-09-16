@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#F7F7F4">
+  <meta name="description" content="Private wedding day timeline planner">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon-192.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.svg">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Our Wedding">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>Our Wedding · Day Planner</title>
+  <link rel="stylesheet" href="/styles/tokens.css">
+  <link rel="stylesheet" href="/styles/base.css">
+  <link rel="stylesheet" href="/styles/timeline.css">
+  <link rel="stylesheet" href="/styles/cards.css">
+  <link rel="stylesheet" href="/styles/sheets.css">
+  <link rel="stylesheet" href="/styles/print.css">
+  <link rel="stylesheet" href="/styles/a11y.css">
+  <script type="module" src="/src/app.js"></script>
+</head>
+<body>
+  <!-- No aria-live here. It used to re-announce the whole screen on every
+       change; only the toast region speaks. -->
+  <div id="app" class="app-shell"></div>
+  <div id="sheet-root"></div>
+  <!-- Alerts stack on top of an open sheet rather than replacing it, so
+       asking "discard changes?" cannot itself discard them. -->
+  <div id="alert-root"></div>
+  <div id="toast-region" class="toast-region" role="status" aria-atomic="false"></div>
+</body>
+</html>

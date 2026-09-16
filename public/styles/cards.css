@@ -1,0 +1,371 @@
+/*
+ * Activity cards.
+ *
+ * A card is exactly as tall as its duration. What it shows is decided by
+ * measuring it (fit.js) and dropping rows in one order — people, stage,
+ * location, progress, time — until the content fits. The title and any warning
+ * never drop. Three faint dots in the corner say something was hidden.
+ */
+
+.card {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  /* Not `overflow: hidden`. The handles sit astride the card's edges by
+     design, and clipping the card clipped them out of existence. The content
+     is clipped by .card-body instead. */
+  -webkit-touch-callout: none;
+  user-select: none;
+  /* A swipe that starts on a card scrolls the day. Only the handles take
+     touch, and only while the card is selected (F5). */
+  touch-action: pan-y;
+  /* The ring and the hover lift are both box-shadow, so they are one
+     transition. Nothing else about a card moves under its own steam: while an
+     edge or a card is being dragged it follows the pointer exactly. */
+  transition: box-shadow 180ms ease-out;
+}
+
+/* The stage bar: phase colour, inset so it scales with the card. */
+.card-rule {
+  position: absolute;
+  left: 10px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--phase);
+}
+.card--line .card-rule { top: 5px; bottom: 5px; }
+
+.card-body {
+  position: absolute;
+  inset: 0;
+  padding: 9px 12px 9px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+  border-radius: var(--radius);
+}
+.card--small .card-body { padding: 7px 12px 7px 26px; gap: 2px; }
+
+/* On a phone location and people are two rows like any other. */
+.card-meta { display: contents; }
+
+/* Rows never shrink: they are hidden whole, or not at all. */
+.card-row { flex: none; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.card-row[hidden] { display: none; }
+
+.card-title-row { gap: 5px; }
+.card-title {
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card--narrow .card-title { white-space: normal; }
+
+.glyph { display: inline-flex; flex: none; }
+.glyph .icon { width: 15px; height: 15px; }
+.glyph--fixed { color: var(--fixed); }
+.glyph--note { color: var(--faint); }
+
+.card-time {
+  font-size: 15px;
+  line-height: 20px;
+  color: var(--soft);
+  font-variant-numeric: tabular-nums;
+}
+.card-time strong { color: var(--ink-2); font-weight: 500; }
+
+.card-warn { color: var(--bad-text); font-size: 14px; font-weight: 600; line-height: 18px; }
+.card-warn .icon { width: 14px; height: 14px; flex: none; }
+
+.card-location { color: var(--soft); font-size: 15px; line-height: 20px; }
+.card-location .icon { width: 14px; height: 14px; flex: none; }
+.card-location span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.card-people { gap: 4px; overflow: hidden; }
+
+/* One-line cards: ten minutes or less is 40 px, and a title plus its start
+   time is all that fits. */
+.card--line .card-body { flex-direction: row; align-items: center; gap: 6px; padding: 0 12px 0 26px; }
+.card--line .card-title { font-size: 15px; line-height: 18px; }
+.card-line-time { margin-left: auto; color: var(--soft); font-size: 13px; font-variant-numeric: tabular-nums; }
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 13px;
+  background: var(--fill);
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 550;
+  white-space: nowrap;
+  flex: none;
+}
+.tag[hidden] { display: none; }
+.tag--count { background: var(--fill-strong); font-weight: 650; }
+
+.stage-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 13px;
+  background: var(--phase-tint);
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 550;
+  white-space: nowrap;
+}
+/* On a dark surface the raw phase colour is too dark to see, so it is
+   lightened towards white. */
+.stage-tag .icon { width: 14px; height: 14px; color: var(--phase); }
+:root[data-theme="dark"] .stage-tag { background: color-mix(in srgb, var(--phase) 22%, var(--surface)); }
+:root[data-theme="dark"] .stage-tag .icon { color: color-mix(in srgb, var(--phase) 70%, #fff); }
+.stage-tag--button { cursor: pointer; font-family: inherit; }
+.stage-tag--button .icon:last-child { width: 12px; height: 12px; color: var(--soft); }
+
+/* Something was hidden. Three dots, not a truncation mark on the text. */
+.card-dots { position: absolute; right: 9px; bottom: 7px; display: none; gap: 2.5px; }
+.card-dots i { width: 3.5px; height: 3.5px; border-radius: 50%; background: var(--dots); }
+.card.is-clipped .card-dots { display: flex; }
+
+.card-controls { position: absolute; top: 4px; right: 4px; display: flex; align-items: center; gap: 2px; }
+.card-controls .lock-button,
+.card-controls .card-menu-toggle {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--faint);
+}
+.card-controls .icon { width: 18px; height: 18px; }
+.lock-button.is-fixed { color: var(--fixed); }
+
+/* The grip is the only place a drag starts with a mouse. */
+/* The body is painted after the grip, so without a stacking order of its own
+   the grip is laid out but never receives a pointer. */
+.card-grip { position: absolute; z-index: 3; left: 0; top: 0; bottom: 0; width: 22px; display: none; place-items: center; color: var(--dots); cursor: grab; }
+.card-reorder { position: absolute; top: 0; right: 0; width: 44px; height: 44px; display: grid; place-items: center; color: var(--sel); touch-action: none; }
+.card-reorder .icon { width: 20px; height: 20px; }
+
+/* Handles: a small visible bar with a large invisible target, and only on the
+   selected card. The top one is absent on a fixed activity, which has no
+   start to move. */
+/* They are added to the page rather than revealed, so they fade in with an
+   animation; a transition would have nothing to run from. */
+@keyframes handle-in { from { opacity: 0; } }
+.handle {
+  animation: handle-in 180ms ease-out;
+  position: absolute;
+  left: 50%;
+  width: 120px;
+  height: 44px;
+  transform: translateX(-50%);
+  display: grid;
+  place-items: center;
+  touch-action: none;
+  cursor: ns-resize;
+  z-index: 2;
+}
+.handle::after { content: ''; width: 40px; height: 5px; border-radius: 3px; background: var(--sel); }
+.handle--top { top: -22px; }
+.handle--bottom { bottom: -22px; }
+
+.card:focus-visible { outline: 2px solid var(--sel); outline-offset: 2px; }
+.card.is-selected { box-shadow: 0 0 0 2px var(--sel), 0 8px 22px rgba(10, 108, 255, .14); }
+.card.is-selected .card-body { padding-right: 44px; }
+.card.is-faded { opacity: .32; }
+.card.is-menu-open { z-index: 20; }
+
+/* Conflict: both cards keep their real times and sit side by side, and the
+   part that overlaps is hatched rather than merely outlined. */
+.card.is-overrun,
+.card.is-conflicted { box-shadow: 0 0 0 1px rgba(208, 52, 44, .45), var(--shadow-card); }
+.card.is-overrun::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--overrun-height, 0);
+  border-radius: 0 0 var(--radius) var(--radius);
+  pointer-events: none;
+  background: repeating-linear-gradient(135deg,
+    rgba(208, 52, 44, .10) 0 6px,
+    rgba(208, 52, 44, .02) 6px 12px);
+}
+.card--narrow .card-location span { white-space: normal; }
+
+/* Menus anchored to a card. */
+.card-menu, .stage-menu {
+  position: absolute;
+  z-index: 60;
+  min-width: 200px;
+  padding: 6px;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+}
+.card-menu { top: 40px; right: 4px; }
+.stage-menu { top: 32px; left: 0; max-height: 320px; overflow: auto; }
+.card-menu button, .stage-menu-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+}
+.card-menu button .icon, .stage-menu-option .icon { width: 17px; height: 17px; color: var(--soft); }
+.stage-menu-option .icon { color: var(--phase); }
+.stage-menu-option.is-current { background: var(--fill); font-weight: 600; }
+.card-menu button.is-danger { color: var(--bad-text); }
+.card-menu button.is-danger .icon { color: var(--bad-text); }
+
+/* Where there is a mouse, controls appear on hover instead of on selection. */
+@media (hover: hover) and (pointer: fine) {
+  .card-controls { opacity: 0; transition: opacity 140ms ease-out; }
+  .card:hover .card-controls,
+  .card:focus-within .card-controls,
+  .card.is-selected .card-controls,
+  .card.is-menu-open .card-controls { opacity: 1; }
+  .card:hover { box-shadow: var(--shadow-hover); }
+  .card-grip { display: grid; }
+  .card-body { padding-left: 34px; }
+}
+
+/*
+ * The desktop card.
+ *
+ * A wide card does not want the phone's stack: there is room to put the time
+ * and the stage in columns of their own and give the title the rest, which is
+ * what the desktop mockup draws. The columns are fixed (132 for a time range
+ * over its duration, 138 for the widest stage tag) so that the titles of
+ * neighbouring cards line up down the page.
+ *
+ * Conflict columns keep the phone's stack: a card sharing the width with
+ * another has no room for three columns.
+ */
+@media (min-width: 721px) {
+  .card-title { font-size: 16px; line-height: 21px; }
+  .card-location { font-size: 14px; line-height: 19px; }
+
+  .card:not(.card--narrow):not(.card--line) .card-body {
+    display: grid;
+    grid-template-columns: 132px 138px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    column-gap: 14px;
+    row-gap: 6px;
+    align-items: start;
+    align-content: start;
+    /* The lock and the ⋯ are positioned over the card, not laid out in it;
+       this is the column they sit in. */
+    padding: 10px 78px 10px 26px;
+  }
+  .card:not(.card--narrow):not(.card--line) .card-time {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    font-size: 13px;
+    line-height: 16px;
+  }
+  .card:not(.card--narrow):not(.card--line) .card-time strong { font-size: 14px; font-weight: 600; }
+  .card:not(.card--narrow):not(.card--line) .card-stage { grid-column: 2; grid-row: 1 / 3; }
+  .card:not(.card--narrow):not(.card--line) .card-title-row { grid-column: 3; grid-row: 1; }
+  .card:not(.card--narrow):not(.card--line) .card-meta {
+    display: flex;
+    grid-column: 3;
+    grid-row: 2;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    min-width: 0;
+  }
+  /* Anything else the card has to say goes under the title, full width. */
+  .card:not(.card--narrow):not(.card--line) .card-warn,
+  .card:not(.card--narrow):not(.card--line) .card-progress { grid-column: 3; }
+
+  /* A selected card's controls do not move, so the column does not change. */
+  .card.is-selected .card-body { padding-right: 78px; }
+
+  /* Under half an hour the card is 120 px: it loses the people and closes up. */
+  .card--small .card-people { display: none; }
+  .card:not(.card--narrow):not(.card--line).card--small .card-body { padding-top: 7px; padding-bottom: 7px; row-gap: 2px; }
+
+  /* A one-line card leads with its time too, so the columns still line up. */
+  .card--line .card-line-time { order: -1; width: 132px; margin-left: 0; font-size: 13px; }
+  .card--line .card-body { padding-left: 26px; gap: 14px; }
+}
+
+/* Menus live above the cards, because a card is clipped to its own height. */
+.card-menu-layer { position: absolute; z-index: 60; }
+.card-menu-layer .card-menu,
+.card-menu-layer .stage-menu { position: static; }
+
+/* ---- the day itself ------------------------------------------------------ */
+
+/* What has already happened is still there to read, just no longer the point. */
+.card.is-past { opacity: .45; }
+
+.card.is-live { box-shadow: 0 0 0 1.5px var(--live), 0 6px 20px rgba(30, 158, 82, .16); }
+.card-progress { height: 3px; border-radius: 2px; background: color-mix(in srgb, var(--live) 18%, transparent); overflow: hidden; }
+.card-progress i { display: block; height: 100%; background: var(--live); }
+
+.now-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 10px;
+  background: var(--live-tint);
+  color: var(--live-text);
+  font-size: 12px;
+  font-weight: 650;
+}
+.now-tag i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--live);
+  animation: live-pulse 1.8s ease-out infinite;
+}
+@keyframes live-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--live) 55%, transparent); }
+  100% { box-shadow: 0 0 0 7px transparent; }
+}
+
+/*
+ * The global reduced-motion rule shortens every animation to nothing, which is
+ * the right blanket answer but leaves the pulse still named and still running.
+ * The pulse is called out by name in the design guide, so it is turned off by
+ * name here.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .now-tag i { animation: none; }
+}

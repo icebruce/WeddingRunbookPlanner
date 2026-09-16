@@ -1,0 +1,151 @@
+/*
+ * Every colour, and nothing else. Component stylesheets reference these names
+ * and never hard-code a value, so the dark pass is a matter of redefining them
+ * rather than hunting through the other files.
+ *
+ * Dark is chosen in settings and remembered on the device. Light is and stays
+ * the default: the app does not follow the system setting, because a phone that
+ * flips to dark at sunset must not repaint the plan in the middle of the day.
+ */
+:root {
+  color-scheme: light;
+
+  /* Neutrals */
+  --bg: #F7F7F4;
+  --surface: #FFFFFF;
+  --surface-2: #F4F4F1;
+  --fill: #F2F2EF;
+  --fill-strong: #E9E9E5;
+  --ink: #1C1C1E;
+  --ink-2: #3A3C42;
+  --soft: #6B6E76;
+  --faint: #8E9098;
+  --hair: #E7E7E2;
+  --dots: #B3B5BA;
+
+  /* Roles. One colour, one job: blue is selection and anything tappable, red is
+     problems and delete, green is live, amber is sunset and day-of editing. */
+  --sel: #0A6CFF;
+  --sel-tint: #EAF2FF;
+  --bad: #D0342C;
+  --bad-tint: #FCEDEC;
+  --live: #1E9E52;
+  --live-dot: #34C759;
+  --live-tint: #EEF7F1;
+  --fixed: var(--ink);
+  --amber: #8A5A00;
+  --amber-tint: #FFF1D6;
+  --ok: #34A853;
+  --brand: #D65A73;
+
+  /* Phase colours: the stage bar, the tag icon and the tag tint. */
+  --phase-prep: #7A66E8;
+  --phase-prep-tint: #F1EEFD;
+  --phase-photo: #1F8A9B;
+  --phase-photo-tint: #E5F3F5;
+  --phase-transit: #6F7885;
+  --phase-transit-tint: #EFF1F3;
+  --phase-ceremony: #A67C0F;
+  --phase-ceremony-tint: #F8F1DC;
+  --phase-cocktail: #C44E78;
+  --phase-cocktail-tint: #FBEBF1;
+  --phase-reception: #3F8A57;
+  --phase-reception-tint: #E7F3EA;
+
+  /* Time grid */
+  --grid-hour: #D2D2CB;
+  --grid-half: #DDDDD7;
+  --grid-quarter: #E6E6E1;
+  --grid-five: #EEEEEA;
+  --spine: #CFCFC8;
+  --tick-hour: #8F8F88;
+  --tick-half: #A9A9A2;
+  --tick-quarter: #C0C0B9;
+
+  /*
+   * Selection blue as *text* needs more contrast than selection blue as a
+   * ring or a fill: #0A6CFF on the page background is 4.25:1, just under what
+   * body text needs. This is the same blue, one step darker, and it is used
+   * wherever the blue has to be read rather than seen.
+   */
+  --sel-text: #0A5FE6;
+
+  /*
+   * Red and green have the same problem as blue. #D0342C on its own tint is
+   * 4.39:1 and #1E9E52 on the page is 3.17:1 — both fine as a ring, a dot or a
+   * progress bar, neither readable as words. These are the same two colours
+   * darkened until they are, and they are used only where the colour is text.
+   */
+  --bad-text: #B4271F;
+  --live-text: #146E38;
+
+  /* Elevation */
+  --shadow-card: 0 0 0 .5px rgba(0,0,0,.05), 0 1px 2px rgba(0,0,0,.04), 0 3px 10px rgba(0,0,0,.03);
+  --shadow-hover: 0 6px 20px rgba(0,0,0,.08);
+  --shadow-lifted: 0 22px 50px rgba(0,0,0,.2);
+  --shadow-float: 0 12px 36px rgba(0,0,0,.16);
+
+  /* The top bar's height, so that everything that sticks under it has one
+     number to stick to rather than four that drift apart. */
+  --topbar-height: 52px;
+
+  --radius: 12px;
+  --radius-lg: 16px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+/* Dark values, applied only when the app is switched to dark. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #111214;
+  --surface: #1C1D20;
+  --surface-2: #232428;
+  --fill: #2A2B2F;
+  --fill-strong: #33343A;
+  --ink: #F2F2F0;
+  --ink-2: #D5D6DA;
+  --soft: #9EA1A8;
+  --faint: #7C7F86;
+  --hair: #2C2D31;
+  --dots: #5E6066;
+
+  --sel: #3D8BFF;
+  --sel-tint: #16233A;
+  --bad: #FF6259;
+  --bad-tint: #3A1D1C;
+  --live: #3DD06C;
+  --live-dot: #34C759;
+  --live-tint: #16301F;
+  --amber: #F2C46B;
+  --amber-tint: #3A2C10;
+  --ok: #34C759;
+  --brand: #E27A90;
+
+  --grid-hour: #3A3B3F;
+  --grid-half: #333438;
+  --grid-quarter: #2C2D31;
+  --grid-five: #26272A;
+  --spine: #3A3B3F;
+  --tick-hour: #7C7F86;
+  --tick-half: #6A6D73;
+  --tick-quarter: #55585E;
+  /* On a dark page the brighter colours are already the readable ones. */
+  --sel-text: #5C9DFF;
+  --bad-text: var(--bad);
+  --live-text: var(--live);
+
+  /* Shadows read as dirt on a dark background; a hairline outline reads as depth. */
+  --shadow-card: 0 0 0 .5px rgba(255,255,255,.07);
+  --shadow-hover: 0 0 0 .5px rgba(255,255,255,.12);
+  --shadow-lifted: 0 22px 50px rgba(0,0,0,.6), 0 0 0 1px var(--sel);
+  --shadow-float: 0 12px 36px rgba(0,0,0,.5), 0 0 0 .5px rgba(255,255,255,.07);
+}
+
+@media (min-width: 721px) {
+  :root { --topbar-height: 62px; }
+}
