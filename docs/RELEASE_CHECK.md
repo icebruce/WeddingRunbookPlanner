@@ -15,6 +15,8 @@ Run at the end of the redesign, against branch `claude/tender-ptolemy-auoyoi`.
 | `VISUAL=1 npx playwright test visual` | 64 passed, stable over three runs |
 | CI (Chromium **and** WebKit), commit `f915b56` | green |
 
+Re-run after the review fixes below: check clean, unit 190, e2e 821, visual 64.
+
 WebKit could not be downloaded in the development environment, so the
 `iphone-13` and `ipad` projects ran on Chromium with the iOS device
 descriptors. CI installs WebKit and runs them on the real engine.
@@ -82,6 +84,40 @@ and it cannot have one:
 > declared in `tokens.css`, and `e2e/security.spec.mjs` checks that
 > `vercel.json` still names `public` as the output directory — and both assert
 > that a declaration exists, not that a design does.
+
+## Code review
+
+A review of the whole branch — dev and QA — found ten defects, all since
+fixed, each with a test that was checked to fail without its fix. Three could
+lose a day's work:
+
+| | What it was |
+|---|---|
+| Critical | Cancelling "Add activity here" committed an untitled activity first and opened the editor after, so the server refused the plan and **nothing saved again**. |
+| Critical | The page-hide flush left the tab a revision behind its own writing, so switching tabs mid-edit produced "Changed on another device" — about your own change, with a button that discards it. |
+| High | The day-of time line was repainted only when one activity handed over to the next, so it stood still through a long one. |
+| Medium ×4 | Version history had no compare-and-set; a failed restore left its safety copy behind; a malformed cookie 500'd every request unrecoverably; the local driver's write queue was per-instance and it built a new instance per call. |
+| Low ×3 | A cleared sunset marker came back; a conflict with no other version opened a dialog whose two buttons did nothing; a second finger opened the wrong card's editor. |
+
+### What the tests were not doing
+
+All ten passed a suite of 969. The pattern behind that is worth keeping in
+mind, because it will produce the next ten:
+
+- **The suite asserted the first half of each behaviour.** The page-hide test
+  polled the *server* for the change and stopped — it never looked at the state
+  the client was left in, which is where the bug was.
+- **Happy paths only.** "Add activity here" was tested by filling a name and
+  submitting. The Cancel branch — the one that broke the plan — was never taken.
+- **Single instants.** The time line was measured once against a frozen clock.
+  A line that never moves passed. No test had ever run the clock: they all use
+  `setFixedTime`, which does not fire timers.
+- **Mocks proving themselves.** Every storage test injects a fake driver, so
+  `getDriver()` and the real `FileDriver` never ran under test at all.
+- **Nothing malformed below the JSON body.** No cookie, header or URL fuzzing.
+- **One finger.** The touch helper could not express two.
+
+Each of those now has at least one test that exercises it.
 
 ## Gaps
 
