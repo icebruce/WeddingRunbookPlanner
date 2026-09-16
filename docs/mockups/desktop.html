@@ -1,0 +1,1104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Wedding Runbook Planner · Desktop mockup</title>
+<style>
+:root{
+  --pg-bg:#EDEDE8; --pg-ink:#1C1C1E; --pg-soft:#5F6269; --pg-line:#D9D9D3; --pg-card:#F8F8F5;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --pg-bg:#161618; --pg-ink:#F2F2F0; --pg-soft:#A4A7AE; --pg-line:#2E2F33; --pg-card:#1F2023; }
+}
+:root[data-theme="dark"]{ --pg-bg:#161618; --pg-ink:#F2F2F0; --pg-soft:#A4A7AE; --pg-line:#2E2F33; --pg-card:#1F2023; }
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--pg-bg);color:var(--pg-ink);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+.page{max-width:1320px;margin:0 auto;padding:40px 24px 80px}
+.intro{max-width:720px}
+.intro h1{font-family:ui-serif,"New York",Georgia,serif;font-weight:500;font-size:40px;letter-spacing:-.02em;margin:0 0 14px;line-height:1.1}
+.intro p{color:var(--pg-soft);font-size:16px;line-height:1.55;margin:0 0 10px}
+.decisions{margin:22px 0 0;padding:16px 18px;border:1px solid var(--pg-line);border-radius:14px;background:var(--pg-card);font-size:14px;line-height:1.55}
+.decisions b{font-weight:650}
+.decisions ul{margin:6px 0 0;padding-left:18px}
+section.block{margin-top:56px}
+section.block h2{font-size:22px;letter-spacing:-.01em;margin:0 0 6px;font-weight:650}
+section.block > p{color:var(--pg-soft);font-size:15px;line-height:1.5;margin:0 0 20px;max-width:760px}
+.row{display:flex;gap:36px;overflow-x:auto;padding:6px 4px 20px;-webkit-overflow-scrolling:touch;align-items:flex-start}
+.fig{flex:none}
+.fig figcaption{margin-top:12px;max-width:410px;font-size:14px;line-height:1.45;color:var(--pg-soft)}
+.fig figcaption b{color:var(--pg-ink);font-weight:650}
+.swatches{display:flex;flex-wrap:wrap;gap:12px}
+.sw{display:flex;align-items:center;gap:10px;padding:10px 14px 10px 10px;border:1px solid var(--pg-line);border-radius:12px;background:var(--pg-card);font-size:13px;line-height:1.35}
+.sw i{width:30px;height:30px;border-radius:8px;display:block;flex:none}
+.sw small{display:block;color:var(--pg-soft)}
+@media (max-width:480px){ .page{padding:28px 14px 60px} .intro h1{font-size:30px} .phone{zoom:.84} .browser{zoom:.5} .row{gap:20px} }
+
+/* ---------- Phone ---------- */
+.phone{width:410px;height:864px;border-radius:58px;background:#0E0F10;padding:10px;box-shadow:0 30px 70px rgba(0,0,0,.22),inset 0 0 0 1.5px #2A2B2E}
+.screen{position:relative;width:390px;height:844px;border-radius:48px;overflow:hidden}
+.statusbar{position:absolute;z-index:80;top:0;left:0;right:0;height:50px;display:flex;align-items:center;justify-content:space-between;padding:6px 32px 0 40px;font:600 16px/1 -apple-system,system-ui,sans-serif;color:#1C1C1E;background:rgba(247,247,244,.92);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
+.statusbar .isl{position:absolute;left:50%;top:11px;width:122px;height:35px;margin-left:-61px;border-radius:20px;background:#000}
+.statusbar .sig{display:flex;gap:5px;align-items:center}
+.statusbar .sig i{display:block;background:#1C1C1E;border-radius:2px}
+.homebar{position:absolute;z-index:90;bottom:8px;left:50%;width:134px;height:5px;margin-left:-67px;border-radius:3px;background:#1C1C1E}
+.scroller{position:absolute;inset:50px 0 0 0;overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
+.scroller::-webkit-scrollbar{display:none}
+
+/* ---------- App tokens (always light: this depicts the light app) ---------- */
+.app{--bg:#F7F7F4;--surface:#FFFFFF;--ink:#1C1C1E;--ink2:#3A3C42;--soft:#6B6E76;--faint:#8E9098;--hair:#E7E7E2;--hair2:#EFEFEB;
+  --sel:#0A6CFF;--sel-tint:#EAF2FF;--bad:#D0342C;--bad-tint:#FCEDEC;--brand:#D65A73;
+  background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;color-scheme:light}
+.app button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+.ic{width:1em;height:1em;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none;display:block}
+.ic.fill{fill:currentColor;stroke:none}
+
+/* top bar */
+.m-top{position:sticky;top:0;z-index:40;height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 8px 0 18px;background:rgba(247,247,244,.92);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border-bottom:.5px solid transparent}
+.card.narrow .title,.card.narrow .loc span{white-space:normal;overflow:visible}
+.card.narrow .t1{flex-wrap:wrap}
+.m-top.edge{border-bottom-color:var(--hair)}
+.brand{display:flex;align-items:center;gap:8px;font-family:ui-serif,"New York",Georgia,serif;font-size:19px;letter-spacing:-.01em}
+.brand .ic{width:20px;height:20px;color:var(--brand)}
+.top-right{display:flex;align-items:center;gap:2px}
+.savestate{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--soft);padding:0 6px}
+.savestate i{width:7px;height:7px;border-radius:50%;background:#34A853;display:block}
+.iconbtn{width:44px;height:44px;display:grid;place-items:center;border-radius:12px;color:var(--ink2)}
+.iconbtn .ic{width:22px;height:22px}
+.viewonly{display:flex;align-items:center;gap:6px;height:30px;padding:0 11px;border-radius:15px;background:#EDEDE9;font-size:13px;font-weight:600;color:var(--ink2)}
+.viewonly .ic{width:14px;height:14px}
+.textbtn{height:44px;padding:0 10px 0 12px;margin-right:4px;color:var(--sel)!important;font-size:17px!important;font-weight:600}
+
+/* large title */
+.hero{padding:10px 18px 4px}
+.hero h1{margin:0;font-size:34px;line-height:1.1;letter-spacing:-.025em;font-weight:700}
+.hero .date{margin:4px 0 0;color:var(--soft);font-size:15px}
+.summary{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 0}
+.pill{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 10px;border-radius:14px;background:#EDEDE9;color:var(--ink2);font-size:13px;font-weight:500;white-space:nowrap}
+.pill .ic{width:14px;height:14px}
+.pill.bad{background:var(--bad-tint);color:var(--bad);font-weight:600}
+.filters{display:flex;gap:8px;overflow-x:auto;padding:14px 18px 6px;scrollbar-width:none}
+.filters::-webkit-scrollbar{display:none}
+.fchip{flex:none;height:34px;padding:0 14px;border-radius:17px;background:var(--surface);border:1px solid var(--hair);font-size:14px;font-weight:500;color:var(--ink2);display:flex;align-items:center}
+.fchip.on{background:var(--ink);border-color:var(--ink);color:#fff}
+
+/* timeline */
+.tl{position:relative;margin:8px 0 0}
+.rl{position:absolute;left:0;right:0;height:0;pointer-events:none}
+.rl::after{content:"";position:absolute;right:0;top:0;height:1px}
+.rl.h::after{left:var(--rw);background:#DEDED8}
+.rl.hh::after{left:calc(var(--rw) + 0px);background:#E6E6E1}
+.rl.q::after{left:var(--rw);background:#EEEEEA}
+.rl.f::after{left:var(--rw);background:#F3F3F0}
+.rl b{position:absolute;right:calc(100% - var(--rw) + 8px);top:-8px;font-variant-numeric:tabular-nums;white-space:nowrap;line-height:16px}
+.rl.h b{font-size:13px;font-weight:650;color:var(--ink)}
+.rl.hh b{font-size:12px;font-weight:550;color:#55585F}
+.rl.q b{font-size:11px;font-weight:450;color:#74777E}
+.rl s{position:absolute;top:0;height:1px;right:calc(100% - var(--rw));text-decoration:none}
+.rl.h s{width:10px;background:#BDBDB6}.rl.hh s{width:8px;background:#CACAC4}.rl.q s{width:6px;background:#D6D6D0}.rl.f s{width:3px;background:#DEDED8}
+.rl.snap::after{background:var(--sel);height:1.5px}
+.rl.snap b{color:#fff;background:var(--sel);border-radius:5px;padding:0 5px;font-weight:650;font-size:11px;right:calc(100% - var(--rw) + 4px)}
+.plan{position:absolute;top:0;bottom:0;left:var(--pl);right:var(--pr)}
+
+/* cards */
+.card{position:absolute;left:0;right:0;background:var(--surface);border-radius:12px;box-shadow:0 0 0 .5px rgba(0,0,0,.05),0 1px 2px rgba(0,0,0,.04),0 3px 10px rgba(0,0,0,.03);overflow:hidden}
+.card .rule{position:absolute;left:10px;top:8px;bottom:8px;width:3px;border-radius:2px;background:var(--ph)}
+.card.micro .rule{top:5px;bottom:5px}
+.card .body{position:absolute;inset:0 0 0 22px;padding:10px 12px 10px 4px;display:flex;flex-direction:column;gap:5px;min-width:0}
+.card.compact .body{padding-top:9px;gap:4px}
+.card.micro .body{flex-direction:row;align-items:center;padding:0 12px 0 4px;gap:8px}
+.t1{display:flex;align-items:center;gap:6px;min-width:0}
+.title{font-size:16px;font-weight:600;letter-spacing:-.01em;line-height:21px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.card.micro .title{font-size:14px;line-height:18px;flex:1}
+.glyph{width:15px;height:15px;color:var(--ink2);flex:none}
+.glyph.note{color:var(--faint)}
+.t2{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--soft);font-variant-numeric:tabular-nums;white-space:nowrap}
+.t2 .dur{color:var(--ink2);font-weight:500}
+.micro-time{font-size:13px;color:var(--soft);font-variant-numeric:tabular-nums;white-space:nowrap}
+.chip{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px 0 7px;border-radius:12px;background:var(--tint);color:var(--ink2);font-size:12px;font-weight:600;white-space:nowrap}
+.chip .ic{width:13px;height:13px;color:var(--ph)}
+.loc{display:flex;align-items:center;gap:5px;font-size:14px;color:var(--soft);min-width:0}
+.loc span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.loc .ic{width:14px;height:14px}
+.ppl{display:flex;gap:5px;flex-wrap:nowrap;min-width:0;overflow:hidden}
+.tag{flex:none;height:24px;padding:0 9px;border-radius:12px;background:#F2F2EF;color:#4A4D54;font-size:12px;font-weight:550;display:flex;align-items:center;white-space:nowrap}
+.tag.more{background:#E9E9E5;color:var(--ink2);font-weight:650}
+.warn{display:flex;align-items:center;gap:5px;color:var(--bad);font-size:13px;font-weight:600;line-height:16px}
+.warn .ic{width:14px;height:14px}
+.card.overrun{box-shadow:0 0 0 1px rgba(208,52,44,.45),0 1px 2px rgba(0,0,0,.04)}
+.card.overrun::after{content:"";position:absolute;left:0;right:0;bottom:0;height:var(--ovh);background:repeating-linear-gradient(135deg,rgba(208,52,44,.10) 0 6px,rgba(208,52,44,.02) 6px 12px);pointer-events:none}
+.card.fixedc{box-shadow:0 0 0 1px rgba(208,52,44,.45),0 1px 2px rgba(0,0,0,.04)}
+.card.sel{box-shadow:0 0 0 2px var(--sel),0 8px 22px rgba(10,108,255,.14);z-index:5}
+.card.dim{opacity:.45}
+.card.live{box-shadow:0 0 0 1.5px var(--ink),0 8px 22px rgba(0,0,0,.08)}
+.progress{height:3px;border-radius:2px;background:#ECECE8;overflow:hidden}
+.progress i{display:block;height:100%;background:var(--ink)}
+.handle{position:absolute;left:50%;bottom:3px;width:40px;height:5px;margin-left:-20px;border-radius:3px;background:var(--sel)}
+.handle::before{content:"";position:absolute;left:-40px;right:-40px;top:-18px;bottom:-14px;border:1px dashed rgba(10,108,255,.0)}
+.reorder{position:absolute;right:4px;top:6px;width:44px;height:44px;display:grid;place-items:center;color:var(--faint)}
+.reorder .ic{width:20px;height:20px}
+.bubble{position:absolute;z-index:20;padding:7px 10px;border-radius:10px;background:var(--ink);color:#fff;font-size:13px;font-weight:600;white-space:nowrap;box-shadow:0 6px 16px rgba(0,0,0,.2);font-variant-numeric:tabular-nums}
+
+/* gaps and markers */
+.gap{position:absolute;left:0;right:0;border-radius:12px;border:1.5px dashed #CFCFC8;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--soft);background:rgba(255,255,255,.35)}
+.gap strong{font-size:15px;font-weight:600;color:var(--ink2)}
+.gap small{font-size:13px}
+.gap .plus{margin-top:6px;width:30px;height:30px;border-radius:15px;background:var(--surface);display:grid;place-items:center;color:var(--ink2);box-shadow:0 0 0 .5px rgba(0,0,0,.08)}
+.gap .plus .ic{width:16px;height:16px}
+.gap.on{border-color:var(--sel);background:var(--sel-tint);color:var(--sel)}
+.nowline{position:absolute;left:var(--nl);right:0;height:2px;background:var(--ink);z-index:15}
+.nowline::before{content:"";position:absolute;left:-5px;top:-4px;width:10px;height:10px;border-radius:5px;background:var(--ink)}
+.nowpill{position:absolute;z-index:16;height:22px;padding:0 7px;border-radius:11px;background:var(--ink);color:#fff;font-size:12px;font-weight:650;display:flex;align-items:center;font-variant-numeric:tabular-nums}
+.sunset{position:absolute;left:0;right:0;height:0;border-top:1.5px dotted #B7862A;z-index:3;pointer-events:none}
+.sunset span{position:absolute;right:6px;top:-22px;display:flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:#8A6414;background:var(--bg);padding:0 4px;border-radius:4px}
+.sunset span .ic{width:14px;height:14px}
+.rail{position:absolute;width:3px;border-radius:2px;background:var(--bad);z-index:4}
+.raillabel{position:absolute;z-index:4;font-size:11px;font-weight:700;color:var(--bad);white-space:nowrap}
+.endmark{position:absolute;left:var(--pl);right:var(--pr);display:flex;align-items:center;gap:8px;color:var(--soft);font-size:13px}
+.endmark i{flex:1;height:1px;background:#D6D6D0}
+
+/* overlays */
+.fab{position:absolute;z-index:60;right:20px;bottom:40px;width:58px;height:58px;border-radius:29px;background:var(--ink);color:#fff;display:grid;place-items:center;box-shadow:0 10px 26px rgba(0,0,0,.25)}
+.fab .ic{width:26px;height:26px}
+.toolbar{position:absolute;z-index:60;left:12px;right:12px;bottom:30px;border-radius:24px;background:rgba(255,255,255,.96);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);box-shadow:0 0 0 .5px rgba(0,0,0,.08),0 12px 36px rgba(0,0,0,.16);padding:10px 8px 6px}
+.toolbar .ctx{font-size:13px;color:var(--soft);text-align:center;padding:0 10px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toolbar .ctx b{color:var(--ink);font-weight:600}
+.tbtns{display:grid;grid-template-columns:repeat(5,1fr)}
+.tbtns button{height:54px;display:flex!important;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:11px!important;font-weight:550;color:var(--ink2)!important;border-radius:14px}
+.tbtns .ic{width:22px;height:22px}
+.tbtns .danger{color:var(--bad)!important}
+.toast{position:absolute;z-index:70;left:16px;right:16px;bottom:40px;min-height:50px;border-radius:16px;background:rgba(28,28,30,.96);color:#fff;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 8px 0 16px;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.toast button{height:44px;padding:0 10px;color:#7FB3FF!important;font-weight:650;font-size:15px}
+.scrim{position:absolute;inset:0;z-index:65;background:rgba(0,0,0,.3)}
+.sheet{position:absolute;z-index:70;left:0;right:0;bottom:0;background:var(--surface);border-radius:16px 16px 0 0;box-shadow:0 -10px 40px rgba(0,0,0,.15);display:flex;flex-direction:column}
+.grabber{width:36px;height:5px;border-radius:3px;background:#D4D4CF;margin:7px auto 0}
+.sh-head{display:grid;grid-template-columns:80px 1fr 80px;align-items:center;height:52px;padding:0 6px;border-bottom:.5px solid var(--hair)}
+.sh-head h3{margin:0;text-align:center;font-size:17px;font-weight:600}
+.sh-head .l{justify-self:start;color:var(--sel)!important;font-size:17px!important;height:44px;padding:0 10px}
+.sh-head .r{justify-self:end;color:var(--sel)!important;font-size:17px!important;font-weight:650;height:44px;padding:0 10px}
+.sh-body{overflow:hidden;padding:18px 16px 30px;display:flex;flex-direction:column;gap:22px}
+.fl{font-size:13px;color:var(--soft);margin:0 0 7px 4px;font-weight:500}
+.inp{height:46px;border-radius:12px;background:#F4F4F1;display:flex;align-items:center;padding:0 14px;font-size:17px;color:var(--ink)}
+.group{border-radius:12px;background:#F4F4F1;overflow:hidden}
+.grow{min-height:50px;display:flex;align-items:center;justify-content:space-between;padding:0 12px 0 14px;font-size:17px;gap:10px}
+.grow + .grow{border-top:.5px solid #E2E2DD}
+.grow .v{color:var(--soft);font-variant-numeric:tabular-nums}
+.grow .hint{font-size:13px;color:var(--soft);padding:0 14px 12px;margin-top:-6px}
+.seg{display:flex;background:#E5E5E0;border-radius:9px;padding:2px}
+.seg span{height:30px;padding:0 13px;border-radius:7px;display:flex;align-items:center;font-size:14px;font-weight:550;color:var(--ink2)}
+.seg span.on{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12);color:var(--ink)}
+.stepper{display:flex;align-items:center;gap:0;background:#E9E9E4;border-radius:10px;height:36px}
+.stepper button{width:44px;height:36px;display:grid;place-items:center}
+.stepper button .ic{width:16px;height:16px}
+.stepper span{min-width:64px;text-align:center;font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+.stagegrid{display:flex;flex-wrap:wrap;gap:8px}
+.stagegrid .chip{height:34px;padding:0 12px 0 10px;font-size:14px;border-radius:17px}
+.stagegrid .chip .ic{width:15px;height:15px}
+.stagegrid .chip.on{box-shadow:0 0 0 2px var(--ph)}
+.suggest{margin-top:6px;border-radius:12px;background:#fff;box-shadow:0 0 0 .5px rgba(0,0,0,.1),0 8px 24px rgba(0,0,0,.1)}
+.suggest div{height:44px;display:flex;align-items:center;gap:8px;padding:0 14px;font-size:16px;color:var(--ink2)}
+.suggest div + div{border-top:.5px solid var(--hair)}
+.suggest .ic{width:15px;height:15px;color:var(--faint)}
+.pchips{display:flex;flex-wrap:wrap;gap:8px;padding:10px;border-radius:12px;background:#F4F4F1}
+.pchips .tag{height:34px;padding:0 6px 0 13px;font-size:15px;background:#fff;box-shadow:0 0 0 .5px rgba(0,0,0,.08);gap:2px}
+.pchips .tag .x{width:30px;height:30px;display:grid;place-items:center;color:var(--faint)}
+.pchips .tag .x .ic{width:13px;height:13px}
+.pchips .add{height:34px;padding:0 12px;display:flex;align-items:center;gap:5px;color:var(--sel);font-size:15px;font-weight:600}
+.pchips .add .ic{width:15px;height:15px}
+.action{padding:8px 8px 34px;display:flex;flex-direction:column;gap:8px}
+.action .grp{border-radius:14px;background:#fff;overflow:hidden}
+.action .hd{text-align:center;padding:14px 16px 12px;border-bottom:.5px solid var(--hair)}
+.action .hd strong{display:block;font-size:14px;font-weight:600;color:var(--ink2)}
+.action .hd small{font-size:13px;color:var(--soft)}
+.action .opt{min-height:62px;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:8px 16px;border-bottom:.5px solid var(--hair);text-align:center}
+.action .opt:last-child{border-bottom:0}
+.action .opt b{color:var(--sel);font-size:18px;font-weight:500}
+.action .opt small{font-size:13px;color:var(--soft);margin-top:2px}
+.action .cancel{height:58px;display:grid;place-items:center;color:var(--sel);font-size:18px;font-weight:650}
+.sheetwrap{position:absolute;inset:auto 0 0 0;z-index:70}
+.nownext{position:sticky;top:52px;z-index:35;margin:0 12px;padding:12px 14px;border-radius:16px;background:rgba(255,255,255,.96);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);box-shadow:0 0 0 .5px rgba(0,0,0,.07),0 6px 20px rgba(0,0,0,.07);display:grid;grid-template-columns:1.25fr 1fr;gap:14px}
+.nownext .lbl{font-size:12px;font-weight:650;color:var(--soft);margin-bottom:3px}
+.nownext .nm{font-size:17px;font-weight:650;line-height:21px;letter-spacing:-.01em}
+.nownext .sub{font-size:13px;color:var(--soft);margin-top:3px;font-variant-numeric:tabular-nums}
+.nownext .nx{border-left:.5px solid var(--hair);padding-left:14px}
+.nownext .progress{margin-top:8px}
+.empty{margin:36px 18px 0;padding:28px 22px;border-radius:18px;background:var(--surface);text-align:center;box-shadow:0 0 0 .5px rgba(0,0,0,.05)}
+.empty .glyphbig{width:48px;height:48px;margin:0 auto 12px;border-radius:24px;background:#F2F2EF;display:grid;place-items:center;color:var(--brand)}
+.empty .glyphbig .ic{width:24px;height:24px}
+.empty h4{margin:0 0 6px;font-size:20px;font-weight:650}
+.empty p{margin:0 0 20px;color:var(--soft);font-size:15px;line-height:1.45}
+.btn{height:50px;border-radius:14px;display:flex!important;align-items:center;justify-content:center;gap:8px;font-size:17px!important;font-weight:600;width:100%}
+.btn.primary{background:var(--ink);color:#fff!important}
+.btn.secondary{background:#EDEDE9;color:var(--ink)!important;margin-top:10px}
+
+/* ---------- Desktop ---------- */
+.browser{width:1240px;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 30px 70px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.08)}
+.chrome{height:40px;background:#ECECE8;display:flex;align-items:center;gap:8px;padding:0 14px}
+.chrome i{width:12px;height:12px;border-radius:6px;display:block;background:#D4D4CF}
+.chrome .url{margin-left:18px;height:26px;flex:0 1 460px;border-radius:7px;background:#fff;font-size:13px;color:#6B6E76;display:flex;align-items:center;padding:0 12px}
+.dview{height:900px;overflow-y:auto;position:relative}
+.d-top{position:sticky;top:0;z-index:40;height:62px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;background:rgba(247,247,244,.92);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border-bottom:.5px solid var(--hair)}
+.statusbtn{display:flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:17px;background:#EDEDE9;font-size:14px;font-weight:600;color:var(--ink2)}
+.statusbtn .ic{width:13px;height:13px}
+.d-wrap{max-width:1100px;margin:0 auto;padding:34px 28px 60px}
+.d-head{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;padding-left:92px}
+.d-head h1{margin:0;font-size:44px;line-height:1.05;letter-spacing:-.03em;font-weight:700}
+.d-head .date{margin:6px 0 0;color:var(--soft);font-size:16px}
+.addbtn{height:40px;padding:0 16px;border-radius:12px;background:var(--ink)!important;color:#fff!important;display:flex!important;align-items:center;gap:8px;font-size:15px!important;font-weight:600}
+.addbtn .ic{width:16px;height:16px}
+.addnote{font-size:12px;color:var(--soft);text-align:right;margin-top:6px}
+.d-sub{padding-left:92px}
+.d-sub .filters{padding:14px 0 4px}
+.dcard .body{inset:0 0 0 22px;padding:10px 10px 10px 4px;display:grid;grid-template-columns:132px 138px minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:14px;row-gap:6px;align-items:start;align-content:start}
+.dcard .grip{position:absolute;left:0;top:0;bottom:0;width:22px;display:flex;align-items:flex-start;justify-content:center;padding-top:12px;color:#C4C5C9}
+.dcard .grip .ic{width:14px;height:14px}
+.dcard .rule{left:22px}
+.dcard .body{left:34px}
+.dcard .tm{grid-row:1/3;font-variant-numeric:tabular-nums}
+.dcard .tm div{font-size:13px;color:var(--soft);white-space:nowrap}
+.dcard .tm strong{display:block;font-size:14px;font-weight:600;color:var(--ink2);margin-top:3px}
+.dcard .st{grid-row:1/3}
+.dcard .t1{grid-column:3}
+.dcard .ctl{grid-column:4;grid-row:1/3;display:flex;align-items:flex-start;gap:0;margin-top:-5px}
+.dcard .ctl button{width:34px;height:34px;display:grid;place-items:center;border-radius:9px;color:#9A9CA3}
+.dcard .ctl button .ic{width:17px;height:17px}
+.dcard .ctl button.locked{color:var(--ink)}
+.dcard .meta{grid-column:3;grid-row:2;display:flex;align-items:center;justify-content:space-between;gap:14px;min-width:0}
+.dcard .meta .loc{font-size:13px}
+.dcard .title{font-size:16px}
+.dcard.micro .body{display:flex;align-items:center;gap:14px;padding:0 10px 0 4px}
+.dcard.micro .tm{width:132px;flex:none}
+.dcard.micro .grip{padding-top:0;align-items:center}
+.dcard.hover{box-shadow:0 0 0 .5px rgba(0,0,0,.06),0 6px 20px rgba(0,0,0,.08)}
+.dcard.hover .ctl button{color:#5F6269}
+.dcard.hover .grip{color:#6B6E76}
+.dhandle{position:absolute;left:50%;bottom:3px;width:36px;height:4px;margin-left:-18px;border-radius:2px;background:#B9BAC0}
+.slot{position:absolute;left:0;right:0;border-radius:12px;background:var(--sel-tint);border:1.5px solid rgba(10,108,255,.35)}
+.slot::before{content:"";position:absolute;left:-6px;right:-6px;top:-3px;height:3px;border-radius:2px;background:var(--sel)}
+.slot span{position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:12px;font-weight:650;color:var(--sel)}
+.lifted{transform:rotate(-.6deg) scale(1.02);box-shadow:0 0 0 1px rgba(10,108,255,.5),0 22px 50px rgba(0,0,0,.2)!important;z-index:30}
+.cursor{position:absolute;z-index:31;width:22px;height:22px}
+
+
+.summary .brk{flex-basis:100%;height:0}
+.plan{z-index:2}
+.nowline{z-index:1}
+.nowpill,.sunpill{z-index:6}
+.sunset{position:absolute;right:0;height:0;border-top:1.5px dotted #C08A1E;z-index:1;pointer-events:none}
+.sunpill{position:absolute;left:2px;height:22px;padding:0 6px 0 5px;border-radius:11px;background:#FFF1D6;color:#8A5A00;font-size:12px;font-weight:650;display:flex;align-items:center;gap:3px;box-shadow:0 0 0 1px #F0D49A;font-variant-numeric:tabular-nums}
+.sunpill .ic{width:13px;height:13px}
+.card.compact .warn{white-space:nowrap}
+.viewmode .dcard .grip,.viewmode .dcard .ctl button:not(.locked){visibility:hidden}
+.dcard.dcompact .body{padding-top:7px;padding-bottom:7px;row-gap:2px}
+.dcard.dcompact .meta .ppl{display:none}
+.dcard.dcompact .tm strong{margin-top:1px}
+/* ===== Round 2 overrides ===== */
+/* type scale: iOS body 17 / subhead 15 / footnote 13 */
+.title{font-size:17px;line-height:22px}
+.card.micro .title{font-size:15px;line-height:18px}
+.t2{font-size:15px;line-height:20px}
+.loc{font-size:15px;line-height:20px}
+.loc .ic{width:15px;height:15px}
+.micro-time{font-size:13px}
+.chip{height:26px;font-size:13px;padding:0 10px 0 8px}
+.chip .ic{width:14px;height:14px}
+.tag{height:26px;font-size:13px;padding:0 10px}
+.warn{font-size:14px;line-height:18px}
+.fchip{font-size:15px;height:36px}
+.savestate{font-size:13px}
+.tbtns button{font-size:12px!important}
+.gap strong{font-size:16px}
+.gap small{font-size:14px}
+.card .body{padding:9px 12px 9px 4px;gap:4px}
+.card.compact .body{padding-top:7px;gap:2px}
+.rowchips{display:flex;gap:6px;min-width:0;overflow:hidden;flex-wrap:nowrap}
+.rowchips .chip{flex:none}
+/* ruler: stronger hierarchy */
+.tl::before{content:"";position:absolute;top:0;bottom:30px;left:calc(var(--rw) - 1px);width:1px;background:#CFCFC8}
+.rl.h::after{background:#D2D2CB}
+.rl.hh::after{background:#DDDDD7}
+.rl.q::after{background:#E6E6E1}
+.rl.f::after{background:#EEEEEA}
+.rl.h s{width:14px;height:1.5px;background:#8F8F88}
+.rl.hh s{width:10px;background:#A9A9A2}
+.rl.q s{width:7px;background:#C0C0B9}
+.rl.f s{width:4px;background:#D2D2CB}
+.rl.h b{font-size:14px;font-weight:700;color:var(--ink)}
+.rl.hh b{font-size:13px;font-weight:600;color:#43464D}
+.rl.q b{font-size:12px;font-weight:500;color:#686B72}
+/* summary: plain text, only actionable parts look tappable */
+.summary{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:10px 0 0;font-size:15px;color:var(--soft)}
+.summary .sep{color:#C4C5C9}
+.slink{display:inline-flex;align-items:center;gap:2px;font-weight:600;color:var(--sel)}
+.slink.bad{color:var(--bad)}
+.slink .ic{width:13px;height:13px}
+/* collapsed title in the top bar */
+.ctitle{display:flex;flex-direction:column;line-height:1.15}
+.ctitle b{font-size:17px;font-weight:650;letter-spacing:-.01em}
+.ctitle small{font-size:12px;color:var(--soft)}
+/* pinned filter row */
+.pinrow{position:sticky;top:52px;z-index:34;display:flex;align-items:center;justify-content:space-between;height:44px;padding:0 6px 0 18px;background:rgba(234,242,255,.95);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border-bottom:.5px solid rgba(10,108,255,.18);font-size:15px;color:var(--ink2)}
+.pinrow b{color:var(--sel);font-weight:650}
+.pinrow button{width:44px;height:44px;display:grid;place-items:center;color:var(--sel)}
+.pinrow .ic{width:16px;height:16px}
+.card.faded{opacity:.32}
+/* menu popover */
+.menu{position:absolute;z-index:70;top:104px;right:12px;width:250px;border-radius:14px;background:rgba(255,255,255,.98);box-shadow:0 0 0 .5px rgba(0,0,0,.08),0 14px 40px rgba(0,0,0,.18);overflow:hidden}
+.menu div{min-height:46px;display:flex;align-items:center;gap:12px;padding:0 16px;font-size:17px;color:var(--ink)}
+.menu div + div{border-top:.5px solid var(--hair)}
+.menu div.sep{border-top:6px solid #F2F2EF}
+.menu .ic{width:19px;height:19px;color:var(--ink2)}
+.menu small{margin-left:auto;font-size:15px;color:var(--soft)}
+.menu .sw2{margin-left:auto;width:44px;height:26px;border-radius:13px;background:#34C759;position:relative}
+.menu .sw2.off{background:#E3E3DE}.menu .sw2.off::after{right:auto;left:2px}
+.menu .sw2::after{content:"";position:absolute;right:2px;top:2px;width:22px;height:22px;border-radius:11px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.editing{display:flex;align-items:center;gap:6px;height:30px;padding:0 11px;border-radius:15px;background:#FFF1D6;color:#8A5A00;font-size:13px;font-weight:650}
+.editing i{width:7px;height:7px;border-radius:50%;background:#E69A00;display:block}
+/* live status strip */
+.nownext{position:sticky;top:52px;z-index:35;margin:0;padding:10px 16px 12px;border-radius:0 0 18px 18px;background:#17181A;color:#fff;box-shadow:0 8px 24px rgba(0,0,0,.22);-webkit-backdrop-filter:none;backdrop-filter:none;display:block}
+.nownext .livebar{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#30D158}
+.nownext .livebar span{display:flex;align-items:center;gap:7px}
+.nownext .livebar i{width:8px;height:8px;border-radius:50%;background:#30D158;box-shadow:0 0 0 4px rgba(48,209,88,.22);display:block;animation:pulse 1.6s ease-in-out infinite}
+.nownext .livebar em{font-style:normal;color:rgba(255,255,255,.6);letter-spacing:0;text-transform:none;font-weight:600;font-variant-numeric:tabular-nums}
+@keyframes pulse{50%{box-shadow:0 0 0 7px rgba(48,209,88,0)}}
+@media (prefers-reduced-motion:reduce){.nownext .livebar i{animation:none}}
+.nownext .cols{display:grid;grid-template-columns:1.25fr 1fr;gap:14px}
+.nownext .lbl{font-size:12px;font-weight:650;color:rgba(255,255,255,.55);margin-bottom:2px;letter-spacing:0}
+.nownext .nm{font-size:17px;font-weight:650;line-height:22px;color:#fff}
+.nownext .sub{font-size:14px;color:rgba(255,255,255,.7);margin-top:2px}
+.nownext .nx{border-left:.5px solid rgba(255,255,255,.16);padding-left:14px}
+.nownext .nx .nm{color:rgba(255,255,255,.88)}
+.nownext .progress{margin-top:8px;background:rgba(255,255,255,.16)}
+.nownext .progress i{background:#30D158}
+.card.live{box-shadow:0 0 0 2px #17181A,0 8px 22px rgba(0,0,0,.1)}
+.card.live .progress i{background:#17181A}
+.nowline{background:#17181A}
+.nowline::before{background:#30D158;box-shadow:0 0 0 2px #17181A}
+.nowpill{background:#17181A}
+/* desktop strip */
+.d-strip{position:sticky;top:62px;z-index:39;background:#17181A;color:#fff}
+.d-strip .in{max-width:1100px;margin:0 auto;padding:12px 28px 12px 120px;display:grid;grid-template-columns:auto 1.3fr 1fr;gap:28px;align-items:center}
+.d-strip .livebar{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#30D158}
+.d-strip .livebar span{display:flex;align-items:center;gap:7px}
+.d-strip .livebar i{width:8px;height:8px;border-radius:50%;background:#30D158;box-shadow:0 0 0 4px rgba(48,209,88,.22);display:block}
+.d-strip .livebar em{font-style:normal;color:rgba(255,255,255,.6);font-size:20px;letter-spacing:-.01em;text-transform:none;font-weight:650;font-variant-numeric:tabular-nums}
+.d-strip .lbl{font-size:12px;font-weight:650;color:rgba(255,255,255,.55)}
+.d-strip .nm{font-size:18px;font-weight:650;margin-top:2px}
+.d-strip .sub{font-size:14px;color:rgba(255,255,255,.7);margin-top:2px}
+.d-strip .nx{border-left:.5px solid rgba(255,255,255,.16);padding-left:24px}
+.d-strip .progress{margin-top:8px;background:rgba(255,255,255,.16);max-width:320px}
+.d-strip .progress i{background:#30D158}
+.viewonly.dk{background:#EDEDE9}
+.dcard.micro .chip{height:20px;font-size:12px}
+.dcard .t2d{font-size:14px}
+/* phone-width viewing of this page: show screens at true size, swipe between them */
+@media (max-width:480px){
+  .phone{zoom:1;width:auto;height:auto;padding:0;background:none;box-shadow:none;border-radius:0}
+  .screen{width:calc(100vw - 16px);height:780px;border-radius:26px;box-shadow:0 0 0 1px rgba(0,0,0,.08),0 10px 30px rgba(0,0,0,.12)}
+  .statusbar{padding:6px 22px 0 26px}.statusbar .isl{display:none}
+  .row{margin:0 -14px;padding:6px 8px 20px;gap:12px;scroll-snap-type:x mandatory}
+  .fig{scroll-snap-align:center}
+  .fig figcaption{max-width:calc(100vw - 32px);padding:0 6px}
+}
+
+/* ===== Round 3 ===== */
+.card:not(.micro) .body > *{flex:none}
+.app{--live:#1E9E52;--live-dot:#34C759;--live-tint:#EEF7F1}
+.card .body{overflow:hidden}
+.card.small .body{padding:7px 12px 7px 4px;gap:2px}
+.card.small .t2{line-height:18px}
+.chipline{display:flex;min-width:0}
+.card .ppl{display:flex}
+.moreind{display:none;position:absolute;right:9px;bottom:7px;gap:2.5px;pointer-events:none}
+.moreind i{width:3.5px;height:3.5px;border-radius:50%;background:#B3B5BA;display:block}
+.card.clipped > .moreind{display:flex}
+.card.micro .moreind{display:flex;position:static;margin-left:auto;align-self:center}
+.card.micro .micro-time{margin-left:2px}
+.card.micro .title{flex:0 1 auto}
+.card.sel > .moreind{right:50px}
+.toolbar .ctx2{font-size:13px;color:var(--soft);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@keyframes livepulse{0%{box-shadow:0 0 0 0 rgba(52,199,89,.45)}70%{box-shadow:0 0 0 7px rgba(52,199,89,0)}100%{box-shadow:0 0 0 0 rgba(52,199,89,0)}}
+.livedot{width:8px;height:8px;border-radius:50%;background:var(--live-dot);flex:none;display:block;animation:livepulse 1.8s ease-out infinite}
+@media (prefers-reduced-motion:reduce){.livedot{animation:none}}
+.nownext{position:sticky;top:52px;z-index:35;margin:0;padding:7px 16px 9px 18px;border-radius:0;display:block;color:var(--ink);background:rgba(238,247,241,.94);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);box-shadow:none;border-bottom:.5px solid rgba(30,158,82,.18)}
+.nownext .nn1{display:flex;align-items:center;gap:8px;min-width:0;height:22px}
+.nownext .nnl{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--live);flex:none}
+.nownext .nm{font-size:16px;font-weight:650;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;line-height:22px;letter-spacing:-.01em}
+.nownext .left{margin-left:auto;font-size:14px;font-weight:600;color:var(--live);white-space:nowrap;font-variant-numeric:tabular-nums}
+.nownext .nn2{font-size:14px;color:var(--soft);margin:1px 0 0 16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:19px}
+.nownext .nn2 b{color:var(--ink2);font-weight:600;font-variant-numeric:tabular-nums}
+.nnbar{position:absolute;left:0;right:0;bottom:0;height:2px;background:rgba(30,158,82,.12)}
+.nnbar i{display:block;height:100%;background:var(--live-dot)}
+.card.live{box-shadow:0 0 0 1.5px var(--live),0 6px 18px rgba(30,158,82,.12)}
+.card.live .progress{background:#E3F1E8}
+.card.live .progress i{background:var(--live-dot)}
+.livetag{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 7px;border-radius:10px;background:var(--live-tint);color:var(--live);font-size:12px;font-weight:700;flex:none}
+.livetag i{width:6px;height:6px;border-radius:50%;background:var(--live-dot);display:block;animation:livepulse 1.8s ease-out infinite}
+.nowline{background:var(--live);height:1.5px}
+.nowline::before{background:var(--live-dot);box-shadow:0 0 0 2px var(--bg)}
+.nowpill{background:var(--live);color:#fff}
+.d-strip{position:sticky;top:62px;z-index:39;color:var(--ink);background:rgba(238,247,241,.95);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border-bottom:.5px solid rgba(30,158,82,.18)}
+.d-strip .in{max-width:1100px;margin:0 auto;height:44px;padding:0 28px 0 120px;display:flex;align-items:center;gap:12px;grid-template-columns:none}
+.d-strip .nnl{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--live);white-space:nowrap;font-variant-numeric:tabular-nums}
+.d-strip .nm{font-size:16px;font-weight:650;margin:0}
+.d-strip .left{font-size:14px;font-weight:600;color:var(--live);white-space:nowrap}
+.d-strip .nx{margin-left:auto;border:0;padding:0;font-size:14px;color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.d-strip .nx b{color:var(--ink2);font-weight:600}
+.d-strip{position:sticky}
+.d-strip .nnbar{position:absolute}
+.dcard.dcompact.clipped > .moreind{display:flex}
+.dcard .moreind{right:12px;bottom:6px}
+
+/* ===== Round 4 ===== */
+.ovl{position:absolute;inset:0;background:transparent!important;pointer-events:none}
+.ovl > *{pointer-events:auto}
+.addbtn{white-space:nowrap;flex:none}
+.d-head > div:last-child{flex:none;text-align:right}
+.handle.top{top:3px;bottom:auto}
+.dhandle.top{top:3px;bottom:auto}
+.dcard.hover .dhandle{background:var(--sel)}
+.gap.thin{flex-direction:row;gap:6px;justify-content:flex-start;padding-left:14px}
+.gap.thin small,.gap.thin .plus{display:none}
+.gap.thin strong{font-size:13px}
+/* sign in */
+.signin{padding:70px 26px 30px;display:flex;flex-direction:column}
+.brand.big{font-size:22px;margin-bottom:34px}.brand.big .ic{width:24px;height:24px}
+.signin h1{margin:0 0 8px;font-size:34px;letter-spacing:-.025em}
+.signin p{margin:0 0 28px;font-size:17px;line-height:1.4;color:var(--soft)}
+.signin .inp{justify-content:space-between;letter-spacing:.15em}
+.inp.err{box-shadow:0 0 0 1.5px var(--bad);background:#fff}
+.inp .show{letter-spacing:0;font-size:15px;font-weight:600;color:var(--sel)}
+.errmsg{display:flex;align-items:center;gap:6px;margin:8px 4px 22px;font-size:15px;color:var(--bad)}
+.errmsg .ic{width:16px;height:16px}
+.signin .fine,.fine{font-size:13px!important;color:var(--soft);text-align:center;margin:14px 0 0!important}
+/* sheets */
+.help{font-size:13px;color:var(--soft);margin:7px 4px 0;line-height:1.4}
+.grow .v em{font-style:normal;font-size:13px;color:var(--faint)}
+.saverow{display:flex;gap:8px;align-items:center}
+.btn.sm{height:46px;width:auto;padding:0 18px;font-size:16px!important}
+.vlist{border-radius:12px;background:#F4F4F1;overflow:hidden}
+.vrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px 10px 14px;background:#F4F4F1;min-height:66px}
+.vlist > * + *{border-top:.5px solid #E2E2DD}
+.vrow b{display:block;font-size:16px;font-weight:600}
+.vrow small{display:block;font-size:13px;color:var(--soft);margin-top:1px}
+.vrow button{height:34px;padding:0 13px;border-radius:17px;background:#fff;color:var(--sel)!important;font-size:15px;font-weight:600;box-shadow:0 0 0 .5px rgba(0,0,0,.1)}
+.vrow.cur{background:var(--sel-tint)}
+.badge{height:24px;padding:0 9px;border-radius:12px;background:var(--sel);color:#fff;font-size:12px;font-weight:650;display:flex;align-items:center}
+.vswipe{position:relative;background:var(--bad);display:flex;justify-content:flex-end}
+.vswipe .vrow{position:relative;z-index:1;flex:1;margin-right:88px}
+.vswipe .del{position:absolute;right:0;top:0;bottom:0;width:88px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#fff;font-size:13px;font-weight:600}
+.vswipe .del .ic{width:20px;height:20px}
+.slist .srow{height:44px;display:flex;align-items:center;gap:12px;padding:0 16px;font-size:17px;border-top:.5px solid var(--hair)}
+.sdot{width:28px;height:28px;border-radius:14px;background:var(--tint);display:grid;place-items:center;color:var(--ph)}
+.sdot .ic{width:15px;height:15px}
+.srow .tick{margin-left:auto;color:var(--sel)}.srow .tick .ic{width:20px;height:20px}
+/* network and save states */
+.savestate.off i{background:#9A9CA3}
+.savestate.bad{color:var(--bad);font-weight:600}.savestate.bad i{background:var(--bad)}
+.netbar{position:sticky;top:52px;z-index:34;display:flex;gap:10px;align-items:flex-start;padding:10px 18px;background:rgba(242,242,239,.96);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border-bottom:.5px solid var(--hair);font-size:14px;line-height:1.35;color:var(--ink2)}
+.netbar .ic{width:18px;height:18px;margin-top:1px;color:var(--soft)}
+.alert{position:absolute;z-index:70;left:36px;right:36px;top:230px;border-radius:18px;background:rgba(255,255,255,.98);padding:20px 16px 12px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.25)}
+.alert .aic{width:44px;height:44px;border-radius:22px;background:#F2F2EF;display:grid;place-items:center;margin:0 auto 10px;color:var(--ink2)}
+.alert .aic .ic{width:22px;height:22px}
+.alert h4{margin:0 0 6px;font-size:17px;font-weight:650}
+.alert p{margin:0 0 14px;font-size:14px;line-height:1.4;color:var(--ink2)}
+.alert .ab{display:block;width:100%;height:46px;border-radius:12px;background:#F2F2EF;color:var(--sel)!important;font-size:16px;font-weight:600;margin-top:8px}
+.alert .ab.strong{background:var(--sel);color:#fff!important}
+/* dark appearance (switch in the menu or settings) */
+.app.dark{--bg:#111214;--surface:#1C1D20;--ink:#F2F2F0;--ink2:#D5D6DA;--soft:#9EA1A8;--faint:#7C7F86;--hair:#2C2D31;--hair2:#26272B;--sel:#3D8BFF;--sel-tint:#16233A;--bad:#FF6259;--bad-tint:#3A1D1C;--live:#3DD06C;--live-tint:#16301F}
+.app.dark .statusbar{background:rgba(17,18,20,.92);color:#fff}.app.dark .statusbar .sig i{background:#fff}
+.app.dark .homebar{background:#fff}
+.app.dark .m-top{background:rgba(17,18,20,.9)}
+.app.dark .card{box-shadow:0 0 0 .5px rgba(255,255,255,.07)}
+.app.dark .card.sel{box-shadow:0 0 0 2px var(--sel)}
+.app.dark .tag{background:#2A2B2F;color:#C9CACE}
+.app.dark .tag.more{background:#33343A;color:#E4E5E8}
+.app.dark .chip{background:color-mix(in srgb,var(--ph) 22%,#1C1D20);color:#E8E9EC}
+.app.dark .chip .ic{color:color-mix(in srgb,var(--ph) 70%,#fff)}
+.app.dark .fchip{background:var(--surface);border-color:var(--hair);color:var(--ink2)}
+.app.dark .fchip.on{background:#F2F2F0;color:#111214;border-color:#F2F2F0}
+.app.dark .rl.h::after{background:#34353A}.app.dark .rl.hh::after{background:#2B2C30}.app.dark .rl.q::after{background:#232428}.app.dark .rl.f::after{background:#1B1C1F}
+.app.dark .rl.h s{background:#8A8C92}.app.dark .rl.hh s{background:#66686E}.app.dark .rl.q s{background:#4D4F54}.app.dark .rl.f s{background:#3A3B3F}
+.app.dark .rl.hh b{color:#C4C6CB}.app.dark .rl.q b{color:#8E9097}
+.app.dark .tl::before{background:#3A3B3F}
+.app.dark .gap{border-color:#3A3B40;background:rgba(255,255,255,.02)}
+.app.dark .gap .plus{background:#2A2B2F}
+.app.dark .toolbar{background:rgba(36,37,41,.96);box-shadow:0 0 0 .5px rgba(255,255,255,.08),0 12px 36px rgba(0,0,0,.5)}
+.app.dark .moreind i{background:#5E6066}
+.app.dark .iconbtn{color:var(--ink2)}
+.app.dark .sunpill{background:#3A2C10;color:#F2C46B;box-shadow:0 0 0 1px #5A4418}
+/* desktop modal, gap menu, toast */
+.dscrim{position:absolute;inset:40px 0 0 0;background:rgba(0,0,0,.28);z-index:60}
+.dmodal{position:absolute;z-index:61;left:50%;top:90px;width:580px;margin-left:-290px;border-radius:16px;background:#fff;box-shadow:0 30px 80px rgba(0,0,0,.3);overflow:hidden}
+.dm-body{padding:18px 20px 16px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.dm-body .full{grid-column:1/-1}
+.dmodal .fl{font-size:13px}
+.dmodal .inp,.dmodal .grow{font-size:15px}.dmodal .inp{height:40px}
+.dmodal .inp.tall{height:64px;align-items:flex-start;padding-top:10px}
+.dmodal .grow{min-height:42px}
+.dmodal .stagegrid .chip{height:30px;font-size:13px}
+.dmodal .pchips .tag{height:30px;font-size:14px}.dmodal .pchips .tag .x{width:24px;height:24px}
+.dmodal .sh-head .l,.dmodal .sh-head .r{font-size:15px!important}
+.dmodal .sh-head h3{font-size:16px}
+.dm-foot{border-top:.5px solid var(--hair);padding-top:12px}
+.danger-link{display:flex!important;align-items:center;gap:6px;color:var(--bad)!important;font-size:15px!important;font-weight:600}
+.danger-link .ic{width:16px;height:16px}
+.gapmenu{position:absolute;z-index:20;left:50%;width:330px;margin-left:-165px;border-radius:14px;background:#fff;box-shadow:0 0 0 .5px rgba(0,0,0,.1),0 16px 44px rgba(0,0,0,.18);overflow:hidden}
+.gm-h{padding:10px 14px;font-size:13px;font-weight:600;color:var(--soft);border-bottom:.5px solid var(--hair)}
+.gm-o{padding:9px 14px;border-bottom:.5px solid var(--hair)}.gm-o:last-child{border:0}
+.gm-o b{display:block;font-size:15px;font-weight:600;color:var(--sel)}
+.gm-o small{font-size:13px;color:var(--soft)}
+.dtoast{position:absolute;z-index:50;left:50%;bottom:28px;transform:translateX(-50%);display:flex;align-items:center;gap:16px;height:46px;padding:0 8px 0 18px;border-radius:14px;background:rgba(28,28,30,.96);color:#fff;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.25);white-space:nowrap}
+.dtoast button{height:36px;padding:0 10px;color:#7FB3FF!important;font-weight:650;font-size:14px}
+.dlane{z-index:3}
+.dlane .body{inset:0 0 0 22px}
+/* print */
+.paper{width:794px;min-height:600px;background:#fff;color:#111;padding:44px 52px;box-shadow:0 20px 60px rgba(0,0,0,.18);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif}
+.phead{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:1.5px solid #111;padding-bottom:12px;margin-bottom:6px}
+.pbrand{font-family:ui-serif,Georgia,serif;font-size:14px;color:#555}
+.phead h2{margin:2px 0 4px;font-size:28px;letter-spacing:-.02em}
+.pdate{font-size:13px;color:#444}
+.pfilter{text-align:right;font-size:13px;font-weight:600}.pfilter small{font-weight:400;color:#666}
+.pgroup h5{margin:18px 0 4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#555;display:flex;align-items:center;gap:8px}
+.pgroup h5::before{content:"";width:10px;height:10px;border-radius:3px;background:var(--ph)}
+.prow{display:grid;grid-template-columns:150px 1fr;gap:16px;padding:7px 0;border-top:.5px solid #DDD;break-inside:avoid}
+.pt{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}.pt small{display:block;font-weight:400;color:#666}
+.prow b{font-size:14px}.pm{font-size:12.5px;color:#444;margin-top:1px}.pn{font-size:12.5px;color:#111;margin-top:2px;font-style:italic}
+.pfix{font-size:10px;font-weight:700;border:1px solid #111;border-radius:4px;padding:0 4px;margin-left:4px;vertical-align:2px}
+</style>
+</head>
+<body>
+<main class="page">
+<header class="intro">
+<h1>Wedding Runbook Planner · Desktop mockup</h1>
+<p>Reference for the desktop layout (browser width 1240 px). Same data, scale and rules as the mobile mockup.</p>
+<div class="decisions">
+<b>Approved rules shown here</b>
+<ul>
+<li>Scale: 20 px per 5 minutes. Lines every 5 minutes, labels at 15, 30 and 60. Card edges sit exactly on their times.</li>
+<li>Card rows: title, time, location, stage, people. Short cards drop people, then stage, then location, then time. Faint dots bottom-right mean something is hidden.</li>
+<li>Phone cards stay quiet. Selecting one shows the toolbar and its handles: top and bottom for flexible activities, bottom only for fixed ones.</li>
+<li>Colour roles: phase colours for stages, blue for selection, red only for conflict and delete, black for fixed, green for live.</li>
+<li>Day-of view: automatic on the wedding date and when status is Final, view only until Edit.</li>
+<li>Light is the default. Dark is an in-app switch (menu or Plan settings).</li>
+</ul></div>
+</header>
+<section class="block">
+<h2>Planning</h2>
+<p>Controls stay on the card because a mouse can hover.</p>
+<div class="row"><figure class="fig"><div id="DA"></div><figcaption style="max-width:760px"><b>At rest, hovering a card.</b> Hovered card (Getting-ready Portraits) shows its controls and both resize handles. Fixed cards show a solid lock; others a faint open lock.</figcaption></figure><figure class="fig"><div id="DB"></div><figcaption style="max-width:760px"><b>Edit dialog.</b> Same fields and order as the phone sheet, in a centered window. Delete sits at the bottom.</figcaption></figure></div>
+</section>
+<section class="block">
+<h2>Timeline actions</h2>
+<p></p>
+<div class="row"><figure class="fig"><div id="H"></div><figcaption style="max-width:760px"><b>Drag preview.</b> “Bouquet handoff” moving after “Travel to Church”. One insertion line, a slot at the exact landing time, neighbours already at their new times.</figcaption></figure><figure class="fig"><div id="DC"></div><figcaption style="max-width:760px"><b>Open time menu.</b> Clicking open time shows three choices next to it.</figcaption></figure><figure class="fig"><div id="DD"></div><figcaption style="max-width:760px"><b>Conflict.</b> Overlapping activities split into columns so both keep their true times. A toast reports what moved and offers Undo.</figcaption></figure></div>
+</section>
+<section class="block">
+<h2>On the day</h2>
+<p>View only until Edit. Reorder and lock controls are hidden; the solid lock on fixed items stays.</p>
+<div class="row"><figure class="fig"><div id="N"></div><figcaption style="max-width:760px"><b>Day-of on a laptop.</b> Slim live strip on one line, time line, finished activities faded, current activity outlined in green.</figcaption></figure></div>
+</section>
+<section class="block">
+<h2>Print</h2>
+<p>Print or save as PDF from the menu. A clean list grouped by phase, not the timeline drawing. Uses the active person filter.</p>
+<div class="row"><figure class="fig"><div id="DP"></div><figcaption style="max-width:760px"><b>Printed timeline.</b> Times, titles, fixed marker, location, people and notes.</figcaption></figure></div>
+</section>
+<section class="block">
+<h2>Colour</h2>
+<p>Six phase colours plus four single-purpose colours.</p>
+<div class="swatches" id="SW"></div>
+</section>
+</main>
+<script>
+const PX = 4.0;
+const T = (h, m = 0) => h * 60 + m;
+const PH = {
+  prep:      { c: '#7A66E8', t: '#F1EEFD', n: 'Getting ready' },
+  photo:     { c: '#1F8A9B', t: '#E5F3F5', n: 'Photos' },
+  transit:   { c: '#6F7885', t: '#EFF1F3', n: 'Travel and buffer' },
+  ceremony:  { c: '#A67C0F', t: '#F8F1DC', n: 'Ceremony' },
+  cocktail:  { c: '#C44E78', t: '#FBEBF1', n: 'Cocktail and celebration' },
+  reception: { c: '#3F8A57', t: '#E7F3EA', n: 'Reception, dinner, party' }
+};
+const ST = {
+  preparation: ['Preparation', 'prep', 'sparkle'], 'first-look': ['First look', 'photo', 'heart'],
+  photography: ['Photography', 'photo', 'camera'], transition: ['Transition', 'transit', 'car'],
+  buffer: ['Buffer', 'transit', 'clock'], ceremony: ['Ceremony', 'ceremony', 'rings'],
+  celebration: ['Celebration', 'cocktail', 'party'], cocktail: ['Cocktail', 'cocktail', 'glass'],
+  reception: ['Reception', 'reception', 'table'], dinner: ['Dinner', 'reception', 'fork'], party: ['Party', 'reception', 'music']
+};
+const P = {
+  sparkle: '<path d="m12 3 1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6Z"/><path d="M18.5 15.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6Z"/>',
+  heart: '<path d="M20.8 4.6a5.4 5.4 0 0 0-7.6 0L12 5.8l-1.2-1.2a5.4 5.4 0 0 0-7.6 7.6L12 21l8.8-8.8a5.4 5.4 0 0 0 0-7.6Z"/>',
+  camera: '<path d="M4 7.5h3.2L8.8 5.5h6.4l1.6 2H20v11H4Z"/><circle cx="12" cy="13" r="3.4"/>',
+  car: '<path d="m5 11 1.8-4.5h10.4L19 11"/><path d="M4 11h16v6H4Z"/><circle cx="7.5" cy="17.5" r="1.4"/><circle cx="16.5" cy="17.5" r="1.4"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  rings: '<circle cx="9" cy="14" r="5"/><circle cx="15" cy="14" r="5"/><path d="M10.5 6 12 3.5 13.5 6"/>',
+  party: '<path d="M5 19.5 9 7l8.5 8.5Z"/><path d="M14 4v2M19 5l-1.5 1.5M20 10h-2"/>',
+  glass: '<path d="M7 4h10l-.8 6.5a4.2 4.2 0 0 1-8.4 0Z"/><path d="M12 15v5M9 20h6"/>',
+  table: '<path d="M4 10h16"/><path d="M6 10v9M18 10v9M8 10V6h8v4"/>',
+  fork: '<path d="M7 3v6a2.5 2.5 0 0 0 5 0V3M9.5 3v18M17 3c-2 1.5-2 7 0 9v9"/>',
+  music: '<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>',
+  lock: '<rect x="5" y="10.5" width="14" height="10" rx="2.6"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" fill="none" stroke="currentColor" stroke-width="2"/>',
+  lockopen: '<rect x="5.5" y="10.5" width="13" height="9.5" rx="2.4"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 6.8-1.2"/>',
+  pin: '<path d="M12 21s6.5-5.4 6.5-11.2a6.5 6.5 0 1 0-13 0C5.5 15.6 12 21 12 21Z"/><circle cx="12" cy="9.8" r="2.2"/>',
+  note: '<path d="M6 4h9l3 3v13H6Z"/><path d="M9 11h6M9 15h4"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>', minus: '<path d="M5 12h14"/>',
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  more: '<circle cx="5.5" cy="12" r="1.5" class="d"/><circle cx="12" cy="12" r="1.5" class="d"/><circle cx="18.5" cy="12" r="1.5" class="d"/>',
+  grip: '<circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/>',
+  reorder: '<path d="M4 8h16M4 12h16M4 16h16"/>',
+  pencil: '<path d="M4 20h4L19 9l-4-4L4 16Z"/><path d="m13.5 6.5 4 4"/>',
+  copy: '<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+  trash: '<path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/>',
+  x: '<path d="m6 6 12 12M18 6 6 18"/>', warn: '<path d="M12 3.5 2.8 20h18.4Z"/><path d="M12 10v4M12 17.2v.1"/>',
+  sun: '<circle cx="12" cy="15" r="4"/><path d="M12 5v2.5M5 15H3M21 15h-2M6.3 9.3 7.8 10.8M17.7 9.3l-1.5 1.5M3 20h18"/>',
+  chev: '<path d="m7 10 5 5 5-5"/>', chevr: '<path d="m10 7 5 5-5 5"/>', moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>', download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>', check: '<path d="m5 12 5 5 9-10"/>', wifi: '<path d="M2 8.5a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0M3 3l18 18"/>', eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>', devices: '<rect x="3" y="4" width="13" height="10" rx="1.5"/><rect x="15" y="9" width="6" height="11" rx="1.5"/><path d="M7 18h6"/>', live: '<circle cx="12" cy="12" r="2.5"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 16.2a6 6 0 0 0 0-8.4M5 5a10 10 0 0 0 0 14M19 19a10 10 0 0 0 0-14"/>', print: '<path d="M7 9V4h10v5M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><path d="M7 14h10v6H7z"/>', history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>', gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>', out: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>', flag: '<path d="M4 21V4h13l-2 4 2 4H4"/>', swatch: '<path d="M4 7h16M4 12h10M4 17h13"/>',
+  cal: '<rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M4 10h16M9 3v4M15 3v4"/>'
+};
+const ic = (n, cls = '') => {
+  const solid = ['lock', 'grip', 'more'].includes(n);
+  return `<svg class="ic ${solid ? 'fill' : ''} ${cls}" viewBox="0 0 24 24" aria-hidden="true">${P[n]}</svg>`;
+};
+const hm = m => { const x = ((m % 1440) + 1440) % 1440; return { h: Math.floor(x / 60), mi: x % 60 }; };
+const t12 = (m, ap = true) => { const { h, mi } = hm(m); const hh = h % 12 || 12; const s = mi ? `${hh}:${String(mi).padStart(2, '0')}` : `${hh}:00`; return ap ? `${s} ${h >= 12 ? 'PM' : 'AM'}` : s; };
+const range = (a, b) => (hm(a).h >= 12) === (hm(b).h >= 12) ? `${t12(a, false)} – ${t12(b)}` : `${t12(a)} – ${t12(b)}`;
+const dur = m => m < 60 ? `${m} min` : (m % 60 ? `${Math.floor(m / 60)} hr ${m % 60} min` : `${m / 60} hr`);
+const rulerLabel = m => { const { h, mi } = hm(m); if (mi === 0) return `${h % 12 || 12} ${h >= 12 ? 'PM' : 'AM'}`; return `${h % 12 || 12}:${String(mi).padStart(2, '0')}`; };
+
+const LOC_READY = 'Getting-ready location · TBD';
+const SOBOR = 'St. Peter and Paul Orthodox Sobor';
+const RICH = 'Le Richmond · Griffintown';
+const BASE = [
+  { id: 'ready', title: 'Getting Ready', d: 45, stage: 'preparation', loc: LOC_READY, ppl: ['Bride', 'Mothers'] },
+  { id: 'photog', title: 'Photographer Arrives & Details', d: 30, stage: 'photography', loc: LOC_READY, ppl: ['Bride', 'Photographer'], fixed: T(12, 15), note: true },
+  { id: 'portraits', title: 'Getting-ready Portraits', d: 30, stage: 'photography', loc: LOC_READY, ppl: ['Bride', 'Photographer', 'Mothers', 'Sister', 'Maid of Honour', 'Grandma', 'Cousin Léa'] },
+  { id: 'bouquet', title: 'Bouquet handoff', d: 5, stage: 'preparation', loc: LOC_READY, ppl: ['Bride', 'Florist'] },
+  { id: 'travel', title: 'Travel to Church', d: 35, stage: 'transition', loc: SOBOR, ppl: ['Bride', 'Wedding Party'] },
+  { id: 'arrive', title: 'Arrival & Buffer', d: 15, stage: 'buffer', loc: SOBOR, ppl: ['Bride', 'Wedding Party'] },
+  { id: 'ceremony', title: 'Ceremony', d: 60, stage: 'ceremony', loc: SOBOR, ppl: ['Bride', 'Groom', 'Family', 'Guests'], fixed: T(14, 45), note: true },
+  { id: 'travel2', title: 'Travel to Le Richmond', d: 15, stage: 'transition', loc: RICH, ppl: ['Bride', 'Groom'] },
+  { id: 'cocktail', title: 'Cocktail Hour', d: 75, stage: 'cocktail', loc: RICH, ppl: ['All Guests'], fixed: T(16) },
+  { id: 'reception', title: 'Reception', d: 60, stage: 'reception', loc: RICH, ppl: ['All Guests'] },
+  { id: 'dinner', title: 'Dinner', d: 90, stage: 'dinner', loc: RICH, ppl: ['All Guests'] },
+  { id: 'party', title: 'Dancing & Party', d: 180, stage: 'party', loc: RICH, ppl: ['All Guests'] }
+];
+const DAY = T(11, 30);
+const SUNSET = T(16, 19);
+
+function build(acts) {
+  let cur = DAY; const items = [], gaps = [];
+  for (const a of acts) {
+    let s = cur;
+    if (a.fixed == null && a.gap) { s = cur + a.gap; gaps.push({ start: cur, end: s, before: a, prev: items[items.length - 1], manual: true }); }
+    if (a.fixed != null) { s = a.fixed; if (cur < s) gaps.push({ start: cur, end: s, before: a, prev: items[items.length - 1] }); }
+    items.push({ ...a, start: s, end: s + a.d, conflict: a.fixed != null && cur > a.fixed ? cur - a.fixed : 0 });
+    cur = Math.max(cur, s + a.d);
+  }
+  for (const L of items.filter(i => i.conflict)) {
+    L.lane = 1;
+    for (const i of items) if (i !== L && i.fixed == null && i.start < L.end && i.end > L.start) {
+      i.lane = 0; i.over = { into: L, mins: Math.min(i.end, L.end) - Math.max(i.start, L.start), from: Math.max(i.start, L.start) };
+    }
+  }
+  return { items, gaps, end: cur };
+}
+const move = (arr, id, afterId) => { const a = arr.filter(x => x.id !== id); const m = arr.find(x => x.id === id); a.splice(a.findIndex(x => x.id === afterId) + 1, 0, m); return a; };
+const withD = (arr, id, d) => arr.map(x => x.id === id ? { ...x, d } : x);
+
+function ruler(from, to, desk, extra = {}) {
+  let out = '';
+  for (let m = from; m <= to; m += 5) {
+    const k = m % 60 === 0 ? 'h' : m % 30 === 0 ? 'hh' : m % 15 === 0 ? 'q' : 'f';
+    const snap = extra.snap === m;
+    const label = (k !== 'f' || snap) ? `<b>${snap ? t12(m, false) : rulerLabel(m)}</b>` : '';
+    out += `<div class="rl ${k} ${snap ? 'snap' : ''}" style="top:${(m - from) * PX}px"><s></s>${label}</div>`;
+  }
+  return out;
+}
+function people(list, max) {
+  const shown = list.slice(0, max), rest = list.length - shown.length;
+  return shown.map(p => `<span class="tag">${p}</span>`).join('') + (rest > 0 ? `<span class="tag more">+${rest}</span>` : '');
+}
+function chip(stage) { const [label, ph, icon] = ST[stage]; return `<span class="chip" style="--ph:${PH[ph].c};--tint:${PH[ph].t}">${ic(icon)}${label}</span>`; }
+
+function mCard(it, o) {
+  const [, ph] = ST[it.stage];
+  const top = (it.start - o.from) * PX + 1, h = it.d * PX - 2;
+  const dens = it.d <= 10 ? 'micro' : it.d <= 25 ? 'small' : 'std';
+  const faded = o.who && !it.ppl.includes(o.who);
+  const sel = o.sel === it.id, dim = o.now && it.end <= o.now, live = o.now && it.start <= o.now && it.end > o.now;
+  let lane = '';
+  if (it.lane === 0) lane = 'right:calc(45% + 3px);';
+  if (it.lane === 1) lane = 'left:calc(55% + 3px);';
+  const cls = ['card', it.lane != null && 'narrow', dens, sel && 'sel', dim && 'dim', live && 'live', it.over && 'overrun', it.conflict && 'fixedc', faded && 'faded'].filter(Boolean).join(' ');
+  const lock = it.fixed != null ? `<svg class="ic fill glyph" viewBox="0 0 24 24" aria-label="Fixed time">${P.lock}</svg>` : '';
+  const narrow = it.lane != null;
+  const note = it.note && !narrow ? `<span class="glyph note">${ic('note')}</span>` : '';
+  const livetag = live ? `<span class="livetag"><i></i>Now</span>` : '';
+  const warn = it.over ? `<div class="warn">${ic('warn')}${it.d < 20 ? `${it.over.mins} min over` : `Runs ${it.over.mins} min into ${it.over.into.title}`}</div>`
+    : it.conflict ? `<div class="warn">${ic('warn')}Fixed · ${it.conflict} min overlap</div>` : '';
+  let body;
+  if (dens === 'micro') {
+    body = `<span class="title">${it.title}</span>${lock}<span class="moreind" aria-hidden="true"><i></i><i></i><i></i></span><span class="micro-time">${t12(it.start, false)}</span>`;
+  } else {
+    // Rows in display order; fitRows() removes them from the bottom of the priority list until the card fits.
+    body = `<div class="t1"><span class="title">${it.title}</span>${lock}${note}${livetag}</div>
+      <div class="t2" data-drop="4"><span>${narrow ? t12(it.start) : range(it.start, it.end)}</span><span class="dur">${dur(it.d)}</span></div>
+      ${warn}
+      ${live ? `<div class="progress" data-drop="3"><i style="width:${Math.round((o.now - it.start) / it.d * 100)}%"></i></div>` : ''}
+      <div class="loc" data-drop="2">${ic('pin')}<span>${it.loc}</span></div>
+      ${narrow ? '' : `<div class="chipline" data-drop="1">${chip(it.stage)}</div>`}
+      ${narrow ? '' : `<div class="ppl" data-drop="0">${people(it.ppl, 99)}</div>`}`;
+  }
+  const ov = it.over ? `--ovh:${Math.min(h, it.over.mins * PX)}px;` : '';
+  return `<div class="${cls}" style="top:${top}px;height:${h}px;--ph:${PH[ph].c};${lane}${ov}">
+    <span class="rule"></span><div class="body" ${sel ? 'style="right:44px"' : ''}>${body}</div>${dens !== 'micro' ? '<span class="moreind" aria-hidden="true"><i></i><i></i><i></i></span>' : ''}
+    ${sel ? `<span class="reorder">${ic('reorder')}</span>${it.fixed == null ? '<span class="handle top"></span>' : ''}<span class="handle"></span>` : ''}</div>`;
+}
+
+function mTimeline(sched, o) {
+  const from = o.from, to = o.to;
+  const H = (to - from) * PX;
+  let html = `<div class="tl" style="height:${H + 40}px;--rw:56px;--pl:64px;--pr:12px;--nl:56px">${ruler(from, to, false, o)}<div class="plan">`;
+  for (const g of sched.gaps) {
+    if (o.noGaps) continue;
+    const top = (g.start - from) * PX + 1, h = (g.end - g.start) * PX - 2;
+    html += `<div class="gap ${o.gapOn ? 'on' : ''} ${h < 70 ? 'thin' : ''}" style="top:${top}px;height:${h}px"><strong>${g.end - g.start} min open</strong><small>before ${g.before.title}</small><span class="plus">${ic('plus')}</span></div>`;
+  }
+  for (const it of sched.items) if (it.end > from && it.start < to) html += mCard(it, o);
+  html += `</div>`;
+  if (o.sunset) html += `<div class="sunset" style="left:var(--nl);top:${(o.sunset - from) * PX}px"></div><div class="sunpill" style="top:${(o.sunset - from) * PX - 11}px">${ic('sun')}${t12(o.sunset, false)}</div>`;
+  for (const it of sched.items) if (it.conflict) {
+    html += `<div class="rail" style="left:57px;top:${(it.start - from) * PX}px;height:${it.conflict * PX}px"></div>`;
+  }
+  if (o.now) html += `<div class="nowline" style="top:${(o.now - from) * PX}px"></div><div class="nowpill" style="left:2px;top:${(o.now - from) * PX - 11}px">${t12(o.now, false)}</div>`;
+  if (o.bubble) html += `<div class="bubble" style="left:${o.bubble.x}px;top:${(o.bubble.m - from) * PX - 44}px">${o.bubble.text}</div>`;
+  if (o.showEnd) html += `<div class="endmark" style="top:${(sched.end - from) * PX + 10}px"><span>${t12(sched.end)}</span><i></i><span>End of day</span></div>`;
+  return html + `</div>`;
+}
+
+function statusbar(time = '9:41') {
+  return `<div class="statusbar"><span>${time}</span><span class="isl"></span><span class="sig"><i style="width:3px;height:5px"></i><i style="width:3px;height:7px"></i><i style="width:3px;height:9px"></i><i style="width:3px;height:11px"></i><i style="width:24px;height:11px;border-radius:3px;margin-left:5px"></i></span></div>`;
+}
+function topbar({ viewOnly = false, edge = false, save = 'Saved', collapsed = false, editing = false } = {}) {
+  const left = collapsed ? `<span class="ctitle"><b>Wedding Day</b><small>Sat, Nov 21</small></span>` : `<span class="brand">${ic('heart')}Our Wedding</span>`;
+  if (editing) return `<div class="m-top edge">${left}<span class="top-right"><span class="editing"><i></i>Editing</span><button class="textbtn">Done</button></span></div>`;
+  const right = viewOnly
+    ? `<span class="viewonly">${ic('lock')}View only</span><button class="textbtn">Edit</button>`
+    : `<span class="savestate"><i></i>${save}</span><button class="iconbtn" aria-label="Menu">${ic('menu')}</button>`;
+  return `<div class="m-top ${edge ? 'edge' : ''}">${left}<span class="top-right">${right}</span></div>`;
+}
+function hero(sched, extra = '') {
+  const gapMin = sched.gaps.reduce((s, g) => s + g.end - g.start, 0);
+  const conf = sched.items.reduce((s, i) => s + i.conflict, 0);
+  return `<div class="hero"><h1>Wedding Day</h1><p class="date">Saturday, November 21, 2026</p>
+    <div class="summary"><span>${t12(DAY)} – ${t12(sched.end)}</span><span class="sep">·</span><span>${sched.items.length} activities</span><span class="brk"></span>
+    ${gapMin ? `<span class="slink">${gapMin} min open${ic('chevr')}</span>` : ''}${conf ? `<span class="slink bad">${ic('warn')}${conf} min conflict${ic('chevr')}</span>` : ''}${extra}</div></div>`;
+}
+const filters = (on = 'Everyone') => `<div class="filters">${['Everyone', 'Bride', 'Groom', 'Photographer', 'Wedding Party', 'All Guests'].map(f => `<span class="fchip ${f === on ? 'on' : ''}">${f}</span>`).join('')}</div>`;
+
+function phone(target, { time, content, overlay = '', scrollTo = null, dark = false }) {
+  const el = document.getElementById(target);
+  if (!el) return;
+  el.innerHTML = `<div class="phone"><div class="screen app ${dark ? 'dark' : ''}">${statusbar(time)}<div class="scroller">${content}</div>${overlay}<span class="homebar"></span></div></div>`;
+  if (scrollTo != null) requestAnimationFrame(() => {
+    const sc = el.querySelector('.scroller'), tl = el.querySelector('.tl');
+    sc.scrollTop = tl.offsetTop + (scrollTo - DAY) * PX;
+  });
+}
+
+/* A: at rest */
+const S = build(BASE);
+phone('A', { content: topbar() + hero(S) + filters() + mTimeline(S, { from: DAY, to: T(22, 50), sunset: SUNSET, showEnd: true }), overlay: `<button class="fab" aria-label="Add activity">${ic('plus')}</button>` });
+
+/* B: selected + toolbar */
+const toolbar = (name, time, locked, extra = '') => `<div class="toolbar"><div class="ctx"><b>${name}</b> · ${time}${extra ? `<div class="ctx2">${extra}</div>` : ''}</div><div class="tbtns">
+  <button>${ic('pencil')}Edit</button><button>${ic(locked ? 'lockopen' : 'lock')}${locked ? 'Unlock' : 'Lock'}</button>
+  <button>${ic('swatch')}Stage</button><button>${ic('copy')}Duplicate</button><button class="danger">${ic('trash')}Delete</button></div></div>`;
+phone('B', { content: topbar({ edge: true }) + hero(S) + filters() + mTimeline(S, { from: DAY, to: T(22, 50), sel: 'portraits', sunset: SUNSET }),
+  overlay: toolbar('Getting-ready Portraits', '12:45 – 1:15 PM', false, 'Bride, Photographer, Mothers, Sister, Maid of Honour +2'), scrollTo: T(12, 20) });
+
+/* I: resizing */
+const SI = build(withD(BASE, 'portraits', 40));
+phone('I', { content: topbar({ edge: true, save: 'Editing' }) + hero(S) + filters() + mTimeline(SI, { from: DAY, to: T(22, 50), sel: 'portraits', snap: T(13, 25), bubble: { x: 196, m: T(13, 25), text: 'Ends 1:25 PM · 40 min' } }),
+  scrollTo: T(12, 30) });
+
+/* C: edit sheet */
+const stageGrid = Object.keys(ST).map(k => { const [l, ph, icn] = ST[k]; return `<span class="chip ${k === 'photography' ? 'on' : ''}" style="--ph:${PH[ph].c};--tint:${PH[ph].t}">${ic(icn)}${l}</span>`; }).join('');
+const editSheet = `<div class="scrim"></div><div class="sheet" style="height:790px"><div class="grabber"></div>
+  <div class="sh-head"><button class="l">Cancel</button><h3>Edit activity</h3><button class="r">Done</button></div>
+  <div class="sh-body">
+    <div><div class="fl">Name</div><div class="inp">Getting-ready Portraits</div></div>
+    <div><div class="fl">Timing</div><div class="group">
+      <div class="grow"><span>Starts</span><span class="seg"><span class="on">Flexible</span><span>Fixed</span></span></div>
+      <div class="grow" style="min-height:40px;padding-top:0"><span class="v" style="font-size:15px">Follows the activity before it</span><span class="v">12:45 PM</span></div>
+      <div class="grow"><span>Duration</span><span class="stepper"><button aria-label="5 minutes less">${ic('minus')}</button><span>30 min</span><button aria-label="5 minutes more">${ic('plus')}</button></span></div>
+      <div class="grow"><span>Ends</span><span class="v">1:15 PM</span></div>
+    </div></div>
+    <div><div class="fl">Location</div><div class="inp" style="box-shadow:0 0 0 2px var(--sel);background:#fff">Get<span style="display:inline-block;width:1.5px;height:20px;background:var(--sel);margin-left:1px"></span></div>
+      <div class="suggest"><div>${ic('pin')}Getting-ready location · TBD</div></div></div>
+    <div><div class="fl">Stage</div><div class="stagegrid">${stageGrid}</div></div>
+    <div><div class="fl">People</div><div class="pchips">${['Bride', 'Photographer', 'Mothers'].map(p => `<span class="tag">${p}<span class="x">${ic('x')}</span></span>`).join('')}<span class="add">${ic('plus')}Add</span></div></div>
+  </div></div>`;
+phone('C', { content: topbar() + hero(S) + filters() + mTimeline(S, { from: DAY, to: T(16) }), overlay: editSheet, scrollTo: T(12, 30) });
+
+/* D: gap actions */
+const gapSheet = `<div class="scrim"></div><div class="sheetwrap"><div class="action">
+  <div class="grp"><div class="hd"><strong>35 min open before Ceremony</strong><small>2:10 – 2:45 PM</small></div>
+    <div class="opt"><b>Keep as buffer</b><small>Adds a Buffer activity for this time</small></div>
+    <div class="opt"><b>Extend Arrival &amp; Buffer</b><small>Ends at 2:45 PM instead of 2:10 PM</small></div>
+    <div class="opt"><b>Add activity here</b><small>Starts 2:10 PM, 35 min</small></div></div>
+  <div class="grp"><div class="cancel">Cancel</div></div></div></div>`;
+phone('D', { content: topbar({ edge: true }) + hero(S) + filters() + mTimeline(S, { from: DAY, to: T(22, 50), gapOn: true }), overlay: gapSheet, scrollTo: T(13, 40) });
+
+/* E: conflict */
+const SE = build(withD(BASE, 'travel', 90));
+phone('E', { content: topbar({ edge: true }) + hero(SE) + filters() + mTimeline(SE, { from: DAY, to: T(22, 50) }),
+  overlay: `<div class="toast"><span>Arrival &amp; Buffer moved to 2:50 PM</span><button>Undo</button></div>`, scrollTo: T(13, 5) });
+
+/* F: day-of */
+const NOW = T(13, 32);
+const cur = S.items.find(i => i.start <= NOW && i.end > NOW), nxt = S.items.find(i => i.start >= cur.end);
+const nownext = `<div class="nownext" role="status"><div class="nn1"><span class="livedot"></span><span class="nnl">Now</span><span class="nm">${cur.title}</span><span class="left">${cur.end - NOW} min left</span></div>
+  <div class="nn2">Next <b>${t12(nxt.start)}</b> ${nxt.title}</div><div class="nnbar"><i style="width:${Math.round((NOW - cur.start) / cur.d * 100)}%"></i></div></div>`;
+phone('F', { time: '1:32', content: topbar({ viewOnly: true, edge: true }) + nownext + mTimeline(S, { from: DAY, to: T(22, 50), now: NOW, noGaps: false, sunset: SUNSET }), scrollTo: T(12, 30) });
+
+
+/* J: scrolled, collapsed title */
+phone('J', { content: topbar({ edge: true, collapsed: true }) + hero(S) + filters() + mTimeline(S, { from: DAY, to: T(22, 50), sunset: SUNSET }),
+  overlay: `<button class="fab" aria-label="Add activity">${ic('plus')}</button>`, scrollTo: T(15, 20) });
+
+/* K: filter active */
+const pinrow = who => `<div class="pinrow"><span>Showing <b>${who}</b> · ${S.items.filter(i => i.ppl.includes(who)).length} of ${S.items.length}</span><button aria-label="Clear filter">${ic('x')}</button></div>`;
+phone('K', { content: topbar({ edge: true, collapsed: true }) + pinrow('Photographer') + hero(S) + filters('Photographer') + mTimeline(S, { from: DAY, to: T(22, 50), who: 'Photographer' }),
+  scrollTo: T(12, 0) });
+
+/* L: menu with day-of entry */
+const menu = `<div class="menu">
+  <div>${ic('live')}Day-of view<span class="sw2"></span></div>
+  <div>${ic('moon')}Dark appearance<span class="sw2 off"></span></div>
+  <div>${ic('flag')}Status<small>Working</small></div>
+  <div class="sep">${ic('print')}Print or save PDF</div>
+  <div>${ic('download')}Export backup</div>
+  <div>${ic('history')}Version history</div>
+  <div>${ic('gear')}Plan settings</div>
+  <div class="sep">${ic('out')}Sign out</div></div>`;
+phone('L', { content: topbar({ edge: true }) + hero(S) + filters() + mTimeline(S, { from: DAY, to: T(22, 50), sunset: SUNSET }),
+  overlay: `<div class="scrim" style="background:rgba(0,0,0,.08)"></div>${menu}` });
+
+/* M: editing on the day */
+phone('M', { time: '1:32', content: topbar({ editing: true }) + nownext + mTimeline(S, { from: DAY, to: T(22, 50), now: NOW, sel: 'arrive' }),
+  overlay: toolbar('Arrival & Buffer', '1:55 – 2:10 PM', false, 'Buffer · St. Peter and Paul Orthodox Sobor · Bride, Wedding Party'), scrollTo: T(12, 45) });
+
+/* G: empty */
+phone('G', { content: topbar() + `<div class="hero"><h1>Wedding Day</h1><p class="date">Saturday, November 21, 2026</p></div>
+  <div class="empty"><div class="glyphbig">${ic('cal')}</div><h4>Nothing planned yet</h4><p>Add activities one at a time, or start from a wedding timeline and adjust it.</p>
+  <button class="btn primary">${ic('plus')}Add first activity</button><button class="btn secondary">Use wedding template</button></div>` });
+
+/* H: desktop drag */
+const SH = build(move(BASE, 'bouquet', 'travel'));
+function dCard(it, o) {
+  const [, ph] = ST[it.stage];
+  const top = (it.start - o.from) * PX + 1, h = it.d * PX - 2;
+  const micro = it.d <= 10, compact = !micro && it.d < 30;
+  const hover = o.hover === it.id;
+  const locked = it.fixed != null;
+  const ctl = `<div class="ctl"><button class="${locked ? 'locked' : ''}" aria-label="${locked ? 'Unlock' : 'Lock'}">${locked ? `<svg class="ic fill" viewBox="0 0 24 24">${P.lock}</svg>` : ic('lockopen')}</button><button aria-label="More">${ic('more')}</button></div>`;
+  const inner = micro
+    ? `<div class="tm"><div>${range(it.start, it.end)}</div></div>${chip(it.stage)}<span class="title" style="flex:1">${it.title}</span>${ctl}`
+    : `<div class="tm"><div>${range(it.start, it.end)}</div><strong>${dur(it.d)}</strong></div>
+       <div class="st">${chip(it.stage)}</div>
+       <div class="t1"><span class="title">${it.title}</span>${it.note ? `<span class="glyph note">${ic('note')}</span>` : ''}</div>${ctl}
+       <div class="meta"><span class="loc">${ic('pin')}<span>${it.loc}</span></span><span class="ppl">${people(it.ppl, 99)}</span></div>`;
+  return `<div class="card dcard ${micro ? 'micro' : ''} ${compact ? 'dcompact' : ''} ${hover ? 'hover' : ''} ${o.cls || ''}" style="top:${o.top ?? top}px;height:${h}px;--ph:${PH[ph].c};${o.style || ''}">
+    <span class="grip">${ic('grip')}</span><span class="rule"></span><div class="body">${inner}</div><span class="moreind" aria-hidden="true"><i></i><i></i><i></i></span>${hover ? `${locked ? '' : '<span class="dhandle top"></span>'}<span class="dhandle"></span>` : ''}</div>`;
+}
+function desk(target, { sched, from, to, drag = false, hover = null, now = null, scroll, lanes = false, overlay = '', gapOn = false, gapMenu = false }) {
+  if (!document.getElementById(target)) return;
+  let tl = `<div class="tl" style="height:${(to - from) * PX + 30}px;--rw:80px;--pl:92px;--pr:0px">${ruler(from, to, true)}<div class="plan">`;
+  for (const g of sched.gaps) tl += `<div class="gap ${gapOn ? 'on' : ''}" style="top:${(g.start - from) * PX + 1}px;height:${(g.end - g.start) * PX - 2}px"><strong>${g.end - g.start} min open</strong><small>before ${g.before.title}</small></div>`;
+  if (gapMenu) { const g = sched.gaps[0]; tl += `<div class="gapmenu" style="top:${(g.start - from) * PX + 30}px"><div class="gm-h">${g.end - g.start} min open · ${t12(g.start, false)} – ${t12(g.end)}</div>
+    <div class="gm-o"><b>Keep as buffer</b><small>Adds a Buffer activity for this time</small></div><div class="gm-o"><b>Extend ${g.prev.title}</b><small>Ends at ${t12(g.end)} instead of ${t12(g.start)}</small></div><div class="gm-o"><b>Add activity here</b><small>Starts ${t12(g.start)}, ${g.end - g.start} min</small></div></div>`; }
+  for (const it of sched.items) {
+    if (drag && it.id === 'bouquet') { tl += `<div class="slot" style="top:${(it.start - from) * PX + 1}px;height:${it.d * PX - 2}px"><span>Lands at ${t12(it.start)}</span></div>`; continue; }
+    const live = now && it.start <= now && it.end > now, dim = now && it.end <= now;
+    if (!(it.end > from && it.start < to)) continue;
+    if (lanes && it.lane != null) { tl += mCard(it, { from }).replace('class="card ', 'class="card dlane '); continue; }
+    tl += dCard(it, { from, hover, cls: [live && 'live', dim && 'dim', it.over && 'overrun', it.conflict && 'fixedc'].filter(Boolean).join(' ') });
+  }
+
+  const b = sched.items.find(i => i.id === 'bouquet');
+  if (drag) { tl += dCard(b, { from, cls: 'lifted', top: (b.start - from) * PX - 34, style: 'left:26px;right:-10px' });
+  tl += `<svg class="cursor" viewBox="0 0 24 24" style="left:30px;top:${(b.start - from) * PX - 26}px"><path d="M8 11V5.5a1.5 1.5 0 0 1 3 0V10m0-1V4.5a1.5 1.5 0 0 1 3 0V10m0-.5V6a1.5 1.5 0 0 1 3 0v8c0 4-2.5 6.5-6 6.5-2.8 0-4-1.3-5.5-3.5L3.7 13.2a1.5 1.5 0 0 1 2.4-1.8L8 13.5" fill="#fff" stroke="#1C1C1E" stroke-width="1.4" stroke-linejoin="round"/></svg>`; }
+  tl += `</div>`;
+  if (!now && to >= SUNSET) tl += `<div class="sunset" style="left:var(--rw);top:${(SUNSET - from) * PX}px"></div><div class="sunpill" style="left:18px;top:${(SUNSET - from) * PX - 11}px">${ic('sun')}${t12(SUNSET, false)}</div>`;
+  if (now) tl += `<div class="nowline" style="left:var(--rw);top:${(now - from) * PX}px"></div><div class="nowpill" style="left:22px;top:${(now - from) * PX - 11}px">${t12(now, false)}</div>`;
+  tl += `</div>`;
+  const right = now ? `<span class="viewonly dk">${ic('lock')}View only</span><button class="textbtn">Edit</button>`
+    : `<span class="savestate"><i></i>Saved</span><span class="statusbtn">Working${ic('chev')}</span><button class="iconbtn" aria-label="Menu">${ic('menu')}</button>`;
+  let strip = '';
+  if (now) {
+    const c = sched.items.find(i => i.start <= now && i.end > now), n = sched.items.find(i => i.start >= c.end);
+    strip = `<div class="d-strip" role="status"><div class="in"><span class="livedot"></span><span class="nnl">Live · ${t12(now)}</span>
+      <span class="nm">${c.title}</span><span class="left">${c.end - now} min left · ends ${t12(c.end)}</span>
+      <span class="nx">Next <b>${t12(n.start)}</b> ${n.title} · ${n.loc}</span></div><div class="nnbar"><i style="width:${Math.round((now - c.start) / c.d * 100)}%"></i></div></div>`;
+  }
+  document.getElementById(target).innerHTML = `<div class="browser" style="position:relative"><div class="chrome"><i></i><i></i><i></i><span class="url">wedding-runbook-planner.vercel.app</span></div>
+  <div class="dview app ${now ? 'viewmode' : ''}"><div class="d-top"><span class="brand">${ic('heart')}Our Wedding</span><span class="top-right" style="gap:10px">${right}</span></div>${strip}
+  <div class="d-wrap"><div class="d-head"><div><h1>Wedding Day</h1><p class="date">Saturday, November 21, 2026</p></div><div><button class="addbtn">${ic('plus')}Add activity</button><div class="addnote">Adds after the selected activity</div></div></div>
+  <div class="d-sub">${hero(sched).replace(/<h1>.*?<\/p>/s, '').replace('class="hero"', 'class="hero" style="padding:0"')}${filters()}</div>${tl}</div></div>${overlay ? `<div class="app ovl">${overlay}</div>` : ''}</div>`;
+  requestAnimationFrame(() => { const v = document.querySelector('#' + target + ' .dview'), t = v.querySelector('.tl'); if (scroll != null) v.scrollTop = t.offsetTop + (scroll - from) * PX - (now ? 150 : 70); });
+}
+desk('H', { sched: SH, from: DAY, to: T(16, 30), drag: true, hover: 'ceremony', scroll: T(12, 40) });
+desk('N', { sched: S, from: DAY, to: T(18, 0), now: NOW, scroll: T(12, 50) });
+
+
+
+/* ================= Round 4 screens ================= */
+const sheetHead = (title, l = 'Cancel', r = 'Done') => `<div class="grabber"></div><div class="sh-head"><button class="l">${l}</button><h3>${title}</h3><button class="r">${r}</button></div>`;
+
+/* O: resize from the top */
+const SO = build(BASE.map(x => x.id === 'portraits' ? { ...x, d: 20, gap: 10 } : x));
+phone('O', { content: topbar({ edge: true, save: 'Editing' }) + hero(SO) + filters() + mTimeline(SO, { from: DAY, to: T(22, 50), sel: 'portraits', snap: T(12, 55), bubble: { x: 196, m: T(12, 55), text: 'Starts 12:55 PM · 20 min' } }),
+  scrollTo: T(12, 5) });
+
+/* P: sign in */
+phone('P', { content: `<div class="signin"><div class="brand big">${ic('heart')}Our Wedding</div>
+  <h1>Wedding Day</h1><p>This planner is private. Enter the shared password to continue.</p>
+  <div class="fl">Password</div><div class="inp err">••••••••<span class="show">Show</span></div>
+  <div class="errmsg">${ic('warn')}That password didn’t work. Try again.</div>
+  <button class="btn primary">Continue</button>
+  <p class="fine">You stay signed in on this device for 30 days.</p></div>` });
+
+/* Q: plan settings */
+const settingsSheet = `<div class="scrim"></div><div class="sheet" style="height:790px">${sheetHead('Plan settings')}
+  <div class="sh-body">
+    <div><div class="fl">Plan</div><div class="group">
+      <div class="grow"><span>Planner name</span><span class="v">Our Wedding</span></div>
+      <div class="grow"><span>Day title</span><span class="v">Wedding Day</span></div>
+      <div class="grow"><span>Date</span><span class="v">Sat, Nov 21, 2026</span></div></div></div>
+    <div><div class="fl">Schedule</div><div class="group">
+      <div class="grow"><span>First activity starts</span><span class="v">11:30 AM</span></div>
+      <div class="grow"><span>Sunset marker</span><span class="v">4:19 PM</span></div></div>
+      <div class="help">Flexible activities follow on from the first start time.</div></div>
+    <div><div class="fl">Timeline view</div><div class="group">
+      <div class="grow"><span>Shows from</span><span class="v">11:00 AM</span></div>
+      <div class="grow"><span>Shows until</span><span class="v">12:30 AM <em>next day</em></span></div></div>
+      <div class="help">Only changes what you see. The view always grows to fit every activity.</div></div>
+    <div><div class="fl">Appearance</div><div class="group"><div class="grow"><span>Theme</span><span class="seg"><span class="on">Light</span><span>Dark</span></span></div></div></div>
+  </div></div>`;
+phone('Q', { content: topbar() + hero(S) + filters() + mTimeline(S, { from: DAY, to: T(16) }), overlay: settingsSheet });
+
+/* R: version history */
+const vrow = (name, when, sum, cur = false) => `<div class="vrow ${cur ? 'cur' : ''}"><div><b>${name}</b><small>${when}</small><small>${sum}</small></div>${cur ? '<span class="badge">Current</span>' : '<button>Restore</button>'}</div>`;
+const versionsSheet = `<div class="scrim"></div><div class="sheet" style="height:760px">${sheetHead('Version history', 'Close', '')}
+  <div class="sh-body">
+    <div><div class="fl">Save the current plan</div><div class="saverow"><div class="inp" style="flex:1;color:#9A9CA3">e.g. After photographer call</div><button class="btn primary sm">Save</button></div></div>
+    <div><div class="fl">Versions</div><div class="vlist">
+      ${vrow('Current plan', 'Edited 2 min ago on this phone', '12 activities · 11:30 AM – 10:45 PM', true)}
+      ${vrow('Before restore', 'Today, 9:02 AM · saved automatically', '11 activities · 11:30 AM – 10:30 PM')}
+      ${vrow('After venue meeting', 'Nov 12, 10:24 AM', '12 activities · 11:30 AM – 10:45 PM')}
+      <div class="vswipe"><div class="vrow">${`<div><b>First draft</b><small>Oct 20, 9:15 AM</small><small>9 activities · 12:00 – 9:00 PM</small></div><button>Restore</button>`}</div><span class="del">${ic('trash')}Delete</span></div>
+    </div><div class="help">Restoring saves a copy of the current plan first, so nothing is lost. Swipe left to delete a version.</div></div>
+  </div></div>`;
+phone('R', { content: topbar() + hero(S) + filters() + mTimeline(S, { from: DAY, to: T(16) }), overlay: versionsSheet });
+
+/* S: stage picker from the toolbar */
+const stageRows = Object.keys(ST).map(k => { const [l, ph, icn] = ST[k]; return `<div class="srow"><span class="sdot" style="--ph:${PH[ph].c};--tint:${PH[ph].t}">${ic(icn)}</span>${l}${k === 'photography' ? `<span class="tick">${ic('check')}</span>` : ''}</div>`; }).join('');
+phone('S', { content: topbar({ edge: true }) + hero(S) + filters() + mTimeline(S, { from: DAY, to: T(22, 50), sel: 'portraits' }),
+  overlay: `<div class="scrim"></div><div class="sheetwrap"><div class="action"><div class="grp"><div class="hd"><strong>Stage</strong><small>Getting-ready Portraits</small></div><div class="slist">${stageRows}</div></div><div class="grp"><div class="cancel">Cancel</div></div></div></div>`, scrollTo: T(12, 20) });
+
+/* U: offline */
+phone('U', { content: topbar({ edge: true, save: 'Offline' }).replace('<span class="savestate">', '<span class="savestate off">') +
+  `<div class="netbar">${ic('wifi')}<span><b>You’re offline.</b> Changes stay on this phone and save when you reconnect.</span></div>` + hero(S) + filters() + mTimeline(S, { from: DAY, to: T(22, 50) }), scrollTo: T(12, 0) });
+
+/* V: changed on another device */
+phone('V', { content: topbar({ edge: true, save: 'Not saved' }).replace('<span class="savestate">', '<span class="savestate bad">') + hero(S) + filters() + mTimeline(S, { from: DAY, to: T(22, 50) }),
+  overlay: `<div class="scrim"></div><div class="alert"><div class="aic">${ic('devices')}</div><h4>Changed on another device</h4>
+    <p>This plan was saved on another device while you were editing. Your last 2 changes are not saved yet.</p>
+    <button class="ab">Use the other version</button><button class="ab strong">Keep my changes</button>
+    <p class="fine">Whichever you choose, the other version is kept in Version history.</p></div>`, scrollTo: T(12, 0) });
+
+/* W: dark appearance */
+phone('W', { dark: true, content: topbar() + hero(S) + filters() + mTimeline(S, { from: DAY, to: T(22, 50), sel: 'portraits', sunset: SUNSET }),
+  overlay: toolbar('Getting-ready Portraits', '12:45 – 1:15 PM', false, 'Bride, Photographer, Mothers, Sister, Maid of Honour +2'), scrollTo: T(12, 0) });
+
+/* ================= Desktop screens ================= */
+desk('DA', { sched: S, from: DAY, to: T(16, 30), hover: 'portraits', scroll: null });
+
+const dEdit = `<div class="dscrim"></div><div class="dmodal"><div class="sh-head"><button class="l">Cancel</button><h3>Edit activity</h3><button class="r">Done</button></div>
+  <div class="dm-body">
+    <div class="full"><div class="fl">Name</div><div class="inp">Getting-ready Portraits</div></div>
+    <div class="full"><div class="fl">Timing</div><div class="group">
+      <div class="grow"><span>Starts</span><span class="seg"><span class="on">Flexible</span><span>Fixed</span></span></div>
+      <div class="grow"><span class="v" style="font-size:15px">Follows the activity before it</span><span class="v">12:45 PM</span></div>
+      <div class="grow"><span>Duration</span><span class="stepper"><button>${ic('minus')}</button><span>30 min</span><button>${ic('plus')}</button></span></div>
+      <div class="grow"><span>Ends</span><span class="v">1:15 PM</span></div></div></div>
+    <div class="full"><div class="fl">Location</div><div class="inp">Getting-ready location · TBD</div></div>
+    <div class="full"><div class="fl">Stage</div><div class="stagegrid">${stageGrid}</div></div>
+    <div class="full"><div class="fl">People</div><div class="pchips">${['Bride', 'Photographer', 'Mothers', 'Sister', 'Maid of Honour', 'Grandma', 'Cousin Léa'].map(p => `<span class="tag">${p}<span class="x">${ic('x')}</span></span>`).join('')}<span class="add">${ic('plus')}Add</span></div></div>
+    <div class="full"><div class="fl">Notes</div><div class="inp tall">Include immediate family, grandparents and siblings.</div></div>
+    <div class="full dm-foot"><button class="danger-link">${ic('trash')}Delete activity</button></div>
+  </div></div>`;
+desk('DB', { sched: S, from: DAY, to: T(16, 30), scroll: T(12, 0), overlay: dEdit });
+
+desk('DC', { sched: S, from: DAY, to: T(16, 30), scroll: T(13, 20), gapOn: true, gapMenu: true });
+
+const SE2 = build(withD(BASE, 'travel', 90));
+desk('DD', { sched: SE2, from: DAY, to: T(16, 30), scroll: T(13, 10), lanes: true,
+  overlay: `<div class="dtoast"><span>Arrival &amp; Buffer moved to 2:50 PM · 2 activities shifted</span><button>Undo</button></div>` });
+
+/* Print */
+(function printView() {
+  const el = document.getElementById('DP'); if (!el) return;
+  const groups = [];
+  for (const it of S.items) { const ph = ST[it.stage][1]; if (!groups.length || groups[groups.length - 1].ph !== ph) groups.push({ ph, items: [] }); groups[groups.length - 1].items.push(it); }
+  const rows = groups.map(g => `<div class="pgroup"><h5 style="--ph:${PH[g.ph].c}">${PH[g.ph].n}</h5>${g.items.map(it => `<div class="prow"><div class="pt">${range(it.start, it.end)}<small>${dur(it.d)}</small></div><div><b>${it.title}${it.fixed != null ? ' <span class="pfix">Fixed</span>' : ''}</b><div class="pm">${it.loc} · ${it.ppl.join(', ')}</div>${it.note ? '<div class="pn">Note: bring the printed family list.</div>' : ''}</div></div>`).join('')}</div>`).join('');
+  el.innerHTML = `<div class="paper"><div class="phead"><div><div class="pbrand">Our Wedding</div><h2>Wedding Day</h2><div class="pdate">Saturday, November 21, 2026 · 11:30 AM – 10:45 PM · Sunset 4:19 PM</div></div><div class="pfilter">Everyone<br><small>Printed Nov 20, 8:14 PM</small></div></div>${rows}</div>`;
+})();
+
+/* Fit people tags: show as many as fit, then “+N” */
+function fitTags() {
+  document.querySelectorAll('.card .ppl').forEach(row => {
+    const tags = [...row.querySelectorAll('.tag:not(.more)')];
+    row.querySelectorAll('.tag.more').forEach(m => m.remove());
+    tags.forEach(t => t.style.display = '');
+    if (row.scrollWidth <= row.clientWidth + 1) return;
+    const more = document.createElement('span'); more.className = 'tag more'; row.appendChild(more);
+    let hidden = 0;
+    for (let i = tags.length - 1; i >= 0; i--) {
+      tags[i].style.display = 'none'; hidden++;
+      more.textContent = '+' + hidden;
+      if (row.scrollWidth <= row.clientWidth + 1) break;
+    }
+  });
+}
+/* Fit card rows: drop the lowest-priority row until the card fits, then show the “more” dots */
+function fitRows() {
+  document.querySelectorAll('.card:not(.dcard)').forEach(card => {
+    const body = card.querySelector('.body');
+    body.querySelectorAll('[data-drop]').forEach(r => r.style.display = '');
+    card.classList.remove('clipped');
+    const rows = [...body.querySelectorAll('[data-drop]')].sort((a, b) => a.dataset.drop - b.dataset.drop);
+    for (const r of rows) {
+      if (body.scrollHeight <= body.clientHeight + 1) break;
+      r.style.display = 'none'; card.classList.add('clipped');
+    }
+    if (card.classList.contains('micro')) card.classList.add('clipped');
+  });
+  document.querySelectorAll('.dcard.dcompact').forEach(c => { if (c.querySelector('.ppl .tag')) c.classList.add('clipped'); });
+}
+requestAnimationFrame(() => requestAnimationFrame(() => { fitTags(); fitRows(); }));
+window.addEventListener('resize', () => { fitTags(); fitRows(); });
+
+/* Swatches */
+if (document.getElementById('SW')) document.getElementById('SW').innerHTML =
+  Object.values(PH).map(p => `<div class="sw"><i style="background:${p.c}"></i><div>${p.n}<small>${p.c}</small></div></div>`).join('') +
+  [['#0A6CFF', 'Selected', 'Selection ring, handles, drop line'], ['#D0342C', 'Conflict and delete', 'Nothing else is red'], ['#1C1C1E', 'Fixed', 'Solid lock'], ['#1E9E52', 'Live', 'Day-of strip, current activity, time line']]
+    .map(([c, n, s]) => `<div class="sw"><i style="background:${c}"></i><div>${n}<small>${s}</small></div></div>`).join('');
+</script>
+</body>
+</html>
