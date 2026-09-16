@@ -660,10 +660,20 @@ const ACTION_HANDLERS = {
   conflict(_, element) {
     void resolveConflict(element.dataset.choice);
   },
+  'select-open-time'(event, element) {
+    // A tap-release on a handle (or the + button) fires its own gesture, but
+    // the click that follows still bubbles up to the block's own toggle —
+    // unselecting it right after the drag that was supposed to use it.
+    if (event.target.closest('.handle, .open-time-add')) return;
+    const before = element.dataset.before;
+    const next = store.ui.selectedOpenTime === before ? null : before;
+    store.setUi({ selectedOpenTime: next }, { regions: ['timeline'] });
+  },
   'open-time'(_, element) {
     rememberOpener(`open-time:${element.dataset.before}`);
     store.setUi({
       openMenu: null,
+      selectedOpenTime: null,
       dialog: {
         type: 'open-time',
         openTime: {
@@ -808,6 +818,9 @@ document.addEventListener('click', event => {
   if (store.ui.selectedId && !event.target.closest('.card, dialog, .topbar, .toolbar')) {
     store.setUi({ selectedId: null }, { regions: ['timeline', 'toolbar'] });
   }
+  if (store.ui.selectedOpenTime && !event.target.closest('.open-time, dialog')) {
+    store.setUi({ selectedOpenTime: null }, { regions: ['timeline'] });
+  }
 });
 
 document.addEventListener('keydown', event => {
@@ -832,6 +845,9 @@ document.addEventListener('keydown', event => {
     }
     if (store.ui.selectedId && !sheetRoot.querySelector('dialog')) {
       store.setUi({ selectedId: null }, { regions: ['timeline', 'toolbar'] });
+    }
+    if (store.ui.selectedOpenTime && !sheetRoot.querySelector('dialog')) {
+      store.setUi({ selectedOpenTime: null }, { regions: ['timeline'] });
     }
     return;
   }
@@ -869,7 +885,12 @@ document.addEventListener('keydown', event => {
     commit(top ? 'activity.resizeTop' : 'activity.resizeBottom',
       top ? { id: item.id, newStart: item.start + delta } : { id: item.id, newEnd: item.end + delta },
       { regions: ['timeline', 'toolbar'] });
-    focusByKey(app, `${top ? 'resize-top' : 'resize'}:${handle.dataset.id}`);
+    // Read the key straight off the handle that was actually used, rather
+    // than reconstructing `resize(-top):id` — an open-time block's handles
+    // drive the same edge through a second element with its own distinct
+    // key (render/timeline.js), and reconstructing would always resolve to
+    // whichever of the two happens to come first in the DOM.
+    focusByKey(app, handle.getAttribute('data-focus-key'));
   }
 });
 

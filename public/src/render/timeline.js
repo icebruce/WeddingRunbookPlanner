@@ -27,15 +27,54 @@ function ruler(layout) {
 /**
  * Open time is drawn, not implied. Under about 70 px there is no room for the
  * second line or the + button, so it becomes a single line.
+ *
+ * A tall block behaves like a card: tapping its body selects it (revealing
+ * the resize handles) rather than opening the actions sheet directly; only
+ * its own + button opens that. A thin block has no room for the + at all, so
+ * tapping it still opens the sheet the way the whole block used to.
+ *
+ * The handles are the same `.handle` control a card uses, just aimed at a
+ * neighbour: the top one is the previous activity's own bottom handle in
+ * disguise (`data-role="resize"` against `afterId`, the activity this gap is
+ * right after), and the bottom one is the next activity's own top handle
+ * (`data-role="resize-top"` against `beforeId`, the activity this gap is
+ * right before) — see gestures.js and schedule.js's `afterId`/`afterTitle`.
+ * Reusing those roles means the existing pointer and keyboard resize wiring
+ * needs no changes at all to pick them up.
  */
-function openTimeBlock(gap, viewOnly) {
+function openTimeBlock(gap, ui, viewOnly) {
   const thin = gap.height < 70;
-  return `<div class="open-time ${thin ? 'open-time--thin' : ''}" style="top:${gap.top}px;height:${gap.height}px"
-    ${viewOnly ? '' : `data-action="open-time"`} data-before="${escapeHtml(gap.beforeId)}" data-start="${gap.start}" data-end="${gap.end}"
-    ${viewOnly ? '' : 'role="button" tabindex="0"'} data-focus-key="open-time:${escapeHtml(gap.beforeId)}"
-    aria-label="${escapeHtml(`${formatDuration(gap.minutes)} open before ${gap.beforeTitle}, ${formatTime(gap.start)} to ${formatTime(gap.end)}`)}">
+  const selected = !thin && ui.selectedOpenTime === gap.beforeId;
+  const label = escapeHtml(`${formatDuration(gap.minutes)} open before ${gap.beforeTitle}, ${formatTime(gap.start)} to ${formatTime(gap.end)}`);
+
+  const bodyAttrs = viewOnly ? '' : thin
+    ? `data-action="open-time" data-before="${escapeHtml(gap.beforeId)}" data-start="${gap.start}" data-end="${gap.end}" role="button" tabindex="0"`
+    : `data-action="select-open-time" data-before="${escapeHtml(gap.beforeId)}" role="button" tabindex="0" aria-pressed="${selected}"`;
+
+  const addButton = thin ? '' : `<button type="button" class="open-time-add" data-action="open-time"
+      data-before="${escapeHtml(gap.beforeId)}" data-start="${gap.start}" data-end="${gap.end}"
+      tabindex="${selected ? '0' : '-1'}" data-focus-key="open-time-add:${escapeHtml(gap.beforeId)}"
+      aria-label="${escapeHtml(`Add time before ${gap.beforeTitle}`)}">${icon('plus')}</button>`;
+
+  // These carry their own focus-key, distinct from the target activity's own
+  // handle (`resize:${id}` / `resize-top:${id}` on the card itself) — two
+  // different elements can drive the same edge, and app.js's keyboard
+  // handler returns focus to whichever one was actually used, by reading it
+  // straight off that element rather than reconstructing it from role+id.
+  // Either is absent when the activity it would resize is locked — same
+  // rule a card's own handle follows.
+  const handles = viewOnly ? '' : `${gap.afterLocked ? '' : `<button type="button" class="handle handle--top" data-role="resize" data-id="${escapeHtml(gap.afterId)}"
+      tabindex="${selected ? '0' : '-1'}" data-focus-key="resize:gap:${escapeHtml(gap.beforeId)}"
+      aria-label="${escapeHtml(`Resize the end of ${gap.afterTitle}`)}"></button>`}
+    ${gap.beforeLocked ? '' : `<button type="button" class="handle handle--bottom" data-role="resize-top" data-id="${escapeHtml(gap.beforeId)}"
+      tabindex="${selected ? '0' : '-1'}" data-focus-key="resize-top:gap:${escapeHtml(gap.beforeId)}"
+      aria-label="${escapeHtml(`Resize the start of ${gap.beforeTitle}`)}"></button>`}`;
+
+  return `<div class="open-time ${thin ? 'open-time--thin' : ''} ${selected ? 'is-selected' : ''}" style="top:${gap.top}px;height:${gap.height}px"
+    ${bodyAttrs} data-focus-key="open-time:${escapeHtml(gap.beforeId)}" aria-label="${label}">
     <strong>${escapeHtml(formatDuration(gap.minutes))} open</strong>
-    ${thin ? '' : `<small>before ${escapeHtml(gap.beforeTitle)}</small><span class="open-time-add">${icon('plus')}</span>`}
+    ${thin ? '' : `<small>before ${escapeHtml(gap.beforeTitle)}</small>${addButton}`}
+    ${handles}
   </div>`;
 }
 
@@ -75,7 +114,7 @@ export function renderTimeline({ plan, ui }) {
   return `<div class="timeline-grid ${ui.dayOf ? 'is-day-of' : ''}" data-from="${layout.from}" style="height:${layout.height + 48}px">
     <div class="timeline-ruler" aria-hidden="true">${ruler(layout)}${nowLine(layout, nowMinutes)}</div>
     <div class="timeline-plan">
-      ${layout.openTimes.map(gap => openTimeBlock(gap, Boolean(ui.dayOf && !ui.editingOnDay))).join('')}
+      ${layout.openTimes.map(gap => openTimeBlock(gap, ui, Boolean(ui.dayOf && !ui.editingOnDay))).join('')}
       ${layout.cards.map(card => renderCard(card, { ui, filter: ui.filter, nowMinutes })).join('')}
       ${menuLayer(layout, ui)}
     </div>

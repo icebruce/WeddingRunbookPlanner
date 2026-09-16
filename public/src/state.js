@@ -32,6 +32,11 @@ function defaultUi() {
     // Two or more ids, held together only long enough to drag them as one
     // group. Empty otherwise — a single selection lives in `selectedId` alone.
     groupSelection: [],
+    // An open-time block's own lightweight selection, identified by the
+    // activity it sits before (a gap's stable-enough identity — see
+    // schedule.js). Separate from `selectedId`: an open block has no
+    // toolbar, no lock, nothing the card selection machinery assumes.
+    selectedOpenTime: null,
     // Only one menu or popover is open at a time; this holds its identity.
     openMenu: null,
     dialog: null,

@@ -139,7 +139,8 @@
   background: color-mix(in srgb, var(--surface) 35%, transparent);
   color: var(--ink-2);
   text-align: center;
-  overflow: hidden;
+  /* Not `overflow: hidden` — same reason as a card (cards.css): its resize
+     handles sit astride its own top/bottom edge. */
   cursor: pointer;
 }
 .open-time strong { font-size: 16px; font-weight: 600; }
@@ -150,10 +151,16 @@
   width: 30px;
   height: 30px;
   margin-top: 2px;
+  border: 0;
+  padding: 0;
   border-radius: 50%;
   background: var(--surface);
   color: var(--ink-2);
   box-shadow: var(--shadow-card);
+  -webkit-appearance: none;
+  appearance: none;
+  font: inherit;
+  cursor: pointer;
 }
 /* Under about 70 px there is no room for more than one line. */
 .open-time--thin {
@@ -164,11 +171,19 @@
 }
 .open-time--thin strong { font-size: 13px; font-weight: 600; }
 .open-time:focus-visible,
-.open-time:active {
+.open-time:active,
+.open-time.is-selected {
   border-color: var(--sel);
   background: var(--sel-tint);
   color: var(--sel);
   outline: none;
+}
+/* Its resize handles follow the same reveal rule as a card's: hidden until
+   selected, or — where there's a mouse — hovered or focused too. */
+.open-time.is-selected .handle { opacity: 1; pointer-events: auto; }
+@media (hover: hover) and (pointer: fine) {
+  .open-time:hover .handle,
+  .open-time:focus-within .handle { opacity: 1; pointer-events: auto; }
 }
 
 .summary {
