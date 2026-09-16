@@ -10,6 +10,11 @@ import plan from '../api/plan.js';
 import versions from '../api/versions.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+// Only this directory is ever served. Server code, tests and package metadata
+// live outside it and are therefore unreachable over HTTP (F8), matching the
+// `outputDirectory: "public"` setting Vercel uses in production.
+const publicRoot = path.join(root, 'public');
 const port = Number(process.env.PORT || 4173);
 
 const apiRoutes = new Map([
@@ -25,8 +30,35 @@ const mime = new Map([
   ['.css', 'text/css; charset=utf-8'],
   ['.js', 'text/javascript; charset=utf-8'],
   ['.json', 'application/json; charset=utf-8'],
-  ['.svg', 'image/svg+xml']
+  ['.webmanifest', 'application/manifest+json; charset=utf-8'],
+  ['.svg', 'image/svg+xml'],
+  ['.png', 'image/png'],
+  ['.ico', 'image/x-icon'],
+  ['.txt', 'text/plain; charset=utf-8']
 ]);
+
+function notFound(res) {
+  res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+  res.end('Not found');
+}
+
+async function readStatic(pathname) {
+  // `cleanUrls` in production also resolves /foo to /foo.html.
+  const candidates = pathname.endsWith('/')
+    ? [path.join(pathname, 'index.html')]
+    : [pathname, `${pathname}.html`];
+  for (const candidate of candidates) {
+    const filePath = path.resolve(publicRoot, `.${candidate}`);
+    if (filePath !== publicRoot && !filePath.startsWith(publicRoot + path.sep)) continue;
+    try {
+      const data = await fs.readFile(filePath);
+      return { filePath, data };
+    } catch (error) {
+      if (error.code !== 'ENOENT' && error.code !== 'EISDIR') throw error;
+    }
+  }
+  return null;
+}
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -36,18 +68,14 @@ const server = http.createServer(async (req, res) => {
 
     let pathname = decodeURIComponent(url.pathname);
     if (pathname === '/') pathname = '/index.html';
-    const filePath = path.resolve(root, `.${pathname}`);
-    if (!filePath.startsWith(root) || filePath.includes(`${path.sep}api${path.sep}`) || filePath.includes(`${path.sep}lib${path.sep}`) || filePath.includes(`${path.sep}tests${path.sep}`)) {
-      res.writeHead(404); res.end('Not found'); return;
-    }
-    const data = await fs.readFile(filePath);
-    res.setHeader('Content-Type', mime.get(path.extname(filePath)) || 'application/octet-stream');
+    const file = await readStatic(pathname);
+    if (!file) return notFound(res);
+
+    res.setHeader('Content-Type', mime.get(path.extname(file.filePath)) || 'application/octet-stream');
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.end(data);
+    res.setHeader('Cache-Control', 'no-store');
+    res.end(file.data);
   } catch (error) {
-    if (error.code === 'ENOENT') {
-      res.writeHead(404); res.end('Not found'); return;
-    }
     console.error(error);
     if (!res.headersSent) res.writeHead(500);
     res.end('Server error');
