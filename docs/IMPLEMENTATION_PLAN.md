@@ -1,8 +1,10 @@
 # Wedding Runbook Planner — Implementation Plan
 
-**Status:** Approved baseline for implementation · **Version:** 1.0 · **Date:** 2026-09-16
+**Status:** Historical record — stages 0–10 below shipped as written and are closed. **Version:** 1.0 · **Date:** 2026-09-16
 **Executor:** Claude Code, committing to branch `redesign` in `icebruce/WeddingRunbookPlanner`
 **Inputs:** `FUNCTIONAL_SPEC.md` (behaviour), `TECHNICAL_SPEC.md` (how; finding IDs F1–F30), `DESIGN_GUIDE.md` (look), `docs/mockups/` (visual reference)
+
+> **Superseded by a later rewrite.** After Stage 10 closed (see `RELEASE_CHECK.md`), commit `2939550` replaced the Flexible/Fixed scheduling model this plan was built around with independent, absolute activity starts and deliberate group moves, and later commits added mobile/back-button fixes on top of it. This document is not wrong about what it describes — it correctly records what stages 0–10 built — but it no longer describes the current app. `FUNCTIONAL_SPEC.md` and `TECHNICAL_SPEC.md` carry the current behaviour and architecture; read those first.
 
 ---
 

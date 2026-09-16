@@ -5,6 +5,8 @@ finding checked against the code, and every gap named.
 
 Run at the end of the redesign, against branch `claude/tender-ptolemy-auoyoi`.
 
+> **Historical.** This report reflects the app as it stood at the end of the redesign (stages 0–10), before the post-release timeline-model rewrite (commit `2939550` onward) that replaced Flexible/Fixed propagation scheduling with absolute per-activity starts and group moves, and before subsequent mobile/back-button fixes. It is accurate as a point-in-time QA record but is not current-state documentation — see `FUNCTIONAL_SPEC.md` and `TECHNICAL_SPEC.md` for current behaviour, and re-verify any gap listed below (e.g. §1) against the current code before relying on it.
+
 ## Regression
 
 | Suite | Result |
