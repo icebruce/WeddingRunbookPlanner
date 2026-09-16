@@ -59,6 +59,12 @@ export function createSavePipeline({
   let episodeReported = false;
   // Set after an outcome that retrying cannot fix on its own.
   let blocked = null;
+  // The page-hide flush sends a save whose answer is never read, so the server
+  // can end up one revision ahead of this tab carrying this tab's own writing.
+  // This remembers the revision such a send was made at, so that the collision
+  // it causes can be told apart from a real one: the same device in a second
+  // tab is still a second copy of the plan, and its work is not ours to drop.
+  let blindSentAt = null;
   let destroyed = false;
 
   function setState(next) {
@@ -118,6 +124,7 @@ export function createSavePipeline({
         savedSeq = Math.max(savedSeq, sentSeq);
         attempt = 0;
         episodeReported = false;
+        blindSentAt = null;
         onSaved({ revision: currentRevision, updatedAt: result?.updatedAt ?? null });
         return { ok: true };
       } catch (error) {
@@ -151,9 +158,30 @@ export function createSavePipeline({
     }
 
     if (status === 409) {
+      const latest = error?.body?.latest ?? null;
+      // A collision with this tab's own page-hide send is not a conflict: the
+      // server is holding exactly what we handed it on the way out, one
+      // revision on from where we sent it. Asking which copy to keep would be
+      // asking about a change that was never in doubt, and one of the answers
+      // throws the person's own work away.
+      //
+      // The test is the revision, not just the device — two tabs of one
+      // browser share a device id, and their edits really can diverge.
+      const ourBlindWrite = blindSentAt !== null
+        && latest
+        && deviceId
+        && latest.updatedBy === deviceId
+        && Number(latest.revision) === Number(blindSentAt) + 1;
+      if (ourBlindWrite) {
+        blindSentAt = null;
+        currentRevision = latest.revision;
+        onSaved({ revision: currentRevision, updatedAt: latest.updatedAt ?? null });
+        void flush();
+        return;
+      }
       blocked = 'conflict';
       setState(SAVE_STATES.notSaved);
-      onConflict(error?.body?.latest ?? null);
+      onConflict(latest);
       return;
     }
 
@@ -216,8 +244,15 @@ export function createSavePipeline({
      */
     flushOnHide(send) {
       if (!this.hasPendingChanges || blocked) return false;
+      // The debounce is disarmed: it would fire on the way out and send the
+      // same plan a second time at the revision this one is about to advance.
+      if (debounceTimer !== null) {
+        timers.clearTimeout(debounceTimer);
+        debounceTimer = null;
+      }
       try {
         send(getPlan(), currentRevision, deviceId);
+        blindSentAt = currentRevision;
         return true;
       } catch {
         return false;

@@ -233,6 +233,57 @@ test.describe('open time', () => {
     expect(stored[1].duration).toBe(75);
   });
 
+  test('cancelling "Add activity here" leaves the plan exactly as it was', async ({ page, server }) => {
+    await server.seed({ plan: withGap() });
+    await signInAndWaitForPlan(page);
+    const before = await server.read();
+
+    await page.locator('.open-time').click();
+    await page.locator('[data-choice="add"]').click();
+    await expect(editor(page)).toBeVisible();
+
+    // Walk away without typing a name.
+    await editor(page).locator('.sheet-close').click();
+    await expect(editor(page)).toHaveCount(0);
+
+    // Nothing was added — and, because nothing untitled was added, the plan is
+    // still one the server will accept.
+    await expect(page.locator('.card')).toHaveCount(before.plan.activities.length);
+    await expect(page.locator('.card-title', { hasText: /^$/ })).toHaveCount(0);
+    await expect(page.locator('.open-time')).toHaveCount(1);
+
+    await page.waitForTimeout(1200);
+    const after = await server.read();
+    expect(after.revision, 'cancelling is not a change').toBe(before.revision);
+
+    // And the next ordinary edit still saves, which is the thing that broke.
+    await openActivityEditor(page, card(page, 'ceremony'));
+    await editor(page).locator('input[name="title"]').fill('Ceremony, renamed');
+    await editor(page).locator('button[type="submit"]').click();
+    await saved(page);
+    expect((await server.read()).plan.activities.at(-1).title).toBe('Ceremony, renamed');
+  });
+
+  test('"Add activity here" can be given a shorter time than the gap', async ({ page, server }) => {
+    await server.seed({ plan: withGap() });
+    await signInAndWaitForPlan(page);
+
+    await page.locator('.open-time').click();
+    await page.locator('[data-choice="add"]').click();
+
+    // The gap's length is offered, and overtyping it is respected.
+    await expect(editor(page).locator('input[name="duration"]')).toHaveValue('75');
+    await editor(page).locator('input[name="duration"]').fill('30');
+    await editor(page).locator('input[name="title"]').fill('Quick photos');
+    await editor(page).locator('button[type="submit"]').click();
+    await saved(page);
+
+    const stored = (await server.read()).plan.activities;
+    expect(stored.find(item => item.title === 'Quick photos').duration).toBe(30);
+    // The rest of the gap is still open.
+    await expect(page.locator('.open-time')).toHaveCount(1);
+  });
+
   test('each choice can be undone', async ({ page, server }) => {
     await server.seed({ plan: withGap() });
     await signInAndWaitForPlan(page);

@@ -249,7 +249,9 @@ export function addInOpenTime(plan, openTime, activity) {
 
   const created = {
     ...activity,
-    duration: normalizeDuration(gap.end - gap.start),
+    // The gap's length is the default, not the rule: the editor offers it
+    // pre-filled and a shorter activity simply leaves the rest open.
+    duration: normalizeDuration(activity.duration || (gap.end - gap.start)),
     lockedStart: null
   };
   delete created.gapBefore;

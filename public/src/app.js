@@ -621,12 +621,18 @@ function submitActivity(event) {
   }
 
   const creating = store.ui.dialog.mode === 'create';
+  // An activity created from an open time goes into that gap rather than after
+  // the selection; the gap is remembered on the dialog because nothing is
+  // committed until now.
+  const openTime = store.ui.dialog.openTime || null;
   editorBaseline = null;
   closeSheet();
 
   if (creating) {
-    commit('activity.add', { activity, afterId: store.ui.selectedId });
-    store.setUi({ selectedId: activity.id }, { regions: ['timeline', 'toolbar'] });
+    const result = openTime
+      ? commit('openTime.add', { openTime, activity })
+      : commit('activity.add', { activity, afterId: store.ui.selectedId });
+    if (result) store.setUi({ selectedId: activity.id }, { regions: ['timeline', 'toolbar'] });
   } else {
     commit('activity.update', { activity });
   }
@@ -950,14 +956,24 @@ const ACTION_HANDLERS = {
     }
     if (choice === 'extend') return void commit('openTime.extend', { openTime });
 
-    // "Add activity here" creates the activity and opens it, so the name can
-    // be typed straight away.
-    const activity = blankActivity();
-    const result = commit('openTime.add', { openTime, activity });
-    if (result) {
-      store.setUi({ selectedId: activity.id }, { regions: [] });
-      openEditor(activity.id);
-    }
+    // "Add activity here" opens the editor on a blank activity; nothing goes
+    // into the plan until Done, exactly as the + does.
+    //
+    // It used to commit first and open afterwards. Pressing Cancel then left
+    // an untitled activity in the plan, which the server refuses — and a plan
+    // the server refuses is a plan that never saves again.
+    rememberOpener();
+    store.setUi({
+      openMenu: null,
+      dialog: {
+        type: 'activity',
+        mode: 'create',
+        openTime,
+        // Pre-filled with the length of the gap, which is what it will be if
+        // the field is left alone.
+        activity: { ...blankActivity(), duration: normalizeDuration(openTime.end - openTime.start) }
+      }
+    });
   },
   jump(_, element) {
     const target = element.dataset.target === 'conflict'
@@ -1346,6 +1362,10 @@ document.addEventListener('visibilitychange', () => {
     if (leftAt !== null && Date.now() - leftAt > AUTO_VIEW_ONLY_MS) returnToViewOnly();
     leftAt = null;
     clock.tick();
+    // Anything handed to the browser on the way out was sent without waiting
+    // for an answer, so on the way back this tab does not know whether it
+    // landed. Sending it again settles that; the server sorts out the revision.
+    if (saver.hasPendingChanges && !saver.isBlocked) void saver.flushNow();
     void refreshFromServer();
     return;
   }

@@ -260,13 +260,28 @@ test('"Extend" works even when the previous activity is fixed', () => {
 
 test('"Add activity here" fills the open time exactly', () => {
   const before = withOpenTime();
-  const { plan: after } = addInOpenTime(before, firstGap(before), activity('new', 30));
+  // No duration of its own: the gap's length is what it takes (§5.9).
+  const blank = activity('new', 30);
+  delete blank.duration;
+  const { plan: after } = addInOpenTime(before, firstGap(before), blank);
 
   const created = after.activities.find(a => a.id === 'new');
   assert.equal(created.duration, 90);
   assert.equal(created.lockedStart, null);
   assert.deepEqual(after.activities.map(a => a.id), ['a', 'new', 'fixed']);
   assert.equal(buildSchedule(after).openTimes.length, 0);
+});
+
+test('"Add activity here" takes a shorter time if it is given one', () => {
+  // The editor opens before anything is added, pre-filled with the gap, so a
+  // duration that reaches here was typed. Overriding it would throw away what
+  // the person asked for; the rest of the gap simply stays open.
+  const before = withOpenTime();
+  const { plan: after } = addInOpenTime(before, firstGap(before), activity('new', 30));
+
+  const created = after.activities.find(a => a.id === 'new');
+  assert.equal(created.duration, 30);
+  assert.equal(buildSchedule(after).openTimes.length, 1, 'the remaining hour is still open');
 });
 
 test('an open-time action against open time that no longer exists does nothing', () => {

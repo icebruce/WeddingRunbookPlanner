@@ -64,6 +64,38 @@ test('a change made just before the tab closes is still sent', async ({ page, co
     .toBe('Typed then closed');
 });
 
+test('hiding the tab mid-edit is not a conflict with yourself', async ({ page, server }) => {
+  await server.seed({ plan: base() });
+  await signInAndWaitForPlan(page);
+
+  // Type, then hide the tab inside the debounce: the change goes out with the
+  // page and the answer is never read, so the server moves ahead of this tab
+  // carrying this tab's own writing.
+  await rename(page, 'ready', 'Typed then hidden');
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect.poll(async () => (await server.read()).plan.activities[0].title, { timeout: 10_000 })
+    .toBe('Typed then hidden');
+
+  // Come back and carry on working.
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await rename(page, 'portraits', 'A second ordinary edit');
+
+  // No dialog asking which copy to keep: there is one device here, and one of
+  // the answers would have thrown the work away.
+  await expect(page.locator('#conflict-dialog')).toHaveCount(0);
+  await saved(page);
+
+  const stored = await server.read();
+  expect(stored.plan.activities[0].title).toBe('Typed then hidden');
+  expect(stored.plan.activities[1].title).toBe('A second ordinary edit');
+});
+
 test('D19: the copy not chosen in a conflict is kept in version history', async ({ page, context, server }) => {
   await server.seed({ plan: base() });
   await signInAndWaitForPlan(page);

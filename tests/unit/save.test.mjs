@@ -310,6 +310,115 @@ test('F12: a 409 reports the other version and stops until it is resolved', asyn
   assert.equal(attempts, 1, 'a conflict is a question for the user, not something to retry');
 });
 
+test('a collision with this tab\'s own page-hide send is adopted, not put to the user', async () => {
+  // The page-hide flush hands the browser a save and never reads the answer,
+  // so the server ends up a revision ahead carrying this tab's own writing.
+  // The tab then collides with itself, and asking "which copy do you want?"
+  // about your own change offers to throw it away.
+  const sent = [];
+  let collided = false;
+  const { pipeline, timers, events } = harness({
+    save: async (plan, revision) => {
+      sent.push(revision);
+      if (!collided) {
+        collided = true;
+        throw apiError(409, {
+          body: { latest: { plan: { title: 'Wedding Day' }, revision: 2, updatedBy: 'device-1', updatedAt: 'then' } }
+        });
+      }
+      return { revision: revision + 1 };
+    }
+  });
+
+  pipeline.markDirty();
+  pipeline.flushOnHide(() => {});
+  await pipeline.flushNow();
+  await timers.advance(0);
+
+  assert.deepEqual(events.conflicts, [], 'the user is not asked about their own change');
+  assert.deepEqual(sent, [1, 2], 'it carries on from the revision the server reported');
+  assert.equal(pipeline.revision, 3);
+  assert.equal(pipeline.isBlocked, null);
+});
+
+test('a second tab on the same device is still a second copy', async () => {
+  // Two tabs of one browser share a device id and their edits really can
+  // diverge, so the device alone cannot be the test — only a collision with
+  // the revision this tab's own blind send would have produced.
+  const { pipeline, timers, events } = harness({
+    save: async () => {
+      throw apiError(409, {
+        body: { latest: { plan: { title: 'From the other tab' }, revision: 9, updatedBy: 'device-1' } }
+      });
+    }
+  });
+
+  pipeline.markDirty();
+  pipeline.flushOnHide(() => {});
+  await pipeline.flushNow();
+  await timers.advance(0);
+
+  assert.equal(events.conflicts.length, 1, 'revision 9 is not the 2 our blind send would have made');
+  assert.equal(pipeline.isBlocked, 'conflict');
+});
+
+test('a conflict from another device is still the user\'s to answer', async () => {
+  const { pipeline, timers, events } = harness({
+    save: async () => {
+      throw apiError(409, {
+        body: { latest: { plan: { title: 'Theirs' }, revision: 7, updatedBy: 'device-2' } }
+      });
+    }
+  });
+
+  pipeline.markDirty();
+  await timers.advance(DEBOUNCE_MS);
+  await timers.advance(0);
+
+  assert.equal(events.conflicts.length, 1);
+  assert.equal(pipeline.isBlocked, 'conflict');
+});
+
+test('the collision is adopted once, not forever', async () => {
+  // Adopting on every 409 would hide a real problem behind a silent loop.
+  let attempts = 0;
+  const { pipeline, timers, events } = harness({
+    save: async (plan, revision) => {
+      attempts += 1;
+      throw apiError(409, {
+        body: { latest: { plan: {}, revision: Number(revision) + 1, updatedBy: 'device-1' } }
+      });
+    }
+  });
+
+  pipeline.markDirty();
+  pipeline.flushOnHide(() => {});
+  await pipeline.flushNow();
+  await timers.advance(0);
+
+  assert.equal(events.conflicts.length, 1, 'the second collision is handed over');
+  assert.equal(attempts, 2, 'one adoption, then it asks');
+  assert.equal(pipeline.isBlocked, 'conflict');
+});
+
+test('the page-hide flush disarms the debounce it is standing in for', async () => {
+  const sent = [];
+  const { pipeline, timers } = harness({
+    save: async (plan, revision) => { sent.push(revision); return { revision: revision + 1 }; }
+  });
+
+  const blind = [];
+  pipeline.markDirty();
+  const handed = pipeline.flushOnHide((plan, revision) => blind.push(revision));
+  assert.equal(handed, true);
+  assert.deepEqual(blind, [1], 'the change went out with the page');
+
+  // The armed debounce must not fire behind it and send the same plan again at
+  // a revision the blind send has already spent.
+  await timers.advance(60_000);
+  assert.deepEqual(sent, [], 'nothing followed it out');
+});
+
 test('F13: resuming at the revision the server reported clears the conflict', async () => {
   const sent = [];
   let conflictOnce = true;
