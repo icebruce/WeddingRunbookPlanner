@@ -50,7 +50,11 @@ export async function openActivityEditor(page, card) {
   if (await pencil.count() && await pencil.isVisible()) {
     await pencil.click();
   } else {
-    await card.click();
+    // A plain click can land on some other control the card draws over
+    // most of its own area (the stage pill, a person tag) and fire that
+    // instead of selecting the card, so this clicks a blank corner the way
+    // the rest of the suite does.
+    await card.click({ position: { x: 40, y: 10 } });
     await page.locator('.toolbar [data-action="edit"]').click();
   }
   await expect(page.locator('#activity-dialog')).toBeVisible();
