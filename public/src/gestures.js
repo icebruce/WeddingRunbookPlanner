@@ -29,14 +29,27 @@ const LONG_PRESS_MS = 500;
 const MOVE_HOLD_MS = 150;
 const AUTOSCROLL_EDGE = 64;
 const AUTOSCROLL_STEP = 12;
+/** How close together two taps on the same card have to land to count as a double-click. */
+const DOUBLE_TAP_MS = 400;
 
-export function createGestures({ root, store, commit, repaint, onLongPress }) {
+export function createGestures({ root, store, commit, repaint, onLongPress, onDoubleClick }) {
   /** The one gesture in progress, if any. */
   let active = null;
   /** A press that has not yet become a tap, a long press or a scroll. */
   let candidate = null;
   let frame = null;
   let suppressClickUntil = 0;
+  /**
+   * Selecting a card repaints the timeline synchronously, on the same tick as
+   * this tap's own pointerup — which can replace the card element out from
+   * under the second click of a real double-click before the browser gets to
+   * hit-test it, so the native `dblclick` event silently never fires (it
+   * ends up targeting whatever is left where the card used to be). Two taps
+   * on the same activity, close together, are tracked here instead, so
+   * opening the editor never depends on the browser's own double-click
+   * timing racing our re-render.
+   */
+  let lastTap = null;
 
   const cardFor = id => root.querySelector(`.card[data-activity-id="${cssEscape(id)}"]`);
   const scheduleOf = plan => buildSchedule(plan);
@@ -108,11 +121,12 @@ export function createGestures({ root, store, commit, repaint, onLongPress }) {
   function onCardPointerUp(event) {
     if (!candidate || candidate.pointerId !== event.pointerId) return;
     const moved = Math.hypot(event.clientX - candidate.x, event.clientY - candidate.y);
-    const { id, groupPick } = candidate;
+    const { id, touch, groupPick } = candidate;
     clearCandidate();
     if (moved > TAP_SLOP) return;
 
     if (groupPick) {
+      lastTap = null;
       const current = new Set(store.ui.groupSelection.length ? store.ui.groupSelection : (store.ui.selectedId ? [store.ui.selectedId] : []));
       if (current.has(id)) current.delete(id); else current.add(id);
       const next = [...current];
@@ -123,6 +137,14 @@ export function createGestures({ root, store, commit, repaint, onLongPress }) {
       }, { regions: ['timeline', 'toolbar'] });
       return;
     }
+
+    // A mouse only: touch's equivalent gesture is the long press above.
+    if (!touch && onDoubleClick && lastTap && lastTap.id === id && Date.now() - lastTap.time <= DOUBLE_TAP_MS) {
+      lastTap = null;
+      onDoubleClick(id);
+      return;
+    }
+    lastTap = touch ? null : { id, time: Date.now() };
 
     store.setUi({ selectedId: id, groupSelection: [], openMenu: null }, { regions: ['timeline', 'toolbar'] });
   }
