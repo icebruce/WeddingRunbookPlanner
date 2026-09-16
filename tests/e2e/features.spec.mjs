@@ -159,13 +159,19 @@ test.describe('the menu', () => {
     await signInAndWaitForPlan(page);
     await menu(page);
 
-    const visible = await page.locator('.menu-popover button:visible').allTextContents();
-    const trimmed = visible.map(text => text.replace(/\s+/g, ' ').trim());
-    const expected = isPhoneLayout(page)
-      ? ['Day-of view', 'Dark appearance', 'Status Working', 'Print or save PDF', 'Export backup', 'Version history', 'Plan settings', 'Sign out']
-      : ['Day-of view', 'Dark appearance', 'Print or save PDF', 'Export backup', 'Version history', 'Plan settings', 'Sign out'];
+    const actions = await page.locator('.menu-popover button:visible')
+      .evaluateAll(nodes => nodes.map(node => node.dataset.menuAction));
 
-    expect(trimmed).toEqual(expected);
+    // The status row is part of the phone menu only; everything else is the
+    // same list either way.
+    const expected = ['day-of', 'theme', 'print', 'export', 'versions', 'settings', 'logout'];
+    if (isPhoneLayout(page)) expected.splice(2, 0, 'status');
+
+    expect(actions).toEqual(expected);
+
+    if (isPhoneLayout(page)) {
+      await expect(page.locator('[data-menu-action="status"]')).toContainText('Working');
+    }
   });
 
   test('D24: the status is in the phone menu and in the wide top bar, never both', async ({ page, server }) => {

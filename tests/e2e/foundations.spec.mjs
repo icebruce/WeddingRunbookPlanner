@@ -16,8 +16,18 @@ test('F14: toggling a lock keeps focus on the button that was pressed', async ({
   await expect(firstCard(page).locator('.lock-button')).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('F14: a repaint does not move focus out of the field being typed in', async ({ page }) => {
+test('F14: a repaint does not move focus out of the control being used', async ({ page }) => {
+  // The status is a select in the wide top bar and a menu row on a phone
+  // (D24), so the control that survives a repaint differs by layout.
   await signInAndWaitForPlan(page);
+
+  if (isPhoneLayout(page)) {
+    const lock = firstCard(page).locator('.lock-button');
+    await lock.focus();
+    await page.keyboard.press('Enter');
+    await expect(firstCard(page).locator('.lock-button')).toBeFocused();
+    return;
+  }
 
   const status = page.locator('[data-action="status"]');
   await status.focus();
