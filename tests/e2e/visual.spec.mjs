@@ -22,7 +22,19 @@
 import { test, expect, activity, seedPlan } from './fixtures.mjs';
 import { isPhoneLayout, signInAndWaitForPlan } from './helpers.mjs';
 
-test.skip(!process.env.VISUAL, 'visual baselines are recorded and compared by hand (VISUAL=1)');
+/*
+ * The mockups draw a phone and a desktop, so those are the two that have
+ * baselines. pixel-7 and ipad are covered by the rest of the suite; another
+ * three hundred images of the same screens would be three hundred more to
+ * re-record every time a font moves.
+ */
+const PHOTOGRAPHED = new Set(['desktop-chrome', 'iphone-13']);
+
+test.beforeEach(({}, testInfo) => {
+  testInfo.skip(!process.env.VISUAL, 'visual baselines are recorded and compared by hand (VISUAL=1)');
+  testInfo.skip(!PHOTOGRAPHED.has(testInfo.project.name), 'the mockups are phone and desktop');
+});
+
 test.describe.configure({ mode: 'parallel' });
 
 const DATE = '2026-11-21';

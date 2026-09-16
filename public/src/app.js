@@ -14,7 +14,7 @@ import { api } from './api.js';
 import { PLAN_STATUSES, STAGES, deviceId } from './config.js';
 import { clearDeviceCopy, readDeviceCopy, writeDeviceCopy } from './device.js';
 import { cssEscape, escapeHtml, focusByKey, paint, uid } from './dom.js';
-import { AUTO_VIEW_ONLY_MS, cardStateAt, createClock, minutesNow, readOverride, shouldBeOn, stripState, writeOverride } from './dayof.js';
+import { AUTO_VIEW_ONLY_MS, cardStateAt, clearOverride, createClock, minutesNow, readOverride, shouldBeOn, stripState, writeOverride } from './dayof.js';
 import { createGestures } from './gestures.js';
 import { icon } from './icons.js';
 import { SAVE_STATES, createSavePipeline } from './save.js';
@@ -1018,9 +1018,12 @@ async function resolveConflict(choice) {
 async function signOut() {
   try { await flushSave(); } catch { /* the sign-out still happens; the copy stays on the device */ }
   await api.logout().catch(() => {});
-  // Signing out is the one time the copy is cleared: it is the only moment
-  // someone has said they are finished with this device.
+  // Signing out is the one time this device is cleared: it is the only moment
+  // someone has said they are finished with it. The day-of override goes too —
+  // it is a decision about one date on one device, and the next person to sign
+  // in on it should get the plan's own answer.
   clearDeviceCopy(store.plan?.id);
+  clearOverride();
   saver.markClean(null);
   store.resetUi();
   store.setPlan(null, { revision: null });
@@ -1221,9 +1224,22 @@ function returnToViewOnly() {
  */
 const THEME_KEY = 'wrp:theme';
 
+/**
+ * The colour the browser paints its own chrome with — the bar behind the clock
+ * on a phone, the title bar of an installed app. It cannot be a media query,
+ * because the app does not follow the system setting (D21): it has to follow
+ * the choice made in the app.
+ */
+function paintBrowserChrome(theme) {
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (!meta) return;
+  meta.setAttribute('content', theme === 'dark' ? '#111214' : '#F7F7F4');
+}
+
 function setTheme(theme) {
   const next = theme === 'dark' ? 'dark' : 'light';
   document.documentElement.dataset.theme = next;
+  paintBrowserChrome(next);
   try {
     localStorage.setItem(THEME_KEY, next);
   } catch {
@@ -1379,6 +1395,7 @@ async function loadPlan() {
 async function init() {
   const theme = readTheme();
   document.documentElement.dataset.theme = theme;
+  paintBrowserChrome(theme);
   store.setUi({ theme }, { regions: [] });
 
   repaint();

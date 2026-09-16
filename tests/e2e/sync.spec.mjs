@@ -219,6 +219,26 @@ test('signing out clears the copy on this device', async ({ page, server }) => {
   expect(await page.evaluate(() => Object.keys(localStorage).some(key => key.startsWith('wrp:v1:')))).toBe(false);
 });
 
+test('signing out also forgets the day-of switch this device was left on', async ({ page, server }) => {
+  await server.seed({ plan: base() });
+  await signInAndWaitForPlan(page);
+
+  // Turn the day-of view on by hand — a decision about one date on one device.
+  await page.locator('[data-action="menu"][data-menu="app"]').click();
+  await page.locator('[data-menu-action="day-of"]').click();
+  await expect(page.locator('.live-strip')).toBeVisible();
+
+  await page.locator('[data-action="menu"][data-menu="app"]').click();
+  await page.locator('[data-menu-action="logout"]').click();
+  await expect(page.locator('#login-form')).toBeVisible();
+
+  // The next person to sign in on this device gets the plan's own answer.
+  await page.locator('#login-form input[name="password"]').fill(TEST_PASSWORD);
+  await page.locator('#login-form button[type="submit"]').click();
+  await expect(page.locator('#main-plan')).toBeVisible();
+  await expect(page.locator('.live-strip')).toHaveCount(0);
+});
+
 test('F18: a plan stored in the old shape keeps its versions and its revision', async ({ page, server }) => {
   // The pre-split envelope: versions living inside the plan document.
   await server.seed({

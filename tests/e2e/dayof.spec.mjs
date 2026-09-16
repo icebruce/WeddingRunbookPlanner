@@ -46,7 +46,7 @@ test('D1: setting the status to Final turns it on whatever the date', async ({ p
   await expect(strip(page)).toBeVisible();
 });
 
-test.describe('what the strip says', () => {
+test.describe('D13: what the strip says', () => {
   const cases = [
     ['before the first activity', at(11, 0), 'Starts in 30 min', 'Getting Ready, 11:30 AM'],
     ['during an activity', at(11, 45), 'Getting Ready', 'Next'],
@@ -86,7 +86,7 @@ test.describe('what the strip says', () => {
   });
 });
 
-test('the timeline shows where the day has got to', async ({ page, server }) => {
+test('D13: the timeline shows where the day has got to, in green', async ({ page, server }) => {
   await openAt(page, server, at(11, 45));
 
   await expect(page.locator('.now-line')).toHaveCount(1);

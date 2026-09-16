@@ -310,3 +310,160 @@ test('an activity with notes says so on its card', async ({ page, server }) => {
   await expect(card(page, 'with').locator('.glyph--note')).toHaveCount(1);
   await expect(card(page, 'without').locator('.glyph--note')).toHaveCount(0);
 });
+
+test.describe('D21: dark appearance', () => {
+  const theme = page => page.evaluate(() => document.documentElement.dataset.theme || 'light');
+
+  test('light is the default, whatever the system is set to', async ({ page, server }) => {
+    await server.seed();
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await signInAndWaitForPlan(page);
+
+    // A plan read in a dark room at a venue and the same plan on a laptop
+    // should look like the same plan, so the system setting is not followed.
+    expect(await theme(page)).toBe('light');
+    const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    expect(background).toBe('rgb(247, 247, 244)');
+  });
+
+  test('the switch is remembered on this device and never saved to the plan', async ({ page, server }) => {
+    await server.seed();
+    await signInAndWaitForPlan(page);
+    const before = (await server.read()).revision;
+
+    await menu(page);
+    await page.locator('[data-menu-action="theme"]').click();
+    await expect.poll(() => theme(page)).toBe('dark');
+
+    // It survives a reload, which means it is on the device...
+    await page.reload();
+    await expect(page.locator('#main-plan')).toBeVisible();
+    expect(await theme(page)).toBe('dark');
+
+    // ...and the plan was never touched, which means it is not in the plan.
+    await page.waitForTimeout(900);
+    const after = await server.read();
+    expect(after.revision, 'choosing a theme is not an edit').toBe(before);
+    expect('theme' in after.plan, 'the plan has no theme').toBe(false);
+
+    // A second device, which has not been told, is still light.
+    const other = await page.context().browser().newContext();
+    const fresh = await other.newPage();
+    await fresh.goto(page.url());
+    await fresh.locator('#login-form input[name="password"]').fill('e2e-password-987');
+    await fresh.locator('#login-form button[type="submit"]').click();
+    await expect(fresh.locator('#main-plan')).toBeVisible();
+    expect(await fresh.evaluate(() => document.documentElement.dataset.theme || 'light')).toBe('light');
+    await other.close();
+  });
+
+  test('the browser chrome is repainted with the app, not with the system', async ({ page, server }) => {
+    await server.seed();
+    await signInAndWaitForPlan(page);
+
+    const chrome = () => page.locator('meta[name="theme-color"]').getAttribute('content');
+    expect(await chrome()).toBe('#F7F7F4');
+
+    await menu(page);
+    await page.locator('[data-menu-action="theme"]').click();
+    await expect.poll(chrome).toBe('#111214');
+
+    await page.reload();
+    await expect(page.locator('#main-plan')).toBeVisible();
+    expect(await chrome(), 'and again on the next visit').toBe('#111214');
+  });
+
+  test('settings offers the same switch, and the two agree', async ({ page, server }) => {
+    await server.seed();
+    await signInAndWaitForPlan(page);
+
+    await menu(page);
+    await page.locator('[data-menu-action="settings"]').click();
+    // The radio itself is hidden behind its label, which is what a finger hits.
+    await page.locator('#settings-dialog .segmented label', { hasText: 'Dark' }).click();
+    await page.locator('#settings-dialog .button--done').click();
+    await expect.poll(() => theme(page)).toBe('dark');
+
+    await menu(page);
+    await expect(page.locator('[data-menu-action="theme"] .menu-switch')).not.toHaveClass(/is-off/);
+  });
+});
+
+test('D4: eleven stages share six phase colours, and the icon says which stage', async ({ page, server }) => {
+  await server.seed({
+    plan: seedPlan({
+      activities: [
+        activity('prep', 45, { title: 'Getting Ready', stage: 'preparation' }),
+        activity('look', 30, { title: 'First Look', stage: 'first-look' }),
+        activity('photos', 30, { title: 'Photos', stage: 'photography' }),
+        activity('drive', 30, { title: 'Drive', stage: 'transition' }),
+        activity('wait', 30, { title: 'Buffer', stage: 'buffer' }),
+        activity('rings', 60, { title: 'Ceremony', stage: 'ceremony' }),
+        activity('toast', 30, { title: 'Celebration', stage: 'celebration' }),
+        activity('drinks', 30, { title: 'Cocktail', stage: 'cocktail' }),
+        activity('sit', 30, { title: 'Reception', stage: 'reception' }),
+        activity('eat', 60, { title: 'Dinner', stage: 'dinner' }),
+        activity('dance', 60, { title: 'Party', stage: 'party' })
+      ]
+    })
+  });
+  await signInAndWaitForPlan(page);
+
+  const bars = await page.locator('.card-rule').evaluateAll(nodes =>
+    nodes.map(node => getComputedStyle(node).backgroundColor));
+  expect(bars, 'one colour per stage bar').toHaveLength(11);
+  expect(new Set(bars).size, 'eleven stages, six colours').toBe(6);
+
+  // First look and photography are one phase; ceremony is its own.
+  const colourOf = async id => page.locator(`.card[data-activity-id="${id}"] .card-rule`)
+    .evaluate(node => getComputedStyle(node).backgroundColor);
+  expect(await colourOf('look')).toBe(await colourOf('photos'));
+  expect(await colourOf('drive')).toBe(await colourOf('wait'));
+  expect(await colourOf('rings')).not.toBe(await colourOf('photos'));
+
+  // The icon is what tells two stages of one phase apart.
+  // The first icon in a tag is the stage's own; the second is the chevron.
+  const icons = await page.locator('.stage-tag .icon:first-of-type').evaluateAll(nodes =>
+    nodes.map(node => node.innerHTML.slice(0, 60)));
+  expect(icons, 'one per card').toHaveLength(11);
+  expect(new Set(icons).size, 'eleven stages, eleven icons').toBe(11);
+});
+
+test('moving the first start time says how much of the day moved with it', async ({ page, server }) => {
+  await server.seed({
+    plan: seedPlan({
+      dayStart: '11:30',
+      activities: [
+        activity('a', 45, { title: 'Getting Ready' }),
+        activity('b', 30, { title: 'Portraits' }),
+        activity('c', 60, { title: 'Ceremony' })
+      ]
+    })
+  });
+  await signInAndWaitForPlan(page);
+
+  await menu(page);
+  await page.locator('[data-menu-action="settings"]').click();
+  await page.locator('#settings-dialog input[name="dayStart"]').fill('12:00');
+  await page.locator('#settings-dialog .button--done').click();
+
+  // Changing the first start is not a cosmetic setting: it moves the whole day.
+  await expect(page.locator('.toast')).toContainText('Changed plan settings');
+  await expect(page.locator('.toast')).toContainText('3 activities');
+  await expect(page.locator('.save-indicator')).toHaveText('Saved');
+  expect((await server.read()).plan.dayStart).toBe('12:00');
+});
+
+test('settings that change nothing are not a change', async ({ page, server }) => {
+  await server.seed();
+  await signInAndWaitForPlan(page);
+  const before = (await server.read()).revision;
+
+  await menu(page);
+  await page.locator('[data-menu-action="settings"]').click();
+  await page.locator('#settings-dialog .button--done').click();
+
+  await page.waitForTimeout(900);
+  expect((await server.read()).revision, 'pressing Done without typing saves nothing').toBe(before);
+  await expect(page.locator('.toast')).toHaveCount(0);
+});

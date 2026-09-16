@@ -92,7 +92,7 @@ test('a selected card offers handles; a fixed one has no top handle', async ({ p
   await expect(card(page, 'ceremony').locator('.handle--bottom')).toHaveCount(1);
 });
 
-test('D2: the toolbar replaces the + and says what the card hid', async ({ page, server }) => {
+test('D2, F6: the toolbar replaces the + and says what the card hid', async ({ page, server }) => {
   // The toolbar belongs to the narrow layout. An iPad is a touch device but a
   // wide one: it gets the desktop layout, and reveals a card's handles by
   // selection rather than by hover.

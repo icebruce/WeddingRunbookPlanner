@@ -173,7 +173,7 @@
 }
 .open-time--thin strong { font-size: 13px; font-weight: 600; }
 .open-time:focus-visible,
-.open-time.is-active {
+.open-time:active {
   border-color: var(--sel);
   background: var(--sel-tint);
   color: var(--sel);

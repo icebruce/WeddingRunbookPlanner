@@ -34,7 +34,7 @@ async function originMinute(page) {
   });
 }
 
-test('every card edge is within a pixel of its own time', async ({ page, server }) => {
+test('D8: every card edge is within a pixel of its own time', async ({ page, server }) => {
   await server.seed();
   await signInAndWaitForPlan(page);
 
@@ -123,7 +123,7 @@ test('the ruler has a spine and the day ends with a marker', async ({ page, serv
   await expect(page.locator('.timeline-end')).toContainText('10:45 PM');
 });
 
-test('rows drop in order as cards get shorter', async ({ page, server }) => {
+test('D9: rows drop in order as cards get shorter', async ({ page, server }) => {
   const durations = [45, 30, 25, 20, 15, 10, 5];
   await server.seed({
     plan: seedPlan({
@@ -296,7 +296,7 @@ test('a conflict puts the two activities in columns, both on their real times', 
   await expect(page.locator('.conflict-rail')).toHaveCount(1);
 });
 
-test('the summary counts the day and offers the problems as links', async ({ page, server }) => {
+test('D11: the summary counts the day and offers the problems as links', async ({ page, server }) => {
   await server.seed({
     plan: seedPlan({
       dayStart: '13:00',
@@ -337,7 +337,7 @@ test('a summary link scrolls to the thing it names', async ({ page, server }) =>
   expect(visible).toBe(true);
 });
 
-test('the sunset marker sits at the time it is set to', async ({ page, server }) => {
+test('D17: the sunset marker sits at the time it is set to', async ({ page, server }) => {
   await server.seed();
   await signInAndWaitForPlan(page);
 

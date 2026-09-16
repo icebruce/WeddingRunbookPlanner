@@ -104,6 +104,29 @@ test('moving reorders and reports the shift', () => {
   assert.equal(shifted.count, 3);
 });
 
+test('the first goes last, the last goes first, and a fixed activity is jumped over', () => {
+  const before = plan([
+    activity('a', 30),
+    activity('b', 30),
+    activity('fixed', 60, { lockedStart: '14:00' }),
+    activity('d', 30)
+  ]);
+
+  // First to last.
+  const toEnd = move(before, 'a', 3).plan;
+  assert.deepEqual(toEnd.activities.map(item => item.id), ['b', 'fixed', 'd', 'a']);
+
+  // Last to first.
+  const toStart = move(before, 'd', 0).plan;
+  assert.deepEqual(toStart.activities.map(item => item.id), ['d', 'a', 'b', 'fixed']);
+
+  // A fixed activity cannot be dragged, but it can be dragged past: it keeps
+  // the clock time it was pinned to whatever lands on either side of it.
+  const past = move(before, 'a', 2).plan;
+  assert.deepEqual(past.activities.map(item => item.id), ['b', 'fixed', 'a', 'd']);
+  assert.equal(past.activities.find(item => item.id === 'fixed').lockedStart, '14:00');
+});
+
 test('a fixed activity cannot be moved, and a no-op move is not a change', () => {
   const fixed = plan([activity('a', 30), activity('b', 30, { lockedStart: '12:00' })]);
   assert.equal(move(fixed, 'b', 0), null);

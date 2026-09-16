@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+
 import { test, expect, TEST_PASSWORD } from './fixtures.mjs';
 
 /**
@@ -112,6 +114,49 @@ test('an oversized body is refused rather than parsed', async ({ request, baseUR
   expect(response.status()).toBe(413);
 });
 
+/*
+ * F8 — the site serves public/ and nothing else.
+ *
+ * The old build served the repository root, so lib/server/default-data.js
+ * returned its own source on production. Two things keep that from coming
+ * back: vercel.json names public/ as the output directory, and the dev server
+ * resolves every path inside public/ or answers 404. Both are checked, because
+ * a green development run against a misconfigured deploy would prove nothing.
+ */
+test('F8: nothing outside public/ can be downloaded', async ({ request, baseURL }) => {
+  const offLimits = [
+    '/lib/server/seed-template.js',
+    '/lib/server/storage.js',
+    '/lib/server/auth.js',
+    '/api/plan.js',
+    '/scripts/dev-server.mjs',
+    '/package.json',
+    '/vercel.json',
+    '/.env',
+    '/.env.example',
+    '/docs/FUNCTIONAL_SPEC.md',
+    // And the same again, reached by climbing out of public/.
+    '/../lib/server/seed-template.js',
+    '/%2e%2e/package.json'
+  ];
+
+  for (const route of offLimits) {
+    const response = await request.get(`${baseURL}${route}`, { failOnStatusCode: false });
+    expect(response.status(), route).toBe(404);
+  }
+
+  // And the things that are meant to be there still are.
+  for (const route of ['/', '/src/app.js', '/styles/tokens.css']) {
+    const response = await request.get(`${baseURL}${route}`);
+    expect(response.status(), route).toBe(200);
+  }
+});
+
+test('F8: the deploy is configured to serve only public/', async () => {
+  const config = JSON.parse(await readFile(new URL('../../vercel.json', import.meta.url), 'utf8'));
+  expect(config.outputDirectory).toBe('public');
+});
+
 test('every unauthenticated route answers 401 in the documented shape', async ({ request }) => {
   for (const path of ['/api/plan', '/api/versions']) {
     const response = await request.get(path);
@@ -170,7 +215,7 @@ test('unknown fields are dropped instead of stored', async ({ request, baseURL, 
   expect('injected' in (await server.read()).plan).toBe(false);
 });
 
-test('F28: changing the password invalidates existing sessions', async ({ request, baseURL }) => {
+test('D22, F28: changing the password invalidates existing sessions', async ({ request, baseURL }) => {
   // The token carries a fingerprint of the password it was issued under; a
   // token signed for a different password cannot pass the check.
   await request.post('/api/login', { headers: headers(baseURL, '203.0.113.31'), data: { password: TEST_PASSWORD } });

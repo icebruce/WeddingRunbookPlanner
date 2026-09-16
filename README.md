@@ -54,6 +54,7 @@ and the app fails closed rather than falling back to a file.
 | `npm test` | Unit tests (`tests/unit/*.test.mjs`, `node --test`) |
 | `npm run test:e2e` | Playwright end-to-end tests (`tests/e2e/*.spec.mjs`) |
 | `npm run check` | Syntax check of the main modules |
+| `VISUAL=1 npx playwright test visual` | Screenshot comparison against the mockup scenarios |
 
 The e2e harness starts one dev server per worker on its own port, backed by its
 own data file, so tests never share state and never touch a real database. Each
@@ -69,6 +70,32 @@ Projects: `desktop-chrome` (1280 px), `iphone-13`, `pixel-7`, `ipad`.
 
 Playwright is pinned to an exact version because the browser build revision has
 to match the installed browsers.
+
+`tests/e2e/a11y.spec.mjs` carries a scanner that walks every screen in both
+appearances and reports unnamed controls, text under 12 px, contrast under
+4.5:1 for text or 3:1 for a control, and ARIA that says nothing. It runs with
+the rest of the suite.
+
+### Visual baselines
+
+`tests/e2e/visual.spec.mjs` photographs the scenes the mockups draw — phone and
+desktop, light and dark — and compares them with the images in
+`tests/e2e/visual.spec.mjs-snapshots/`.
+
+They are **not** part of `npm run test:e2e` and are not run in CI. A screenshot
+only compares against another taken by the same browser build, on the same
+operating system, with the same fonts; recording them somewhere other than they
+are compared gives a red pipeline that says nothing about the app.
+
+```
+VISUAL=1 npx playwright test visual                          # compare
+VISUAL=1 npx playwright test visual --update-snapshots=all   # re-record
+```
+
+Re-record deliberately, after a change you meant to make, and look at the
+images before committing them. The baselines in the repository were recorded on
+the development image with Chromium; on another machine expect them to differ
+everywhere text is drawn.
 
 ## Production environment variables
 

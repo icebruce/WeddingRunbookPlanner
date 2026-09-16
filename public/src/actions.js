@@ -19,6 +19,7 @@ import {
   remove,
   resizeBottom,
   resizeTop,
+  setSettings,
   setStage,
   unfix,
   update
@@ -119,9 +120,15 @@ defineAction('openTime.add', fromOperation(
   (_, payload) => `Added ${payload.activity.title || 'activity'}`
 ));
 
+/*
+ * Settings go through the same operation as everything else, because they are
+ * not all cosmetic: moving the first start time moves every flexible activity
+ * with it, and the toast has to say so.
+ */
 defineAction('plan.settings', (plan, { changes }) => {
-  Object.assign(plan, changes);
-  return { plan, label: 'Changed plan settings' };
+  const same = Object.entries(changes).every(([key, value]) => (plan[key] ?? null) === (value ?? null));
+  if (same) return null;
+  return { ...setSettings(plan, changes), label: 'Changed plan settings' };
 });
 
 defineAction('plan.status', (plan, { status }) => {

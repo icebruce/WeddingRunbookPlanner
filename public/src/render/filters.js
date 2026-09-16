@@ -13,8 +13,6 @@
 import { escapeHtml } from '../dom.js';
 import { icon } from '../icons.js';
 
-export const EVERYONE = null;
-
 /** Every distinct name in the plan, in the order it is first used. */
 export function peopleInPlan(plan) {
   const seen = new Set();

@@ -271,6 +271,45 @@ test('nothing is announced twice: only the toast and strip are live', async ({ p
   expect(live.some(name => String(name) === 'app'), '#app is not a live region').toBe(false);
 });
 
+/*
+ * F25 — the status control and the day-of switch had no visible focus at all:
+ * tabbing through the header, the ring simply vanished for two stops.
+ */
+test('F25: every control shows where the focus is', async ({ page, server, isMobile }) => {
+  await server.seed({ plan: plan() });
+  await signInAndWaitForPlan(page);
+
+  const ring = locator => locator.evaluate(node => {
+    const style = getComputedStyle(node);
+    return { width: parseFloat(style.outlineWidth) || 0, style: style.outlineStyle, colour: style.outlineColor };
+  });
+
+  // Tabbed to rather than focused by script: :focus-visible is about how the
+  // focus was reached, and a ring that only appears for the mouse is the bug.
+  if (!isMobile) {
+    const status = page.locator('.status-control select');
+    await page.locator('.brand').focus();
+    await tabTo(page, status, 12);
+    // The ring is on the pill, not on the select inside it.
+    const seen = await ring(page.locator('.status-control'));
+    expect(seen.width, 'the status control').toBeGreaterThanOrEqual(2);
+    expect(seen.style).not.toBe('none');
+    expect(seen.colour).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+  }
+
+  // The day-of switch lives in the menu, and is a button carrying a track.
+  const opener = page.locator('[data-action="menu"][data-menu="app"]');
+  await opener.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.menu-popover')).toBeVisible();
+  const dayOf = page.locator('[data-menu-action="day-of"]');
+  await tabTo(page, dayOf, 12);
+  const seen = await ring(dayOf);
+  expect(seen.width, 'the day-of switch').toBeGreaterThanOrEqual(2);
+  expect(seen.style).not.toBe('none');
+  expect(seen.colour).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+});
+
 test.describe('widths', () => {
   const widths = [320, 390, 430, 740, 1024, 1440];
 
@@ -296,6 +335,85 @@ test.describe('widths', () => {
       expect(problems, report(problems)).toEqual([]);
     });
   }
+
+  /*
+   * F22 — there used to be two breakpoints with a gap between them: the phone
+   * rules stopped at 720 and the desktop rules started at 760, so a window
+   * between the two got neither. There is one line now, and this stands on it.
+   */
+  test('F22: 720 px is a phone and 721 px is a desktop, with nothing in between', async ({ page, server }) => {
+    await server.seed({ plan: plan() });
+
+    await page.setViewportSize({ width: 720, height: 800 });
+    await signInAndWaitForPlan(page);
+    await expect(page.locator('.mobile-add')).toBeVisible();
+    await expect(page.locator('.planner-add')).toBeHidden();
+
+    for (const width of [721, 740, 759, 760]) {
+      await page.setViewportSize({ width, height: 800 });
+      await expect(page.locator('.planner-add'), `${width} px is the desktop layout`).toBeVisible();
+      await expect(page.locator('.mobile-add'), `${width} px has no floating +`).toBeHidden();
+    }
+  });
+
+  /* F23 — the save state used to be hidden below 760 px, which is where it is
+     needed most: a phone at a venue is the thing that loses its connection. */
+  test('F23: the save state is on screen at every width', async ({ page, server }) => {
+    await server.seed({ plan: plan() });
+    for (const width of [320, 390, 430, 740, 1440]) {
+      await page.setViewportSize({ width, height: 800 });
+      if (width === 320) await signInAndWaitForPlan(page);
+      await expect(page.locator('.save-indicator'), `${width} px`).toBeVisible();
+    }
+  });
+
+  /*
+   * F24 and D14 — the old phone build used 12.5, 9.5 and 8 px text with 34 px
+   * targets, and 14 px inputs, which make iOS Safari zoom the page on focus and
+   * never zoom back. iOS sizes: 17 for a title, 15 for detail, 13 for a label,
+   * nothing under 12, and no input under 16.
+   */
+  test('F24: the phone type scale and the sizes a finger needs', async ({ page, server }) => {
+    await server.seed({ plan: plan() });
+    await page.setViewportSize({ width: 390, height: 800 });
+    await signInAndWaitForPlan(page);
+    await page.waitForTimeout(250);
+
+    const size = async selector => page.locator(selector).first()
+      .evaluate(node => Math.round(parseFloat(getComputedStyle(node).fontSize)));
+
+    expect(await size('.card-title'), 'card title').toBe(17);
+    expect(await size('.card-time'), 'card time').toBe(15);
+    expect(await size('.tag'), 'people tag').toBe(13);
+
+    // Nothing a finger has to hit is under 44 px, counting the invisible part.
+    const small = await page.evaluate(() => {
+      // Several controls are drawn smaller than they are pressed: a 34 px
+      // button with a 44 px ::after over it takes the touch, and the glyph
+      // stays the size it should look. The pseudo-element counts.
+      const hit = node => {
+        const own = node.getBoundingClientRect();
+        const after = getComputedStyle(node, '::after');
+        if (after.content === 'none' || after.position !== 'absolute') return { width: own.width, height: own.height };
+        return {
+          width: Math.max(own.width, parseFloat(after.width) || 0),
+          height: Math.max(own.height, parseFloat(after.height) || 0)
+        };
+      };
+      return [...document.querySelectorAll('button, [role="button"], select, summary')]
+        .filter(node => node.offsetParent !== null || node.getClientRects().length)
+        .map(node => ({ where: node.className || node.tagName, ...hit(node) }))
+        .filter(box => box.width > 0 && (box.height < 44 || box.width < 44));
+    });
+    expect(small, JSON.stringify(small)).toEqual([]);
+
+    // And an input a thumb lands on never zooms the page (F24).
+    await page.locator('.card').first().click({ position: { x: 40, y: 10 } });
+    await page.locator('.toolbar-button[data-action="edit"]').click();
+    const input = await page.locator('#activity-dialog input[name="title"]')
+      .evaluate(node => Math.round(parseFloat(getComputedStyle(node).fontSize)));
+    expect(input).toBeGreaterThanOrEqual(16);
+  });
 
   test('a phone in landscape still works', async ({ page, server }) => {
     await server.seed({ plan: plan() });

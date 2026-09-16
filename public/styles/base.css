@@ -45,7 +45,7 @@ svg.icon { width: 1.05em; height: 1.05em; fill: none; stroke: currentColor; stro
    so it is shown at every width. It used to be hidden below 760 px (F23). */
 .save-indicator { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--ink-2); font: inherit; font-size: 13px; font-weight: 560; white-space: nowrap; }
 
-.save-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--live); flex: none; }
+.save-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); flex: none; }
 
 .save-indicator--saving .save-dot { background: var(--amber); animation: pulse 1s ease-in-out infinite; }
 
@@ -59,7 +59,11 @@ svg.icon { width: 1.05em; height: 1.05em; fill: none; stroke: currentColor; stro
 
 .status-control { height: 36px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px 0 10px; border-radius: 999px; background: var(--fill); color: var(--ink-2); position: relative; }
 
+/* The select fills the pill, so the ring goes round the pill: an outline on
+   the select alone would be a rectangle inside a rounded shape (F25). */
 .status-control select { appearance: none; border: 0; outline: 0; background: transparent; padding: 0 18px 0 0; font-size: 12px; font-weight: 650; cursor: pointer; }
+
+.status-control:has(select:focus-visible) { outline: 2px solid var(--sel); outline-offset: 2px; }
 
 .status-control > .icon { position: absolute; right: 8px; width: 12px; height: 12px; pointer-events: none; }
 
@@ -92,27 +96,11 @@ svg.icon { width: 1.05em; height: 1.05em; fill: none; stroke: currentColor; stro
 .planner-add { display: none; }
 .planner-add-wrap { display: none; }
 
-.is-drag-source .activity-card { opacity: .16; box-shadow: none; }
-
 body.is-reordering { user-select: none; cursor: grabbing; }
 
 .mobile-add { position: fixed; z-index: 35; right: 18px; bottom: calc(18px + var(--safe-bottom)); width: 58px; height: 58px; border: 0; border-radius: 50%; display: grid; place-items: center; background: var(--ink); color: var(--bg); box-shadow: var(--shadow-float); }
 
 .mobile-add .icon { width: 26px; height: 26px; }
-
-.conflict-actions { display: flex; gap: 8px; }
-
-.conflict-actions .button { min-height: 34px; }
-
-.lock-setting { border: 1px solid var(--hair); border-radius: 12px; padding: 13px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-
-.lock-setting > div { min-width: 0; display: flex; align-items: flex-start; gap: 9px; }
-
-.lock-setting > div > .icon { margin-top: 2px; color: var(--soft); }
-
-.lock-setting strong { display: block; font-size: 12px; }
-
-.lock-setting small { display: block; margin-top: 3px; color: var(--soft); font-size: 10px; line-height: 1.35; }
 
 .is-hidden { display: none !important; }
 
@@ -176,8 +164,6 @@ body.is-reordering { user-select: none; cursor: grabbing; }
   box-shadow: var(--shadow-lifted), 0 0 0 1px var(--sel);
   transform: rotate(-.6deg) scale(1.02);
 }
-.card.is-drop-before { box-shadow: 0 -3px 0 var(--sel), var(--shadow-card); }
-.card.is-drop-after { box-shadow: 0 3px 0 var(--sel), var(--shadow-card); }
 
 @media (prefers-reduced-motion: reduce) {
   .is-highlighted { animation: none; box-shadow: 0 0 0 3px var(--sel); }
