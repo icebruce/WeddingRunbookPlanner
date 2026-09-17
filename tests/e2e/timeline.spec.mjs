@@ -272,11 +272,11 @@ test('short open time collapses to one line', async ({ page, server }) => {
   await expect(page.locator('.open-time')).toHaveClass(/open-time--thin/);
   await expect(page.locator('.open-time')).toContainText('10 min open');
 
-  // A thin block has no "selected" state to reveal handles with, so both
-  // are shown without it — and, unlike a tall block, without needing a
-  // mouse hover either. Both render even though ceremony is locked.
+  // A thin block has no "selected" state to reveal handles with, so it is
+  // shown without one — and, unlike a tall block, without needing a mouse
+  // hover either. Ceremony is locked, so only arrive's (top) handle exists.
   const handles = page.locator('.open-time .handle');
-  await expect(handles).toHaveCount(2);
+  await expect(handles).toHaveCount(1);
   await expect(handles.first()).toHaveCSS('opacity', '1');
 });
 
