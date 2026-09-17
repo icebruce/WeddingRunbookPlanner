@@ -63,6 +63,6 @@ export function focusByKey(root, key) {
   if (!key) return false;
   const target = root.querySelector(`[data-focus-key="${cssEscape(key)}"]`);
   if (!target) return false;
-  target.focus();
+  target.focus({ preventScroll: true });
   return true;
 }
