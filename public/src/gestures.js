@@ -22,7 +22,7 @@
  * write to the DOM happens in one `requestAnimationFrame`, so an edge follows
  * the finger without the layout being rebuilt per event (F7).
  */
-import { PX_PER_MIN, applyLaneStyle, buildLayout, overlapBox } from './layout.js';
+import { PX_PER_MIN, applyLaneStyle, buildLayout, density, overlapBox } from './layout.js';
 import { buildSchedule, formatDuration, formatTime } from './schedule.js';
 import { moveGroup, moveTo, resizeBottom, resizeTop } from './operations.js';
 import { cssEscape } from './dom.js';
@@ -435,6 +435,7 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
       : `Starts ${formatTime(active.value)} · ${formatDuration(minutes)}`;
     positionBubble(active.bubble, active.card, active.edge);
     markSnapLine(active.value, layout.from);
+    markDropLine(active.value, layout.from);
   }
 
   function onResizeEnd() {
@@ -505,6 +506,23 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
       from: Number(root.querySelector('.timeline-grid')?.dataset.from),
       bubble: createBubble()
     };
+
+    /**
+     * The card being dragged is the selected card.
+     *
+     * A mouse lifts on movement alone, so it never goes through the tap that
+     * would have selected it, and a hold on touch replaces that tap outright
+     * — either way the thing under the pointer wore the plain card's ring
+     * while it was the one being manipulated. Selecting it is silent
+     * (`regions: []`): repainting now would replace the very node the pointer
+     * has captured. The paint that follows the drop renders it properly, with
+     * its toolbar and its handles.
+     *
+     * A group drag is left alone: the group *is* the selection.
+     */
+    if (ids.length === 1 && store.ui.selectedId !== id) {
+      store.setUi({ selectedId: id, groupSelection: [], openMenu: null }, { regions: [] });
+    }
 
     document.body.classList.add('is-moving');
     card.classList.add('is-lifted');
@@ -650,7 +668,10 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
         ? `Starts ${formatTime(newStart)} · ${active.ids.length} activities`
         : `Starts ${formatTime(newStart)}`;
     positionBubble(active.bubble, active.card, 'top');
-    if (Number.isFinite(active.from)) markSnapLine(newStart, active.from, clashMinutes > 0);
+    if (Number.isFinite(active.from)) {
+      markSnapLine(newStart, active.from, clashMinutes > 0);
+      markDropLine(newStart, active.from, clashMinutes > 0);
+    }
   }
 
   /**
@@ -728,6 +749,7 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
       card.style.top = `${entry.top}px`;
       card.style.height = `${entry.height}px`;
       applyLaneStyle(card, entry.lane, entry.totalLanes);
+      if (heightChanged) applyDensity(card, entry.item.duration);
 
       const time = card.querySelector('.card-time span');
       const duration = card.querySelector('.card-time strong');
@@ -760,6 +782,54 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
       if (strong) strong.textContent = `${formatDuration(gap.minutes)} open`;
     }
     return layout;
+  }
+
+  /**
+   * A card's padding follows its duration, and during a resize its duration is
+   * changing — so the class that carries it has to change with it, or the
+   * re-fit below measures the card against the room it used to have.
+   *
+   * A card rendered as a one-liner is left alone: at ten minutes or less its
+   * body is built as a single row rather than measured down to one, and that
+   * is markup, not a class.
+   */
+  function applyDensity(card, duration) {
+    if (card.classList.contains('card--line')) return;
+    const next = density(duration);
+    if (next === 'line') return;
+    card.classList.toggle('card--small', next === 'small');
+    card.classList.toggle('card--standard', next === 'standard');
+  }
+
+  /**
+   * The line the card will land on, drawn over the plan.
+   *
+   * The ruler's own snap tick (below) is drawn *behind* the cards — the ruler
+   * layer precedes the plan layer — so during a move it was hidden underneath
+   * the very card it was placing. This one lives in the plan layer, above
+   * every card but under the lifted one, and it is positioned from the clock
+   * rather than found by searching the ruler for a tick at the right pixel:
+   * a minute before the first tick or past the last one had no tick to find,
+   * which is why it came and went.
+   *
+   * It marks the *minute*, so the card's top border settles the usual two
+   * pixels below it — cards sit inside their lines, they do not stand on them.
+   */
+  function markDropLine(minute, from, bad = false) {
+    const plan = root.querySelector('.timeline-plan');
+    if (!plan || !Number.isFinite(from)) return;
+    let line = plan.querySelector('.drop-line');
+    if (!line) {
+      line = document.createElement('div');
+      line.className = 'drop-line';
+      plan.append(line);
+    }
+    line.style.top = `${(minute - from) * PX_PER_MIN}px`;
+    line.classList.toggle('is-bad', bad);
+  }
+
+  function clearDropLine() {
+    root.querySelector('.drop-line')?.remove();
   }
 
   /** The five-minute line being snapped to turns blue — or red, if landing there collides. */
@@ -808,6 +878,7 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
   function finishGesture() {
     cancelPaint();
     clearSnapLine();
+    clearDropLine();
     if (!active) return;
 
     if (active.kind === 'resize') {

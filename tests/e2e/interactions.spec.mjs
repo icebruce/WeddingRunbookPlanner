@@ -734,6 +734,113 @@ test('back clears an open-time selection instead of leaving the app', async ({ p
   await expect(page.locator('#main-plan')).toBeVisible();
 });
 
+test('back deselects where you are, without taking the scroll back with it', async ({ page, server }) => {
+  await server.seed({ plan: seedPlan({ activities: [
+    activity('a', T(9), 60, { title: 'Portraits' }),
+    activity('b', T(18), 60, { title: 'Party' })
+  ] }) });
+  await signInAndWaitForPlan(page);
+
+  await page.locator('.card[data-activity-id="a"]').click({ position: { x: 40, y: 10 } });
+  await expect(page.locator('.card.is-selected')).toHaveCount(1);
+
+  // Read on, a long way past the card that is selected.
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(200);
+  const before = await page.evaluate(() => window.scrollY);
+
+  await page.goBack();
+  await expect(page.locator('.card.is-selected')).toHaveCount(0);
+
+  // The browser records a scroll position against the entry the selection
+  // pushed, and restoring it threw the reader back to the card they had left
+  // behind. Back closes the top thing; it is not a way of travelling.
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeCloseTo(before, -1);
+});
+
+test('the drop line is drawn over the cards, not behind them', async ({ page, server, isMobile }) => {
+  test.skip(Boolean(isMobile), 'driven with a mouse');
+  await server.seed({ plan: seedPlan({ activities: [
+    activity('a', T(10), 60, { title: 'Portraits' }),
+    activity('b', T(14), 60, { title: 'Ceremony' })
+  ] }) });
+  await signInAndWaitForPlan(page);
+
+  const card = page.locator('.card[data-activity-id="a"]');
+  const box = await card.boundingBox();
+  await page.mouse.move(box.x + 40, box.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 40, box.y + 90, { steps: 8 });
+
+  const line = page.locator('.drop-line');
+  await expect(line).toHaveCount(1);
+
+  // Drawn in the plan layer rather than the ruler, which is painted first and
+  // therefore always behind the very card the line is placing.
+  expect(await line.evaluate(node => node.parentElement.className)).toContain('timeline-plan');
+
+  // And it marks the minute the card will start on: the card's own top border
+  // settles the usual two-pixel inset below it, at any card height.
+  const gap = await page.evaluate(() => {
+    const drop = document.querySelector('.drop-line').getBoundingClientRect();
+    const moving = document.querySelector('.card.is-lifted').getBoundingClientRect();
+    return moving.top - (drop.top + drop.height / 2);
+  });
+  expect(Math.abs(gap - 2)).toBeLessThan(1.5);
+
+  await page.mouse.up();
+  await expect(page.locator('.drop-line')).toHaveCount(0);
+});
+
+test('the card being dragged is the selected card', async ({ page, server, isMobile }) => {
+  test.skip(Boolean(isMobile), 'driven with a mouse');
+  await server.seed({ plan: seedPlan({ activities: [
+    activity('a', T(10), 60, { title: 'Portraits' }),
+    activity('b', T(14), 60, { title: 'Ceremony' })
+  ] }) });
+  await signInAndWaitForPlan(page);
+
+  const box = await page.locator('.card[data-activity-id="a"]').boundingBox();
+  await page.mouse.move(box.x + 40, box.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 40, box.y + 90, { steps: 8 });
+  await page.mouse.up();
+
+  // A mouse lifts on movement alone, so it never goes through the tap that
+  // would have selected the card — it used to be dropped wearing a plain
+  // card's ring, with no toolbar and no handles.
+  await expect(page.locator('.card[data-activity-id="a"]')).toHaveClass(/is-selected/);
+});
+
+test('the top bar draws its hairline only once the plan is under it', async ({ page, server }) => {
+  await server.seed({ plan: seedPlan({ activities: [
+    activity('a', T(9), 60, { title: 'Portraits' }),
+    activity('b', T(18), 60, { title: 'Party' })
+  ] }) });
+  await signInAndWaitForPlan(page);
+
+  const border = () => page.locator('.topbar').evaluate(node => getComputedStyle(node).borderBottomColor);
+  expect(await border(), 'nothing is passing underneath yet').toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await expect(page.locator('.topbar')).toHaveClass(/is-collapsed/);
+  // It fades in over the handover rather than appearing with it.
+  await expect.poll(border).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+});
+
+test('the bars under the top bar stick to its measured height, not to a guess', async ({ page, server }) => {
+  await server.seed({ plan: seedPlan({ status: 'Final', activities: [
+    activity('a', T(9), 60, { title: 'Portraits' })
+  ] }) });
+  await signInAndWaitForPlan(page);
+
+  const measured = await page.evaluate(() => ({
+    token: getComputedStyle(document.documentElement).getPropertyValue('--topbar-height').trim(),
+    real: Math.round(document.querySelector('.topbar').getBoundingClientRect().height)
+  }));
+  expect(measured.token).toBe(`${measured.real}px`);
+});
+
 test('the now line eases between ticks rather than stepping', async ({ page, server }) => {
   const now = new Date();
   const minutes = now.getHours() * 60 + now.getMinutes();

@@ -31,7 +31,16 @@ svg.icon { width: 1.05em; height: 1.05em; fill: none; stroke: currentColor; stro
   position: sticky;
   top: 0;
   z-index: 40;
-  min-height: var(--topbar-height);
+  /*
+   * `--topbar-min` is the floor; `--topbar-height` is what the bar actually
+   * measures (app.js writes it after every paint). They are two different
+   * numbers on a phone with a notch, where the safe-area inset is part of the
+   * padding — and everything that sticks underneath this bar sticks to the
+   * measured one. Using the same custom property for both would make the
+   * min-height ratchet up to whatever the bar last measured and never come
+   * back down.
+   */
+  min-height: var(--topbar-min);
   /* On a phone with a notch, a bar stuck to `top: 0` sits flush against the
      status bar the moment the page scrolls. The safe-area inset keeps a real
      gap above it instead of relying on whatever margin scroll happened to
@@ -44,8 +53,17 @@ svg.icon { width: 1.05em; height: 1.05em; fill: none; stroke: currentColor; stro
   background: color-mix(in srgb, var(--bg) 92%, transparent);
   -webkit-backdrop-filter: saturate(1.4) blur(20px);
   backdrop-filter: saturate(1.4) blur(20px);
-  border-bottom: 1px solid var(--hair);
+  /*
+   * The hairline is a statement that something is passing underneath, so it is
+   * not drawn until something is: at rest the bar is flush with the page, and
+   * the rule fades in on the same handover that brings in the title. This is
+   * also what stops the bar appearing to change height at that moment — a
+   * border arriving on a blurred, translucent bar reads as the bar growing.
+   */
+  border-bottom: 1px solid transparent;
+  transition: border-color 160ms ease-out;
 }
+.topbar.is-collapsed { border-bottom-color: var(--hair); }
 
 .brand { display: inline-flex; align-items: center; gap: 9px; color: var(--ink); text-decoration: none; font-family: ui-serif, Georgia, "Times New Roman", serif; font-size: 18px; letter-spacing: -.015em; }
 
@@ -219,12 +237,29 @@ body.is-reordering { user-select: none; cursor: grabbing; }
    matters most; the shadow carries the elevation instead. */
 .card.is-lifted {
   z-index: 30;
-  box-shadow: var(--shadow-lifted), 0 0 0 1px var(--sel);
-  transform: scale(1.03) translateY(var(--drag-y, 0));
+  /* The same 2 px ring a selected card wears, because it *is* the selected
+     card: a mouse lift never goes through the tap that would have selected it
+     (gestures.js), and the card in the hand must not read as quieter than one
+     merely sitting there. */
+  box-shadow: 0 0 0 2px var(--sel), var(--shadow-lifted);
+  /*
+   * Translate first, then scale — and scale about the top edge.
+   *
+   * Written the other way round, the scale multiplies the travel: a card
+   * dragged 600 px landed 18 px below the finger, and the error grew with the
+   * distance, so the card came loose from the line placing it exactly when the
+   * drag was longest. Scaling about the centre added a second drift on top of
+   * that, half the growth in height, which varied with the card's duration.
+   *
+   * This way the travel is the travel, the top edge is where the clock says it
+   * is, and the card grows downwards and sideways under the hand.
+   */
+  transform-origin: 50% 0;
+  transform: translateY(var(--drag-y, 0)) scale(1.03);
 }
 /* Dropping it here would overlap something. The card says so while it is still
    in the air, so the conflict is a thing you avoid rather than discover. */
-.card.is-lifted.is-clash { box-shadow: var(--shadow-lifted), 0 0 0 1.5px var(--bad); }
+.card.is-lifted.is-clash { box-shadow: 0 0 0 2px var(--bad), var(--shadow-lifted); }
 
 @media (prefers-reduced-motion: reduce) {
   .is-highlighted { animation: none; box-shadow: 0 0 0 3px var(--sel); }
@@ -469,10 +504,15 @@ body.is-moving { cursor: grabbing; }
  * to do. The hysteresis that stops the line itself being jittered is in
  * app.js.
  */
-.topbar-title { display: grid; align-items: center; min-width: 0; }
-.topbar-title > * { grid-area: 1 / 1; transition: opacity 160ms ease-out, transform 160ms ease-out; }
+/* A fixed height, because the two halves of the cross-fade are not the same
+   shape: the brand is one line and the collapsed title is two. Sharing a grid
+   cell already stacks them, but the cell itself would still be sized by
+   whichever is taller — and anything that resizes the bar at the handover is
+   the one thing a sticky title must not do. */
+.topbar-title { display: grid; align-items: center; min-width: 0; height: 34px; }
+.topbar-title > * { grid-area: 1 / 1; align-self: center; transition: opacity 160ms ease-out, transform 160ms ease-out; }
 
-.collapsed-title { display: flex; flex-direction: column; line-height: 1.15; opacity: 0; transform: translateY(2px); pointer-events: none; }
+.collapsed-title { display: flex; flex-direction: column; justify-content: center; line-height: 1.15; opacity: 0; transform: translateY(2px); pointer-events: none; }
 .collapsed-title b { font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
 .collapsed-title small { color: var(--soft); font-size: 12px; }
 .topbar.is-collapsed .brand { opacity: 0; transform: translateY(-2px); pointer-events: none; }

@@ -86,7 +86,14 @@
   --shadow-float: 0 12px 36px rgba(0,0,0,.16);
 
   /* The top bar's height, so that everything that sticks under it has one
-     number to stick to rather than four that drift apart. */
+     number to stick to rather than four that drift apart.
+
+     `--topbar-min` is the design floor. `--topbar-height` is the bar as it
+     really measures — app.js overwrites it on :root after every paint, because
+     a notch's safe-area inset is part of the bar's padding and the floor knows
+     nothing about it. The value below is only what holds until the first
+     measurement lands. */
+  --topbar-min: 52px;
   --topbar-height: 52px;
 
   --radius: 12px;
@@ -148,5 +155,5 @@
 }
 
 @media (min-width: 721px) {
-  :root { --topbar-height: 62px; }
+  :root { --topbar-min: 62px; --topbar-height: 62px; }
 }

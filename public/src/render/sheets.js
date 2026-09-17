@@ -10,6 +10,23 @@ import { buildSchedule, formatDuration, formatTime } from '../schedule.js';
  * away what is half-typed in it.
  */
 
+/**
+ * Where focus lands when a sheet opens.
+ *
+ * `showModal()` focuses the first element carrying `autofocus`, and failing
+ * that the first focusable thing in the dialog — which here is Cancel, so
+ * editing an activity opened with a focus ring sitting on the one button that
+ * throws the edit away. Adding an activity used to answer that by focusing the
+ * name field, which raised the keyboard over the sheet as it was still
+ * arriving and buried the timing block underneath it.
+ *
+ * Neither is right. Focus goes to the sheet itself: nothing is armed, nothing
+ * is covered, Tab walks into the fields in order, and Escape still closes. The
+ * ring is `:focus-visible`, which a programmatic focus does not trigger, so
+ * there is nothing to see.
+ */
+const SHEET_FOCUS = 'tabindex="-1" autofocus';
+
 function peopleEditor(people, suggestions) {
   const values = (people || []).filter(Boolean);
   return `<div class="people-editor" data-people='${escapeHtml(JSON.stringify(values))}'>
@@ -104,7 +121,7 @@ export function activitySheet(payload, plan) {
   const suggestions = suggestionsFrom(plan);
 
   return `<dialog id="activity-dialog" class="sheet-dialog">
-    <form id="activity-form" class="sheet" method="dialog" novalidate>
+    <form id="activity-form" class="sheet" method="dialog" novalidate ${SHEET_FOCUS}>
       <header class="sheet-header">
         <button class="button button--text sheet-close" type="button">Cancel</button>
         <h2>${creating ? 'Add activity' : 'Edit activity'}</h2>
@@ -115,7 +132,7 @@ export function activitySheet(payload, plan) {
 
         <label class="field">
           <span class="field-label">Name</span>
-          <input name="title" maxlength="120" value="${escapeHtml(item.title)}" autocomplete="off" ${creating ? 'autofocus' : ''}>
+          <input name="title" maxlength="120" value="${escapeHtml(item.title)}" autocomplete="off">
         </label>
 
         ${timingBlock(item, plan, Number(item.start) || 0)}
@@ -250,7 +267,7 @@ export function versionsSheet(versions, { plan, updatedAt, deviceLabel = 'this d
   const current = plan ? buildSummary(plan) : null;
 
   return `<dialog id="versions-dialog" class="sheet-dialog sheet-dialog--wide">
-    <section class="sheet">
+    <section class="sheet" ${SHEET_FOCUS}>
       <header class="sheet-header">
         <button class="button button--text sheet-close" type="button">Close</button>
         <h2>Version history</h2>
@@ -323,7 +340,7 @@ function relativeTime(value) {
 
 export function settingsSheet(plan) {
   return `<dialog id="settings-dialog" class="sheet-dialog">
-    <form id="settings-form" class="sheet" method="dialog" novalidate>
+    <form id="settings-form" class="sheet" method="dialog" novalidate ${SHEET_FOCUS}>
       <header class="sheet-header">
         <button class="button button--text sheet-close" type="button">Cancel</button>
         <h2>Plan settings</h2>

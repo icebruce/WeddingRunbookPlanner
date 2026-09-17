@@ -337,6 +337,17 @@ function measureStickyInset() {
     total += node.getBoundingClientRect().height;
   }
   document.documentElement.style.setProperty('--sticky-inset', `${Math.round(total)}px`);
+
+  // The bar's real height, for the bars that stick to its underside. The token
+  // is a design floor (52 px, 62 px on a desktop) and the bar is often taller
+  // than it — a notch's safe-area inset is part of its padding — which left the
+  // live strip and the pinned bars sticking somewhere inside it. They can only
+  // be right if the number they use is measured.
+  const topbar = app.querySelector('.topbar');
+  if (topbar) {
+    document.documentElement.style.setProperty(
+      '--topbar-height', `${Math.round(topbar.getBoundingClientRect().height)}px`);
+  }
 }
 
 /**
@@ -528,6 +539,14 @@ function showDiscardAlert() {
 
 // -------------------------------------------------------------- back button
 //
+// The browser restores the scroll position it recorded for a history entry, and
+// the entry this module pushes is recorded at the moment something was opened.
+// Selecting a card near the top of the day, scrolling a long way down and
+// pressing back therefore did two things: it cleared the selection, and it
+// threw the reader back to where the card had been. Back closes the top thing;
+// it is not a way of travelling, and the page stays exactly where it is.
+history.scrollRestoration = 'manual';
+
 // On a phone, "back" is the hardware button or edge gesture, and it goes to
 // the browser's history, not to the app. Left alone it leaves the whole plan
 // behind whatever was open — a sheet, a menu, a selected card — instead of

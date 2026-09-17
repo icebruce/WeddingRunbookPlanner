@@ -124,7 +124,7 @@ Minimum: 12 px anywhere; 16 px for any text input on phones (prevents iOS zoom).
 ## 4. Components
 
 ### 4.1 Top bar
-Height 52 phone / 62 desktop, sticky, glass, hairline bottom border when content is under it.
+Height 52 phone / 62 desktop **minimum**, sticky, glass. The hairline bottom border is drawn only once something is passing underneath — it fades in over 160 ms on the same handover that brings in the collapsed title, and there is no rule at rest. The bar is often taller than the minimum (a notch's safe-area inset is part of its padding), so everything that sticks to its underside reads the measured height (`--topbar-height`, written by app.js) rather than the floor (`--topbar-min`). The title cell is a fixed 34 px, because the brand is one line and the collapsed title is two and the bar must not resize at the handover.
 Left: brand (heart 20 px + serif 19 px) or, once scrolled, collapsed title (`Wedding Day` 17/650 over `Sat, Nov 21` 12). The two share one grid cell and cross-fade over 160 ms with a 2 px rise; neither is ever `display: none`, so the handover costs no reflow. The line that triggers it has a 10 px band — collapse as the title goes under the bar, restore only once it is 10 px clear — so resting the scroll on the handover cannot flip it back and forth. Right: save state (footnote, 7 px dot), then 44 px menu button. Desktop adds status control (34 px pill) before the menu.
 Day-of right side: `🔒 View only` pill (30 px) + **Edit** text button (17/600 `--sel`). Editing on the day: amber `● Editing` pill + **Done**.
 
@@ -193,6 +193,7 @@ Pulse: `box-shadow` ring expanding 0 → 7 px and fading, 1.8 s, infinite; disab
 
 ### 4.7 Sheets, dialogs, menus
 - **Sheet (phone):** 16 px top radius, grabber 36×5, header 52 px with `Cancel` (17 `--sel`), title (17/600), `Done` (17/650 `--sel`); body padding 18/16, section gap 22. Scrim `rgba(0,0,0,.3)`.
+  A sheet opens with focus on itself, never on a control inside it: focusing the first field raised the keyboard over the sheet as it was still arriving and buried the timing block, and focusing nothing at all left the ring on `Cancel` — the one button that throws the edit away. Nothing is armed, nothing is covered, and Tab walks into the fields in order.
   The grabber means what it means everywhere else: the sheet can be pulled down to dismiss. It follows the finger exactly, resists an upward pull, and the scrim lightens as it goes. Letting go past 40 % of its height, or above 0.5 px/ms, dismisses through the same path as Cancel — so a sheet with typing in it still asks, with the sheet back at rest underneath the question. The pull starts anywhere on the sheet's own chrome, and inside the scrolling body only at the very top, because below that a downward drag means scrolling back up. Wide layouts get a centred dialog and no pull.
 - **Dialog (desktop):** 580 px wide, 16 px radius, same header at 15/16 px, two-column body grid where fields are short.
 - **Grouped fields:** `--surface-2`, 12 px radius, 50 px rows (42 desktop), 0.5 px dividers; label left (body), value right (`--soft`).
@@ -202,6 +203,7 @@ Pulse: `box-shadow` ring expanding 0 → 7 px and fading, 1.8 s, infinite; disab
 - **Action sheet (phone):** two grouped cards (14 px radius); header 14/600 + 13 `--soft`; options 62 px min, centered, 18 px `--sel` title + 13 `--soft` description; separate Cancel 58 px 18/650.
 - **Menu:** 250 px, 14 px radius, rows 46 px, icon 19 px + 17 px text; value or switch right-aligned; 6 px separators between groups. Desktop menus 15 px text, 40 px rows.
 - **Alert:** 36 px side margins, 18 px radius, icon well 44 px, title 17/650, body 14, stacked 46 px buttons (primary filled `--sel`), footnote 13.
+- **Drop line:** 2 px `--sel` centred on the minute being snapped to, with a 7 px leading dot, spanning the plan column; red when landing there would overlap. Drawn in the plan layer, above every card and below the lifted one — the ruler is painted first, so a tick is always behind the card it is placing — and positioned from the clock, not by finding a tick, so it exists at every minute including those outside the ruler's range. The card's own top border settles the usual 2 px inset below it: cards sit inside their lines, they do not stand on them.
 - **Toast:** dark `rgba(28,28,30,.96)` in both themes, 16 px radius, 50 px min height, 14 px text, `Undo` 15/650 `#7FB3FF`; phone 16 px side margins, floated 20 px above whatever occupies the bottom of the screen — the floating + or the taller selection toolbar, measured rather than assumed; desktop centered 28 px from bottom. Auto-hide 6 s; one at a time. The countdown is *unattended* time: it stops while a pointer is over the toast or focus is inside it, and resumes on the way out, because Undo is the only way back from a delete. A toast can also be swiped down to dismiss — it follows the finger, resists upward, and leaves past 28 px or 0.4 px/ms.
 - **Pinned bars** (offline, filter): 44 px min, glass, 14–15 px text, sticky under the top bar.
 
@@ -246,6 +248,8 @@ White A4/Letter, 44/52 px margins, header rule 1.5 px black; phase group labels 
 
 A region is repainted by replacing its HTML, so the settle after a committed change is done with FLIP (`render/settle.js`): measure, paint, invert, release. It is measured against the clock rather than the page — the visible range starts half an hour before the first activity, so moving that activity re-bases every pixel on the timeline, and a page-space comparison would animate the whole day sliding for one card's nudge. Cards, open-time blocks and the end marker all settle; a card that ends up where it already is does not move, which is why a committed drag stays put and a cancelled one eases back. Interrupting a settle continues from where the card actually is, not from where it started.
 | Active resize edge, dragged card | **none** (follows pointer) | — |
+
+A lifted card translates *then* scales, anchored at its top edge (`transform-origin: 50% 0`). Scaling first multiplies the travel — three per cent of it — so a long drag left the card below the finger and off the line placing it, by more the further it went; scaling about the centre added a second drift that varied with the card's height. Both edges a drag is read against now sit exactly where the clock says.
 
 **Sharp for what you did; smooth for what the system did.** The lift is the only moment that overshoots, because it confirms an act. Everything that follows from it — the settle, neighbours moving, a cancelled drag returning — stays on the calm curve.
 | Live pulse | 1.8 s loop | ease-out |
