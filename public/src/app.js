@@ -16,6 +16,7 @@ import { readDeviceCopy, writeDeviceCopy } from './device.js';
 import { cssEscape, escapeHtml, focusByKey, paint, uid } from './dom.js';
 import { AUTO_VIEW_ONLY_MS, createClock, minutesNow, readOverride, shouldBeOn, stripState, writeOverride } from './dayof.js';
 import { createGestures } from './gestures.js';
+import { bindSheetDrag } from './sheet-drag.js';
 import { PX_PER_MIN } from './layout.js';
 import { icon } from './icons.js';
 import { SAVE_STATES, createSavePipeline } from './save.js';
@@ -31,6 +32,7 @@ import { renderPrint } from './render/print.js';
 import { renderStrip } from './render/strip.js';
 import { renderHeading, renderSummary, renderTimeline } from './render/timeline.js';
 import { fitCards, hiddenDetails, watchFit } from './render/fit.js';
+import { createSettle } from './render/settle.js';
 import { createToaster } from './render/toast.js';
 import { renderToolbar } from './render/toolbar.js';
 import { normalizeDuration } from './validate.js';
@@ -48,12 +50,51 @@ const toast = createToaster(
 const store = createStore();
 const DEVICE_ID = deviceId();
 
+/**
+ * How long "Saving…" stays up once it has been shown.
+ *
+ * Most saves wait out the 650 ms debounce first, so they are readable on their
+ * own. The ones that skip it — a version being saved, signing out, the flush
+ * on coming back to the tab — can answer in fifty milliseconds, and a word
+ * that appears and leaves inside a twentieth of a second is a flicker in the
+ * corner of the eye rather than a report. Every other state is shown at once:
+ * "Offline" and "Not saved" are things to act on, not things to pace.
+ */
+const SAVING_MIN_MS = 700;
+let shownSaveState = SAVE_STATES.saved;
+let savingShownAt = 0;
+let saveHoldTimer = null;
+
+function showSaveState(state) {
+  shownSaveState = state;
+  if (state === SAVE_STATES.saving) savingShownAt = Date.now();
+  // The offline bar reads the same state as the header, so both repaint.
+  store.setUi({ saveState: state }, { regions: ['header', 'offline'] });
+}
+
+function presentSaveState(next) {
+  clearTimeout(saveHoldTimer);
+  saveHoldTimer = null;
+
+  const owed = SAVING_MIN_MS - (Date.now() - savingShownAt);
+  if (next !== SAVE_STATES.saving && shownSaveState === SAVE_STATES.saving && owed > 0) {
+    // Show whatever is true when the debt is paid, not what was true now: a
+    // failure landing during the hold must not be masked by a stale "Saved".
+    saveHoldTimer = setTimeout(() => {
+      saveHoldTimer = null;
+      showSaveState(saver.state);
+    }, owed);
+    return;
+  }
+  showSaveState(next);
+}
+
 const saver = createSavePipeline({
   save: (plan, revision, device) => api.save(plan, revision, device),
   getPlan: () => store.plan,
   deviceId: DEVICE_ID,
   // The offline bar reads the same state as the header, so both repaint.
-  onStateChange: next => store.setUi({ saveState: next }, { regions: ['header', 'offline'] }),
+  onStateChange: presentSaveState,
   onSaved: ({ revision, updatedAt }) => {
     store.setRevision(revision, updatedAt);
     writeDeviceCopy(store.plan, { revision, dirty: false });
@@ -127,6 +168,13 @@ const REGIONS = {
 
 let currentScreen = null;
 let currentDialogKey = null;
+/**
+ * A load that resolves this fast should look instant, so nothing is drawn at
+ * all until it has not (DESIGN_GUIDE 4.9). A skeleton that appears for eighty
+ * milliseconds is a flash, which is worse than the blank it replaced.
+ */
+const LOADING_DELAY_MS = 400;
+let loadingTimer = null;
 /** Set once per visit to the day-of view, so the scroll happens on arrival only. */
 let scrolledToNow = false;
 // Focus is returned to whatever opened the sheet when it closes, so a dialog
@@ -134,6 +182,14 @@ let scrolledToNow = false;
 let dialogOpener = null;
 /** The pending "unhighlight" timer from the last summary-link jump. */
 let highlightTimer = null;
+
+function showLoading() {
+  app.innerHTML = '';
+  clearTimeout(loadingTimer);
+  loadingTimer = setTimeout(() => {
+    if (currentScreen === 'loading') app.innerHTML = loadingScreen();
+  }, LOADING_DELAY_MS);
+}
 
 function screenOf(ui) {
   if (ui.loadError && !store.plan) return 'error';
@@ -161,8 +217,26 @@ function signInScreen() {
   </main>`;
 }
 
+/**
+ * The loading skeleton (DESIGN_GUIDE 4.9).
+ *
+ * Three cards at their rest-height pattern rather than a spinner: the plan
+ * then arrives into the shape it was already drawn in, instead of the screen
+ * cutting from a message to a timeline. It is `aria-hidden` and the region
+ * carries the one sentence a screen reader needs — a skeleton read aloud is
+ * three empty boxes.
+ */
+const SKELETON_HEIGHTS = [240, 120, 360];
+
 function loadingScreen() {
-  return `<main class="loading-view"><div class="loading-mark">${icon('heart')}</div><p>Opening your plan…</p></main>`;
+  return `<main class="loading-view planner" aria-busy="true" aria-label="Opening your plan">
+    <div class="skeleton-heading" aria-hidden="true">
+      <div class="skeleton-line"></div><div class="skeleton-line"></div>
+    </div>
+    <div class="skeleton-timeline" aria-hidden="true">
+      ${SKELETON_HEIGHTS.map(height => `<div class="skeleton-card" style="height:${height}px"></div>`).join('')}
+    </div>
+  </main>`;
 }
 
 /** A failed load is never shown as an empty plan or as a sign-in prompt. */
@@ -181,9 +255,10 @@ function repaint(regions = ['all']) {
 
   if (screen !== currentScreen) {
     currentScreen = screen;
+    if (screen !== 'loading') clearTimeout(loadingTimer);
     if (screen === 'error') app.innerHTML = errorScreen(ui.loadError);
     else if (screen === 'signin') app.innerHTML = signInScreen();
-    else if (screen === 'loading') app.innerHTML = loadingScreen();
+    else if (screen === 'loading') showLoading();
     else {
       app.innerHTML = SHELL;
       paintRegions(Object.keys(REGIONS));
@@ -204,10 +279,18 @@ function repaint(regions = ['all']) {
 
 function paintRegions(names) {
   const context = { plan: store.plan, ui: store.ui };
+  // The timeline is rebuilt wholesale, so the only record of where everything
+  // just was is the screen itself. Take it before the paint; play the
+  // difference straight after, before anything else gets a chance to scroll.
+  const settle = names.includes('timeline') ? captureSettle() : null;
   for (const name of names) {
     paint(app.querySelector(`[data-region="${name}"]`), REGIONS[name](context));
   }
+  settle?.();
   if (names.includes('heading')) refreshCollapsedTitle();
+  if (names.includes('toolbar')) measureBottomFurniture();
+  if (names.some(name => STICKY_REGIONS.has(name))) measureStickyInset();
+  if (names.includes('filters')) watchChipOverflow();
   if (names.includes('timeline')) {
     gestures.bind();
     scrollToNow();
@@ -218,6 +301,124 @@ function paintRegions(names) {
       if (store.ui.selectedId) paintRegions(['toolbar']);
     });
   }
+}
+
+/**
+ * How tall the bottom of the screen already is, so a toast can sit above it.
+ *
+ * That is the 58 px floating + most of the time, but selecting a card replaces
+ * the + with the selection toolbar, which is twice as tall — taller again when
+ * the selected card has a second line of hidden details to repeat. The toast
+ * used to be pinned at a fixed 96 px, tuned for the +, which put it on top of
+ * the toolbar's context line and the top of its buttons on every lock,
+ * duplicate, stage change and handle resize. Measuring is the only honest
+ * answer: the height depends on what the selected card had to hide.
+ */
+function measureBottomFurniture() {
+  const node = app.querySelector('.toolbar, .mobile-add');
+  const height = node ? Math.round(node.getBoundingClientRect().height) : 0;
+  document.documentElement.style.setProperty('--bottom-furniture', `${height}px`);
+}
+
+/**
+ * How much of the top of the screen is already spoken for.
+ *
+ * The top bar is always there; the live strip joins it on the day; the offline
+ * and filter bars join either, and each other. Anything scrolled into view —
+ * a card tabbed onto, the card focus is returned to after Alt+arrow moves it —
+ * has to clear whatever is actually showing, which is why this is summed
+ * rather than written down as a number.
+ */
+const STICKY_REGIONS = new Set(['header', 'strip', 'offline', 'filterbar']);
+
+function measureStickyInset() {
+  let total = 0;
+  for (const node of app.querySelectorAll('.topbar, .live-strip, .pinned-bar')) {
+    total += node.getBoundingClientRect().height;
+  }
+  document.documentElement.style.setProperty('--sticky-inset', `${Math.round(total)}px`);
+}
+
+/**
+ * The chip row hides its scrollbar, so the row itself has to say when there is
+ * more of it. A chip cut flush at the screen edge reads as the last chip; one
+ * fading out reads as a row that carries on. Only the side that really has
+ * more is faded, so a row that fits is not given a false edge.
+ */
+function markChipOverflow() {
+  const row = app.querySelector('.filter-chips');
+  if (!row) return;
+  const max = row.scrollWidth - row.clientWidth;
+  row.classList.toggle('has-more-before', row.scrollLeft > 1);
+  row.classList.toggle('has-more-after', row.scrollLeft < max - 1);
+}
+
+// The row is replaced on every filter repaint, so the observer is re-pointed
+// rather than re-created; a new one per paint would leak one per click.
+const chipObserver = new ResizeObserver(markChipOverflow);
+
+function watchChipOverflow() {
+  const row = app.querySelector('.filter-chips');
+  if (!row) return;
+  row.addEventListener('scroll', markChipOverflow, { passive: true });
+  chipObserver.disconnect();
+  chipObserver.observe(row);
+  markChipOverflow();
+}
+
+/**
+ * The on-screen keyboard.
+ *
+ * It does not move the layout viewport on iOS, so a sheet anchored to the
+ * bottom of the page is anchored behind the keyboard, and the field being
+ * typed into can sit under it with no way back but a manual scroll. The
+ * visual viewport is the only thing that knows the keyboard is there.
+ *
+ * How much of the screen it covers is measured against the viewport's own
+ * resting height, learned by watching, rather than against `innerHeight`.
+ * Those two are not the same box on every engine: WebKit reports them against
+ * different things, and `visualViewport.height` is not meaningful at all until
+ * the page has laid out. Subtracting one from the other gave a resting inset
+ * of nearly the whole screen on iOS, which took `max-height` below zero and
+ * collapsed the editor sheet to nothing — the pull gesture then dismissed on
+ * any movement, because every distance is past 40 % of no height.
+ *
+ * Against its own resting height the answer is exactly zero when there is no
+ * keyboard, whatever the engine thinks `innerHeight` means. The baseline is
+ * relearned on a window resize, which is a rotation or a window being dragged
+ * — never a keyboard, because a keyboard that moved the layout viewport would
+ * not need any of this.
+ */
+function trackKeyboardInset() {
+  const viewport = window.visualViewport;
+  if (!viewport) return;
+
+  let restingExtent = 0;
+
+  const update = () => {
+    const extent = viewport.height + viewport.offsetTop;
+    // Nothing useful to read yet. Writing a number now is how the sheet ends
+    // up with no height at all.
+    if (!(extent > 0)) return;
+
+    restingExtent = Math.max(restingExtent, extent);
+    const inset = Math.round(Math.max(0, restingExtent - extent));
+    document.documentElement.style.setProperty('--keyboard-inset', `${inset}px`);
+
+    // The sheet has just been resized under the field; put it back in view.
+    const focused = document.activeElement;
+    if (inset > 0 && focused?.closest?.('.sheet-body')) {
+      focused.scrollIntoView({ block: 'nearest' });
+    }
+  };
+
+  viewport.addEventListener('resize', update);
+  viewport.addEventListener('scroll', update);
+  window.addEventListener('resize', () => {
+    restingExtent = 0;
+    update();
+  });
+  update();
 }
 
 /**
@@ -359,7 +560,11 @@ function topOverlayOpen() {
     alertRoot.querySelector('dialog[open]') ||
     sheetRoot.querySelector('dialog[open]') ||
     store.ui.openMenu ||
-    store.ui.selectedId
+    store.ui.selectedId ||
+    // An open-time block that is selected is showing its handles and has taken
+    // over the timeline's one selection, exactly as a card does. Leaving it out
+    // meant back left the app instead of clearing it.
+    store.ui.selectedOpenTime
   );
 }
 
@@ -404,8 +609,21 @@ window.addEventListener('popstate', () => {
   }
   if (store.ui.selectedId) {
     store.setUi({ selectedId: null }, { regions: ['timeline', 'toolbar'] });
+    return;
+  }
+  if (store.ui.selectedOpenTime) {
+    store.setUi({ selectedOpenTime: null }, { regions: ['timeline'] });
   }
 });
+
+/**
+ * Committed changes move rather than teleport (DESIGN_GUIDE §6).
+ *
+ * Nothing settles while a gesture is running: an edge or a card being dragged
+ * follows the pointer exactly, and a repaint that happened to land mid-drag
+ * must not start easing the thing under the finger.
+ */
+const captureSettle = createSettle(app, { enabled: () => !gestures.active });
 
 const gestures = createGestures({
   root: app,
@@ -480,6 +698,9 @@ function bindSheet(dialog) {
     close();
   });
   dialog.querySelectorAll('.sheet-close').forEach(button => button.addEventListener('click', close));
+  // The grabber at the top of a sheet promises this. Same `close` as Cancel,
+  // so a sheet with typing in it still asks before throwing it away.
+  bindSheetDrag(dialog, { close });
   dialog.addEventListener('click', event => {
     if (event.target === dialog) close();
   });
@@ -818,10 +1039,14 @@ document.addEventListener('click', event => {
     store.setUi({ openMenu: null });
     return;
   }
-  if (store.ui.selectedId && !event.target.closest('.card, dialog, .topbar, .toolbar')) {
+  // A toast is chrome, not "outside". Pressing its Undo used to clear the
+  // selection as well as undoing — the toolbar vanished from under the thumb
+  // that was about to use it again, and the timeline repainted twice for the
+  // one change.
+  if (store.ui.selectedId && !event.target.closest('.card, dialog, .topbar, .toolbar, .toast')) {
     store.setUi({ selectedId: null }, { regions: ['timeline', 'toolbar'] });
   }
-  if (store.ui.selectedOpenTime && !event.target.closest('.open-time, dialog')) {
+  if (store.ui.selectedOpenTime && !event.target.closest('.open-time, dialog, .toast')) {
     store.setUi({ selectedOpenTime: null }, { regions: ['timeline'] });
   }
 });
@@ -1080,14 +1305,23 @@ async function useTemplate() {
 }
 
 /**
- * Once the large title has scrolled past, the top bar takes it over. Watched
- * rather than measured on every scroll event, so it costs nothing while
- * scrolling a long day.
+ * Once the large title has scrolled past, the top bar takes it over.
+ *
+ * Watched rather than measured on every scroll event, so it costs nothing
+ * while scrolling a long day — and watched *twice*, at two lines ten pixels
+ * apart. One boundary means that resting the scroll on the handover, where
+ * momentum and sub-pixel rounding leave it wandering back and forth across a
+ * single line, flips the title with it. Collapsing at the lower line and
+ * coming back only at the higher one gives the decision somewhere to sit.
  */
+const HANDOVER_BAND = 10;
+
 function watchCollapsedTitle() {
-  let observer = null;
+  const observers = [];
   return () => {
-    observer?.disconnect();
+    for (const observer of observers) observer.disconnect();
+    observers.length = 0;
+
     const heading = app.querySelector('.planner-heading h1');
     const topbar = app.querySelector('.topbar');
     if (!heading || !topbar) return;
@@ -1095,16 +1329,31 @@ function watchCollapsedTitle() {
     // The margin is the bar's own height, so the title hands over exactly as it
     // goes under it — 52 px on a phone, 62 px on a desktop.
     const barHeight = Math.round(topbar.getBoundingClientRect().height);
-    observer = new IntersectionObserver(([entry]) => {
-      topbar.classList.toggle('is-collapsed', !entry.isIntersecting);
-    }, { rootMargin: `-${barHeight}px 0px 0px 0px`, threshold: 0 });
-    observer.observe(heading);
+    const watch = (inset, collapsedWhenHidden) => {
+      const observer = new IntersectionObserver(([entry]) => {
+        if (entry.isIntersecting === collapsedWhenHidden) return;
+        topbar.classList.toggle('is-collapsed', !entry.isIntersecting);
+      }, { rootMargin: `-${inset}px 0px 0px 0px`, threshold: 0 });
+      observer.observe(heading);
+      observers.push(observer);
+    };
+    // Going under the bar collapses it; coming back out ten pixels below
+    // restores it. Each observer only ever acts in its own direction.
+    watch(barHeight, false);
+    watch(Math.max(0, barHeight - HANDOVER_BAND), true);
   };
 }
 
 const refreshCollapsedTitle = watchCollapsedTitle();
 
 watchFit(app);
+// The toolbar drops its button labels under 340 px and the layout changes
+// outright on rotation, so the furniture is re-read rather than remembered.
+window.addEventListener('resize', () => {
+  measureBottomFurniture();
+  measureStickyInset();
+});
+trackKeyboardInset();
 window.addEventListener('online', () => void saver.handleOnline());
 window.addEventListener('offline', () => repaint(['header', 'offline']));
 

@@ -5,6 +5,14 @@
 
 html { background: var(--bg); }
 
+/*
+ * `overscroll-behavior-y: contain` keeps a flick at the top of the plan inside
+ * the page. Without it the browser takes it as pull-to-refresh and reloads the
+ * app — possibly with a debounced save still in the air — for a gesture that
+ * only meant "show me the start of the day".
+ */
+html, body { overscroll-behavior-y: contain; }
+
 body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--bg); color: var(--ink); -webkit-font-smoothing: antialiased; }
 
 button, input, select, textarea { font: inherit; color: inherit; }
@@ -51,7 +59,16 @@ svg.icon { width: 1.05em; height: 1.05em; fill: none; stroke: currentColor; stro
 
 .save-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); flex: none; }
 
-.save-indicator--saving .save-dot { background: var(--amber); animation: pulse 1s ease-in-out infinite; }
+/*
+ * No pulse on the saving dot.
+ *
+ * A save lasts the 650 ms debounce plus a round trip — call it eight hundred
+ * milliseconds. A one-second loop over that window runs about four fifths of a
+ * cycle: the dot fades out and is most of the way back when it is replaced, so
+ * every nudge of a card threw a flicker into the top right corner. The amber
+ * already says which state this is; it does not need to move to say it.
+ */
+.save-indicator--saving .save-dot { background: var(--amber); }
 
 .save-indicator--offline .save-dot { background: var(--faint); }
 
@@ -118,9 +135,38 @@ body.is-reordering { user-select: none; cursor: grabbing; }
 
 .login-copy > p:last-child { margin: 12px 0 24px; color: var(--soft); font-size: 13px; line-height: 1.5; }
 
-.loading-view { align-content: center; gap: 10px; color: var(--soft); font-size: 13px; }
+/*
+ * The loading skeleton (DESIGN_GUIDE 4.9).
+ *
+ * Not a spinner: a spinner says "wait", a skeleton says "this is what is
+ * coming", and the plan arrives into the shape it was already drawn in rather
+ * than cutting from one screen to another. Nothing is shown at all for the
+ * first 400 ms, because a load that fast should look instant.
+ */
+.loading-view { min-height: 100dvh; display: block; padding: 0; }
 
-.loading-mark .icon { width: 32px; height: 32px; color: var(--brand); animation: pulse 1.2s ease-in-out infinite; }
+.skeleton-line, .skeleton-card {
+  background: var(--fill);
+  border-radius: var(--radius);
+  animation: skeleton 1.4s ease-in-out infinite;
+}
+.skeleton-line { height: 14px; border-radius: 7px; }
+.skeleton-heading { padding: 18px 0 22px; display: grid; gap: 10px; }
+.skeleton-heading .skeleton-line:first-child { width: 62%; height: 32px; border-radius: 10px; }
+.skeleton-heading .skeleton-line:last-child { width: 38%; }
+/* Their real rest heights: an hour, half an hour, an hour and a half. */
+.skeleton-timeline { position: relative; display: grid; gap: 8px; }
+.skeleton-card { box-shadow: var(--shadow-card); background: var(--surface); }
+.skeleton-card::after {
+  content: '';
+  display: block;
+  margin: 12px 12px 0 26px;
+  height: 14px;
+  width: 52%;
+  border-radius: 7px;
+  background: var(--fill);
+}
+@keyframes skeleton { 50% { opacity: .55; } }
 
 .fatal-view { text-align: center; align-content: center; }
 
@@ -365,6 +411,13 @@ body.is-moving { cursor: grabbing; }
 
 /* ---- the person filter --------------------------------------------------- */
 
+/*
+ * The chip row scrolls with its scrollbar hidden, so the only thing that can
+ * say there is more of it is the row itself. A chip cut flush against the
+ * screen edge reads as a chip that ends there; one fading out reads as a row
+ * that continues. The classes are set from the row's own scroll position
+ * (app.js) so the fade is only ever on the side that really has more.
+ */
 .filter-chips {
   display: flex;
   gap: 8px;
@@ -372,7 +425,13 @@ body.is-moving { cursor: grabbing; }
   padding: 0 4px 4px;
   overflow-x: auto;
   scrollbar-width: none;
+  --fade-start: transparent 0, #000 0;
+  --fade-end: #000 100%, transparent 100%;
+  -webkit-mask-image: linear-gradient(to right, var(--fade-start), var(--fade-end));
+  mask-image: linear-gradient(to right, var(--fade-start), var(--fade-end));
 }
+.filter-chips.has-more-before { --fade-start: transparent 0, #000 24px; }
+.filter-chips.has-more-after { --fade-end: #000 calc(100% - 24px), transparent 100%; }
 .filter-chips::-webkit-scrollbar { display: none; }
 .filter-chip {
   flex: none;
@@ -402,8 +461,19 @@ body.is-moving { cursor: grabbing; }
 
 /* ---- the collapsed title ------------------------------------------------- */
 
-.collapsed-title { display: none; flex-direction: column; line-height: 1.15; }
+/*
+ * The brand and the collapsed title occupy the same cell and cross-fade, with
+ * a 2 px rise, rather than being shown and hidden. A `display` swap is a hard
+ * cut at the one scroll position where the handover happens, and the pair of
+ * them jittering across that line is the thing a sticky title most needs not
+ * to do. The hysteresis that stops the line itself being jittered is in
+ * app.js.
+ */
+.topbar-title { display: grid; align-items: center; min-width: 0; }
+.topbar-title > * { grid-area: 1 / 1; transition: opacity 160ms ease-out, transform 160ms ease-out; }
+
+.collapsed-title { display: flex; flex-direction: column; line-height: 1.15; opacity: 0; transform: translateY(2px); pointer-events: none; }
 .collapsed-title b { font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
 .collapsed-title small { color: var(--soft); font-size: 12px; }
-.topbar.is-collapsed .brand { display: none; }
-.topbar.is-collapsed .collapsed-title { display: flex; }
+.topbar.is-collapsed .brand { opacity: 0; transform: translateY(-2px); pointer-events: none; }
+.topbar.is-collapsed .collapsed-title { opacity: 1; transform: translateY(0); pointer-events: auto; }

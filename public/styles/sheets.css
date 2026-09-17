@@ -6,15 +6,25 @@
 
 .app-menu summary::-webkit-details-marker { display: none; }
 
-.menu-popover { position: absolute; right: 0; top: calc(100% + 8px); width: 210px; padding: 7px; border: 1px solid var(--hair); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-float); }
+/* 250 px, 46 px rows, 19 px icon over 17 px text — the sizes in DESIGN_GUIDE
+   4.7. It was built at 210 px with 13 px text, which is smaller than anything
+   else the phone shows and below the floor the rest of the app holds itself
+   to. Desktop takes the same menu at 15 px over 40 px rows. */
+.menu-popover { position: absolute; right: 0; top: calc(100% + 8px); width: 250px; padding: 7px; border: 1px solid var(--hair); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-float); }
 
-.menu-popover button { width: 100%; border: 0; background: transparent; display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 9px; text-align: left; font-size: 13px; }
+.menu-popover button { width: 100%; min-height: 46px; border: 0; background: transparent; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: 9px; text-align: left; font-size: 17px; }
+
+.menu-popover button .icon { width: 19px; height: 19px; flex: none; }
 
 .menu-popover button:hover { background: var(--surface-2); }
 
 .sheet-dialog { width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; }
 
-.sheet-dialog::backdrop { background: rgba(0, 0, 0, .3); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
+/* The scrim lightens as a sheet is pulled down (sheet-drag.js), so the page
+   underneath comes back as the sheet goes rather than all at once at the end.
+   `--scrim-fade` is set on the dialog; where a backdrop does not inherit it,
+   the fallback holds the scrim steady and nothing is lost but the nicety. */
+.sheet-dialog::backdrop { background: rgba(0, 0, 0, calc(.3 * var(--scrim-fade, 1))); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
 
 /*
  * A sheet rises from the bottom of a phone and a dialog settles in the middle
@@ -30,7 +40,18 @@
 .sheet-dialog[open] .sheet { animation: sheet-in 240ms cubic-bezier(.2, .8, .2, 1); }
 .sheet-dialog[open]::backdrop { animation: scrim-in 240ms cubic-bezier(.2, .8, .2, 1); }
 
-.sheet { position: absolute; inset: auto 0 0; max-height: 92dvh; overflow: hidden; border-radius: 16px 16px 0 0; background: var(--surface); box-shadow: var(--shadow-float); display: flex; flex-direction: column; padding-top: 16px; padding-bottom: var(--safe-bottom); }
+/*
+ * `dvh` follows the browser's own chrome, not the keyboard: on iOS the layout
+ * viewport does not move when the keyboard opens, so a sheet anchored to the
+ * bottom of it is anchored behind the keyboard. `--keyboard-inset` is read
+ * from `visualViewport` (app.js) and is 0 whenever there is no keyboard, or
+ * where the platform has already shrunk the layout viewport itself.
+ */
+/* Longhands, not `inset`. A shorthand carrying a `var()` is held as a pending
+   substitution, which is the same trap the reduced-motion charge ring hit with
+   `animation` — and here it left the sheet lifting by the wrong amount on
+   WebKit while reading correctly everywhere this was built. */
+.sheet { position: absolute; top: auto; right: 0; left: 0; bottom: var(--keyboard-inset, 0px); max-height: max(180px, calc(92dvh - var(--keyboard-inset, 0px))); overflow: hidden; border-radius: 16px 16px 0 0; background: var(--surface); box-shadow: var(--shadow-float); display: flex; flex-direction: column; padding-top: 16px; padding-bottom: max(0px, calc(var(--safe-bottom) - var(--keyboard-inset, 0px))); }
 
 .sheet-header { height: 52px; padding: 0 12px; border-bottom: 1px solid var(--hair); display: grid; grid-template-columns: 64px 1fr 64px; align-items: center; flex: 0 0 auto; }
 
@@ -47,6 +68,11 @@
  * The grabber. A sheet that rises from the bottom of a phone says so with a
  * bar at the top, and drawing it here keeps it out of six pieces of markup.
  */
+/* The grabber is also the one part of the sheet whose only job is to be
+   dragged, so it takes the gesture outright rather than sharing the body's
+   pan. */
+.sheet-header, .sheet::before { touch-action: none; }
+
 .sheet::before {
   content: '';
   position: absolute;
@@ -202,7 +228,16 @@
 
 [aria-invalid="true"] { outline: 1.5px solid var(--bad); outline-offset: 1px; }
 
-.toast-region { position: fixed; z-index: 2000; left: 50%; bottom: calc(96px + var(--safe-bottom)); transform: translateX(-50%); display: grid; gap: 8px; width: min(360px, calc(100% - 32px)); pointer-events: none; }
+/*
+ * The toast sits above whatever occupies the bottom of the screen. That is the
+ * 58 px floating + most of the time, but a selected card replaces it with the
+ * selection toolbar, which is twice as tall and taller again when it has a
+ * second line of hidden details. A fixed offset tuned for the + therefore lands
+ * the toast squarely on top of the toolbar exactly when there is most to read,
+ * so the height is measured on every toolbar paint (`--bottom-furniture`,
+ * app.js) and the toast is floated 20 px clear of it.
+ */
+.toast-region { position: fixed; z-index: 2000; left: 50%; bottom: calc(var(--bottom-furniture, 58px) + 38px + var(--safe-bottom)); transform: translateX(-50%); display: grid; gap: 8px; width: min(360px, calc(100% - 32px)); pointer-events: none; }
 
 
 
@@ -372,11 +407,21 @@
   /* The region ignores pointers so it never blocks the timeline; the toast
      itself accepts them, because Undo has to be pressable. */
   pointer-events: auto;
+  /* A toast is swiped away downwards, the way it came in, so the drag owns the
+     vertical axis outright — there is nothing inside it to scroll. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
   opacity: 0;
   transform: translateY(8px);
   transition: opacity 200ms ease-out, transform 200ms ease-out;
 }
-.toast.is-visible { opacity: 1; transform: translateY(0); }
+.toast.is-visible { opacity: 1; transform: translateY(var(--toast-drag, 0px)); }
+/* While the finger is down the toast follows it exactly — no easing on a
+   direct manipulation, the same rule a card or an edge follows. */
+.toast.is-dragging { transition: none; }
+/* Let go past the threshold and it carries on the way it was going. */
+.toast.is-swiped-out { transform: translateY(120%); }
 .toast-action { border: 0; background: none; color: #7FB3FF; font: inherit; font-size: 15px; font-weight: 650; margin-left: auto; }
 .toast--error { background: rgba(120, 28, 24, .97); }
 
@@ -428,7 +473,8 @@
   transform: translateX(-50%) translateY(8px);
   width: min(360px, calc(100vw - 32px));
 }
-.toast--layered.is-visible { transform: translateX(-50%) translateY(0); }
+.toast--layered.is-visible { transform: translateX(-50%) translateY(var(--toast-drag, 0px)); }
+.toast--layered.is-swiped-out { transform: translateX(-50%) translateY(120%); }
 
 /* Menu rows, in the order of the specification. A group separator is a thin
    line with room either side of it, not a band of background — a band the
@@ -436,6 +482,12 @@
    as an overlap rather than a divider. */
 .menu-popover button.is-grouped { margin-top: 7px; padding-top: 16px; border-top: 1px solid var(--hair); }
 .menu-popover button small { margin-left: auto; color: var(--soft); font-size: 15px; }
+
+@media (min-width: 721px) {
+  .menu-popover button { min-height: 40px; font-size: 15px; }
+  .menu-popover button .icon { width: 17px; height: 17px; }
+  .menu-popover button small { font-size: 13px; }
+}
 .menu-popover button .menu-switch { margin-left: auto; }
 
 /* The status control lives in the phone menu and in the wide top bar, not

@@ -94,7 +94,13 @@ function collapsedTitle(plan) {
 }
 
 export function renderHeader({ plan, ui }) {
-  const brand = `<a href="#main-plan" class="brand" aria-label="${escapeHtml(plan.coupleLabel || 'Our Wedding')} planner">${icon('heart')}<span>${escapeHtml(plan.coupleLabel || 'Our Wedding')}</span></a>${collapsedTitle(plan)}`;
+  // The two live in one grid cell so they can cross-fade in place. Side by
+  // side they would have had to be shown and hidden outright, which is a hard
+  // cut at the exact scroll position where the handover happens.
+  const brand = `<div class="topbar-title">
+    <a href="#main-plan" class="brand" aria-label="${escapeHtml(plan.coupleLabel || 'Our Wedding')} planner">${icon('heart')}<span>${escapeHtml(plan.coupleLabel || 'Our Wedding')}</span></a>
+    ${collapsedTitle(plan)}
+  </div>`;
 
   if (ui.dayOf) {
     return `${brand}<div class="topbar-actions">${dayOfControls(ui)}${appMenu(ui.openMenu === 'app', { ...ui, plan })}</div>`;

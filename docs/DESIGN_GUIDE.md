@@ -48,6 +48,8 @@ Defined once in `public/styles/tokens.css` as CSS custom properties on `:root`, 
 | `--fixed` (= `--ink`) | `#1C1C1E` | `#F2F2F0` | Solid lock only |
 | `--amber` / `--amber-tint` | `#8A5A00` / `#FFF1D6` | `#F2C46B` / `#3A2C10` | Sunset marker, “Editing” label on the day |
 | `--ok` | `#34A853` | `#34C759` | “Saved” dot only |
+
+The save dot never animates. A save lasts the 650 ms debounce plus a round trip, and a one-second pulse over that window dies mid-fade — a flicker in the corner of the eye on every nudge of a card. “Saving…” stays up for 700 ms minimum once shown, so the paths that skip the debounce (version save, sign-out, the flush on returning to the tab) cannot blink it; what is shown when that debt is paid is whatever is true *then*, never a stale “Saved”.
 | `--brand` | `#D65A73` | `#E27A90` | Heart in the brand mark only |
 
 Red never means “fixed”. Green never means “selected”. Blue never means “live”.
@@ -114,7 +116,7 @@ Minimum: 12 px anywhere; 16 px for any text input on phones (prevents iOS zoom).
 
 - **Snap label** (resizing/dragging): white text on `--sel` pill replacing the label at that line; the line itself turns `--sel` 1.5 px.
 - **Cards** sit 1 px inside their lines (top +1, height −2).
-- **Markers** in the ruler column use 22 px pills: time now (green), sunset (amber with sun icon). Their lines run *behind* cards.
+- **Markers** in the ruler column use 22 px pills: time now (green), sunset (amber with sun icon). Their lines run *behind* cards. The time-now line, its pill and the live progress bar ease over 500 ms when the clock moves them: the clock ticks every 30 s, which is a 2 px step, and the one thing on the page that moves by itself all day should not twitch.
 - **End marker:** `10:45 PM ——— End of day`, subhead, `--soft`.
 
 ---
@@ -123,7 +125,7 @@ Minimum: 12 px anywhere; 16 px for any text input on phones (prevents iOS zoom).
 
 ### 4.1 Top bar
 Height 52 phone / 62 desktop, sticky, glass, hairline bottom border when content is under it.
-Left: brand (heart 20 px + serif 19 px) or, once scrolled, collapsed title (`Wedding Day` 17/650 over `Sat, Nov 21` 12). Right: save state (footnote, 7 px dot), then 44 px menu button. Desktop adds status control (34 px pill) before the menu.
+Left: brand (heart 20 px + serif 19 px) or, once scrolled, collapsed title (`Wedding Day` 17/650 over `Sat, Nov 21` 12). The two share one grid cell and cross-fade over 160 ms with a 2 px rise; neither is ever `display: none`, so the handover costs no reflow. The line that triggers it has a 10 px band — collapse as the title goes under the bar, restore only once it is 10 px clear — so resting the scroll on the handover cannot flip it back and forth. Right: save state (footnote, 7 px dot), then 44 px menu button. Desktop adds status control (34 px pill) before the menu.
 Day-of right side: `🔒 View only` pill (30 px) + **Edit** text button (17/600 `--sel`). Editing on the day: amber `● Editing` pill + **Done**.
 
 ### 4.2 Summary line and filter chips
@@ -191,6 +193,7 @@ Pulse: `box-shadow` ring expanding 0 → 7 px and fading, 1.8 s, infinite; disab
 
 ### 4.7 Sheets, dialogs, menus
 - **Sheet (phone):** 16 px top radius, grabber 36×5, header 52 px with `Cancel` (17 `--sel`), title (17/600), `Done` (17/650 `--sel`); body padding 18/16, section gap 22. Scrim `rgba(0,0,0,.3)`.
+  The grabber means what it means everywhere else: the sheet can be pulled down to dismiss. It follows the finger exactly, resists an upward pull, and the scrim lightens as it goes. Letting go past 40 % of its height, or above 0.5 px/ms, dismisses through the same path as Cancel — so a sheet with typing in it still asks, with the sheet back at rest underneath the question. The pull starts anywhere on the sheet's own chrome, and inside the scrolling body only at the very top, because below that a downward drag means scrolling back up. Wide layouts get a centred dialog and no pull.
 - **Dialog (desktop):** 580 px wide, 16 px radius, same header at 15/16 px, two-column body grid where fields are short.
 - **Grouped fields:** `--surface-2`, 12 px radius, 50 px rows (42 desktop), 0.5 px dividers; label left (body), value right (`--soft`).
 - **Inputs:** 46 px (40 desktop), `--surface-2`, 12 px radius, 17 px text (15 desktop); focus 2 px `--sel` ring on `--surface`; error 1.5 px `--bad` ring plus message below (15 `--bad` with warning icon).
@@ -199,7 +202,7 @@ Pulse: `box-shadow` ring expanding 0 → 7 px and fading, 1.8 s, infinite; disab
 - **Action sheet (phone):** two grouped cards (14 px radius); header 14/600 + 13 `--soft`; options 62 px min, centered, 18 px `--sel` title + 13 `--soft` description; separate Cancel 58 px 18/650.
 - **Menu:** 250 px, 14 px radius, rows 46 px, icon 19 px + 17 px text; value or switch right-aligned; 6 px separators between groups. Desktop menus 15 px text, 40 px rows.
 - **Alert:** 36 px side margins, 18 px radius, icon well 44 px, title 17/650, body 14, stacked 46 px buttons (primary filled `--sel`), footnote 13.
-- **Toast:** dark `rgba(28,28,30,.96)` in both themes, 16 px radius, 50 px min height, 14 px text, `Undo` 15/650 `#7FB3FF`; phone 16 px side margins above the home indicator; desktop centered 28 px from bottom. Auto-hide 6 s; one at a time.
+- **Toast:** dark `rgba(28,28,30,.96)` in both themes, 16 px radius, 50 px min height, 14 px text, `Undo` 15/650 `#7FB3FF`; phone 16 px side margins, floated 20 px above whatever occupies the bottom of the screen — the floating + or the taller selection toolbar, measured rather than assumed; desktop centered 28 px from bottom. Auto-hide 6 s; one at a time. The countdown is *unattended* time: it stops while a pointer is over the toast or focus is inside it, and resumes on the way out, because Undo is the only way back from a delete. A toast can also be swiped down to dismiss — it follows the finger, resists upward, and leaves past 28 px or 0.4 px/ms.
 - **Pinned bars** (offline, filter): 44 px min, glass, 14–15 px text, sticky under the top bar.
 
 ### 4.8 Buttons
@@ -207,7 +210,7 @@ Primary 50 px (phone) / 40 px (desktop), 14/12 px radius, `--ink` fill, white 17
 
 ### 4.9 Empty, loading, error
 - Empty plan card: centered, 18 px radius, icon well 48 px (brand colour icon), Title 3, subhead text, primary + secondary buttons.
-- Loading: skeleton of 3 cards at their rest height pattern; no spinner for < 400 ms.
+- Loading: nothing at all for the first 400 ms, then a skeleton of 3 cards at their rest height pattern (240 / 120 / 360 px), in the real page padding, so the plan arrives into the shape it was drawn in. Never a spinner.
 - Load failure: centered message + Retry (primary); never an empty timeline.
 
 ### 4.10 Print
@@ -219,11 +222,14 @@ White A4/Letter, 44/52 px margins, header rule 1.5 px black; phase group labels 
 
 - **One width breakpoint: 720 px.** ≤720: phone layout (sheets, toolbar, floating add, collapsed-title behaviour). >720: desktop layout (dialogs, inline card controls, header add button, status control). Content max width 1100 px, centered.
 - **Input capability decides interaction**, not width: `(hover:hover) and (pointer:fine)` enables hover controls and edge handles on hover; coarse pointers use the selection model at any width (iPad, touch laptops).
-- Card content adapts to the card's own height and width through fitting (drop order + `+N` tags), not through extra breakpoints.
+- Card content adapts to the card's own height and width through fitting (drop order + `+N` tags), not through extra breakpoints. A card being resized re-fits as it goes, on every frame its height changes — density is handled by showing less, and a resize is the one gesture where density is visibly changing.
 - Narrow phones (320 px): ruler 48 px, plan starts at 54 px; filter chips scroll; toolbar labels may drop to icons only below 340 px.
 - Landscape phones: respect `env(safe-area-inset-left/right)` on the top bar, strip, timeline and toolbar.
 - Safe areas: top bar pads `env(safe-area-inset-top)` in standalone mode; toolbar, toasts and floating add sit above `env(safe-area-inset-bottom)`.
-- Use `dvh` for sheet heights; sheets scroll their body and keep the header visible; focused fields scroll into view above the keyboard (`visualViewport` resize).
+- Use `dvh` for sheet heights; sheets scroll their body and keep the header visible; focused fields scroll into view above the keyboard. `dvh` follows the browser's chrome, not the keyboard, so the sheet is lifted by `--keyboard-inset`, read from `visualViewport` and 0 wherever the platform already shrinks the layout viewport itself.
+- Two measured insets, published as custom properties and used for scroll margins: `--sticky-inset` (the top bar plus whichever of the live strip and the pinned bars are showing) and `--bottom-furniture` (the floating + or the selection toolbar). Nothing scrolled into view may land under either.
+- The page sets `overscroll-behavior-y: contain`: a flick at the top of the plan belongs to the plan, not to the browser's pull-to-refresh.
+- Horizontal scrollers with hidden scrollbars (the filter chips) fade 24 px on whichever side has more to show, and neither side when the row fits.
 
 ---
 
@@ -237,13 +243,17 @@ White A4/Letter, 44/52 px margins, header rule 1.5 px black; phase group labels 
 | Selection ring, handles, toolbar in/out | 180 ms | ease-out (toolbar slides 12 px + fade) |
 | Sheet / dialog | 240 ms in, 200 ms out | `cubic-bezier(.2,.8,.2,1)` |
 | Neighbours during drag, cards after a committed change | 180 ms `transform` | ease-out |
+
+A region is repainted by replacing its HTML, so the settle after a committed change is done with FLIP (`render/settle.js`): measure, paint, invert, release. It is measured against the clock rather than the page — the visible range starts half an hour before the first activity, so moving that activity re-bases every pixel on the timeline, and a page-space comparison would animate the whole day sliding for one card's nudge. Cards, open-time blocks and the end marker all settle; a card that ends up where it already is does not move, which is why a committed drag stays put and a cancelled one eases back. Interrupting a settle continues from where the card actually is, not from where it started.
 | Active resize edge, dragged card | **none** (follows pointer) | — |
 
 **Sharp for what you did; smooth for what the system did.** The lift is the only moment that overshoots, because it confirms an act. Everything that follows from it — the settle, neighbours moving, a cancelled drag returning — stays on the calm curve.
 | Live pulse | 1.8 s loop | ease-out |
 | Toast | 200 ms | ease-out |
 
-Motion happens after release, never during. `prefers-reduced-motion: reduce` removes all movement and the pulse (opacity changes allowed).
+Motion happens after release, never during. `prefers-reduced-motion: reduce` removes all movement and the pulse (opacity changes allowed). One exception is made by name: the charging press is the *only* thing that says a lift is coming, so under reduced motion the scale is dropped and a `--sel` ring fades in over the same 300 ms instead. Removing it outright would leave a reader who asked for less motion with no warning at all.
+
+Where the platform supports it, a card ticks the phone (8 ms) as it lifts and again as it lands. A thumb covers what it is holding, so the lift is the one moment the eye may not be on the card. iOS Safari has no vibration API and does nothing; that is not a reason to withhold it elsewhere.
 
 ---
 

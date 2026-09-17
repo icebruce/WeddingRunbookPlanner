@@ -12,7 +12,12 @@
  *   VISUAL=1 npx playwright test visual --update-snapshots   # record
  *   VISUAL=1 npx playwright test visual                      # compare
  *
- * Re-record whenever the browser, the image or the fonts change.
+ * Re-record whenever the browser, the image or the fonts change — and note
+ * that the committed baselines drift against any container whose Chromium
+ * build differs from the one they were taken on, whether or not the app has
+ * changed. To tell a real regression from that drift, run the suite against
+ * the commit before the change as well and compare the pixel counts: a screen
+ * the change did not touch reports the same number twice.
  *
  * Each shot is the screen, not the whole scroll. That is what the mockups draw,
  * and a full-page capture of a page with a sticky bar on it is not repeatable:

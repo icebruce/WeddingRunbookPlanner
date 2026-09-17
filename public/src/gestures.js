@@ -26,6 +26,7 @@ import { PX_PER_MIN, applyLaneStyle, buildLayout, overlapBox } from './layout.js
 import { buildSchedule, formatDuration, formatTime } from './schedule.js';
 import { moveGroup, moveTo, resizeBottom, resizeTop } from './operations.js';
 import { cssEscape } from './dom.js';
+import { refit } from './render/fit.js';
 
 /** Movement thresholds, in CSS pixels. */
 const TAP_SLOP = 6;
@@ -74,6 +75,27 @@ const AUTOSCROLL_MAX = 720;  // px/s — 3 hours/s, a whole day in about five
 const AUTOSCROLL_RAMP_MS = 120;
 /** How close together two taps on the same card have to land to count as a double-click. */
 const DOUBLE_TAP_MS = 400;
+
+/**
+ * A tap on the back of the phone when a card lifts and again when it lands.
+ *
+ * The lift is the moment the gesture stops being a scroll and starts being a
+ * move, and it is the one moment the eye may not be on the card — a thumb
+ * covers what it is holding. Where the platform can say so without looking, it
+ * should. iOS Safari has no vibration API and simply will not; Chrome on
+ * Android and an installed PWA both will, and there is no reason to withhold it
+ * from them because another platform cannot.
+ *
+ * Short and quiet: 8 ms is a tick, not a buzz.
+ */
+function tick(ms = 8) {
+  try {
+    navigator.vibrate?.(ms);
+  } catch {
+    // Some browsers expose it and refuse it (a page that has never been
+    // touched, a policy). A gesture is not worth failing over feedback.
+  }
+}
 
 export function createGestures({ root, store, commit, repaint, onDoubleClick, onOpenTimeActivate }) {
   /** The one gesture in progress, if any. */
@@ -457,15 +479,21 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
     // A tap is over: whatever happens now, it is not a click.
     suppressClickUntil = Date.now() + 700;
 
+    const ids = groupFor(id);
+    const locked = new Set(scheduleOf(store.plan).items.filter(entry => entry.locked).map(entry => entry.id));
+
     active = {
       kind: 'move',
       id,
-      ids: groupFor(id),
+      ids,
+      /** The subset that a commit will really move — see `moveGroup`. */
+      movableIds: ids.filter(entry => !locked.has(entry)),
       card,
       handle: card,
       pointerId,
       originDocY: clientY + window.scrollY,
       pointerY: clientY,
+      touch: pressed.touch,
       delta: 0,
       plan: store.plan,
       item,
@@ -480,6 +508,9 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
 
     document.body.classList.add('is-moving');
     card.classList.add('is-lifted');
+    // Only where the lift was not already announced by movement: a mouse has
+    // no hand on the screen to tell.
+    if (pressed.touch) tick();
     drawMove();
 
     card.addEventListener('pointermove', onMoveMove, { passive: false });
@@ -594,7 +625,11 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
     // is driven from here, so the two never fight over `transform`.
     active.card.style.setProperty('--drag-y', `${offset}px`);
 
-    for (const id of active.ids) {
+    // Only the ones that will actually move. `moveGroup` leaves a locked
+    // activity where it is, and a preview that carries it along anyway is
+    // promising a change that will not happen — invisible while the snap back
+    // was instant, plain as day now that a committed change settles.
+    for (const id of active.movableIds) {
       if (id === active.id) continue;
       const other = cardFor(id);
       if (!other) continue;
@@ -662,10 +697,12 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
 
   function onMoveEnd() {
     if (active?.kind !== 'move') return;
-    const { id, ids, delta, item } = active;
+    const { id, ids, delta, item, touch } = active;
     finishGesture();
 
     if (!delta) return repaint(['timeline']);
+    // It landed somewhere, and somewhere is a change.
+    if (touch) tick();
     if (ids.length > 1) commit('activity.moveGroup', { ids, deltaMinutes: delta });
     else commit('activity.moveTo', { id, start: item.start + delta });
   }
@@ -687,6 +724,7 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
       const card = cardFor(entry.item.id);
       if (!card) continue;
 
+      const heightChanged = card.style.height !== `${entry.height}px`;
       card.style.top = `${entry.top}px`;
       card.style.height = `${entry.height}px`;
       applyLaneStyle(card, entry.lane, entry.totalLanes);
@@ -695,6 +733,15 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
       const duration = card.querySelector('.card-time strong');
       if (time) time.textContent = entry.item.rangeLabel;
       if (duration) duration.textContent = formatDuration(entry.item.duration);
+
+      // A card's height is its duration, and what it can show follows from its
+      // height — so a card being resized has to re-fit as it goes. Without
+      // this, dragging an hour down to a quarter of one left the people, the
+      // location and the stage tag sliced off mid-row behind the body's
+      // `overflow: hidden` until the finger came up, which is the one moment
+      // in the app when density is visibly changing and the card was the last
+      // to know.
+      if (heightChanged) refit(card);
     }
 
     const end = root.querySelector('.timeline-end');
@@ -769,18 +816,37 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
       active.handle.removeEventListener('pointermove', onResizeMove);
       document.body.classList.remove('is-resizing');
     }
+    /**
+     * What the gesture moved, and how far, so it can be left there.
+     *
+     * The repaint that follows every exit from a gesture takes its "before"
+     * picture from the screen as it stands (render/settle.js). Clearing the
+     * travel here would measure a committed move from the time it started at,
+     * and the card would glide back to where it began before setting off for
+     * where it already is. Left in place, a commit measures no movement at all
+     * and stays still, and a cancel measures the whole of it and eases back —
+     * which is the behaviour the design guide asks for in both cases.
+     *
+     * The paint replaces every card node, so none of this is left behind.
+     */
+    let carried = null;
     if (active.kind === 'move') {
       if (active.autoscroll) cancelAnimationFrame(active.autoscroll);
       active.bubble.remove();
+      // The lift's scale and shadow go with the class; the travel does not.
       active.card.classList.remove('is-lifted', 'is-clash');
       active.handle.removeEventListener('pointermove', onMoveMove);
       document.body.classList.remove('is-moving');
+      carried = { ids: new Set(active.movableIds), offset: active.delta * PX_PER_MIN };
     }
+
     for (const card of root.querySelectorAll('.card')) {
-      card.style.transform = '';
       card.style.removeProperty('--drag-y');
       card.style.visibility = '';
       card.classList.remove('is-settling');
+      card.style.transform = carried?.ids.has(card.dataset.activityId)
+        ? `translateY(${carried.offset}px)`
+        : '';
     }
     active = null;
   }

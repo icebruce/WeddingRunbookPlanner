@@ -116,6 +116,21 @@ button, [role="button"], summary, .filter-chip, .stage-choice {
   }
 }
 
+/*
+ * Scrolling something into view has to clear the furniture.
+ *
+ * The top bar, the live strip and the pinned offline/filter bars are all
+ * sticky and can stack; the toolbar or the floating + sit at the bottom. The
+ * browser's own focus scroll — tabbing onto a card, or the focus returned
+ * after Alt+arrow moves one — knows none of that, and parks the card it just
+ * scrolled to underneath them. Both insets are measured rather than assumed
+ * (app.js), because how many bars are showing depends on the state of the day.
+ */
+.card, .open-time, .timeline-end, .handle {
+  scroll-margin-top: calc(var(--sticky-inset, var(--topbar-height)) + 12px);
+  scroll-margin-bottom: calc(var(--bottom-furniture, 58px) + 38px + var(--safe-bottom));
+}
+
 /* Safe areas: a phone in landscape has a notch on one side. */
 .topbar, .live-strip, .pinned-bar {
   padding-left: max(18px, env(safe-area-inset-left));
