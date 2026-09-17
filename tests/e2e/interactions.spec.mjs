@@ -186,6 +186,7 @@ test('the sheet lifts above the on-screen keyboard', async ({ page, server }) =>
   await page.locator('.toolbar [data-action="edit"]').click();
   await expect(page.locator('#activity-dialog')).toBeVisible();
 
+  await sheetAtRest(page);
   const restingBottom = await page.locator('.sheet').evaluate(n => n.getBoundingClientRect().bottom);
 
   // Playwright cannot raise a real keyboard, so the visual viewport is shrunk
@@ -200,8 +201,19 @@ test('the sheet lifts above the on-screen keyboard', async ({ page, server }) =>
   const inset = await page.evaluate(() =>
     Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--keyboard-inset')));
   expect(inset).toBe(300);
-  const liftedBottom = await page.locator('.sheet').evaluate(n => n.getBoundingClientRect().bottom);
-  expect(restingBottom - liftedBottom).toBeGreaterThanOrEqual(295);
+
+  // The contract is not "moved by roughly 300" — how far that is depends on
+  // the dialog's own box, which is not the same on every engine. It is that
+  // the sheet ends up clear of the keyboard: its bottom edge at or above the
+  // line the keyboard's top sits on.
+  const after = await page.evaluate(() => {
+    const box = document.querySelector('.sheet').getBoundingClientRect();
+    return { bottom: box.bottom, top: box.top, height: box.height, viewport: window.innerHeight };
+  });
+  const keyboardTop = after.viewport - inset;
+  expect(after.bottom, `sheet ${JSON.stringify(after)} against a keyboard topped at ${keyboardTop}`)
+    .toBeLessThanOrEqual(keyboardTop + 2);
+  expect(after.bottom).toBeLessThan(restingBottom);
 });
 
 test('a fast load shows nothing at all, and a slow one shows a skeleton', async ({ page, server }) => {
@@ -538,6 +550,20 @@ test('pressing Undo does not also clear the selection', async ({ page, server })
   await expect(page.locator('.card[data-activity-id="a"]')).toHaveClass(/is-selected/);
 });
 
+/**
+ * Wait until the sheet has finished rising into place.
+ *
+ * Its entrance is a CSS animation, and a running animation's transform beats
+ * an inline one — so anything measured during those 240 ms is measuring the
+ * entrance, not the thing under test.
+ */
+async function sheetAtRest(page) {
+  await page.waitForFunction(() => {
+    const sheet = document.querySelector('.sheet');
+    return Boolean(sheet) && sheet.getAnimations().every(a => a.playState !== 'running');
+  });
+}
+
 /** Pull the open sheet down by `distance`, optionally letting go at the end. */
 async function pullSheet(page, distance, { release = true, from = '.sheet-header' } = {}) {
   const grip = await page.locator(from).boundingBox();
@@ -562,6 +588,7 @@ test('a sheet follows the finger and springs back from a short pull', async ({ p
   await page.locator('.card').first().click();
   await page.locator('.toolbar [data-action="edit"]').click();
   await expect(page.locator('#activity-dialog')).toBeVisible();
+  await sheetAtRest(page);
 
   await pullSheet(page, 60, { release: false });
   // It follows the finger exactly: no easing on a direct manipulation.
@@ -580,6 +607,7 @@ test('a long pull dismisses the sheet', async ({ page, server }) => {
   await page.locator('.card').first().click();
   await page.locator('.toolbar [data-action="edit"]').click();
   await expect(page.locator('#activity-dialog')).toBeVisible();
+  await sheetAtRest(page);
 
   const height = await page.locator('.sheet').evaluate(node => node.offsetHeight);
   await pullSheet(page, Math.round(height * 0.6));
@@ -592,6 +620,7 @@ test('pulling a sheet down with typing in it still asks first', async ({ page, s
   await signInAndWaitForPlan(page);
   await page.locator('.card').first().click();
   await page.locator('.toolbar [data-action="edit"]').click();
+  await sheetAtRest(page);
   await page.locator('#activity-dialog input[name="title"]').fill('Something else entirely');
 
   const height = await page.locator('.sheet').evaluate(node => node.offsetHeight);
@@ -615,6 +644,7 @@ test('a sheet scrolled down is not dragged away by a downward swipe', async ({ p
   await page.locator('.card').first().click();
   await page.locator('.toolbar [data-action="edit"]').click();
 
+  await sheetAtRest(page);
   const scrolled = await page.locator('.sheet-body').evaluate(node => {
     node.scrollTop = node.scrollHeight;
     return node.scrollTop;
@@ -633,6 +663,7 @@ test('the desktop dialog is not draggable', async ({ page, server }) => {
   await signInAndWaitForPlan(page);
   await page.locator('.card').first().dblclick();
   await expect(page.locator('#activity-dialog')).toBeVisible();
+  await sheetAtRest(page);
 
   await pullSheet(page, 220);
   await expect(page.locator('#activity-dialog')).toBeVisible();

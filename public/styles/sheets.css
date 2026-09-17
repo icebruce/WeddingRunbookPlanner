@@ -47,7 +47,11 @@
  * from `visualViewport` (app.js) and is 0 whenever there is no keyboard, or
  * where the platform has already shrunk the layout viewport itself.
  */
-.sheet { position: absolute; inset: auto 0 var(--keyboard-inset, 0px); max-height: max(180px, calc(92dvh - var(--keyboard-inset, 0px))); overflow: hidden; border-radius: 16px 16px 0 0; background: var(--surface); box-shadow: var(--shadow-float); display: flex; flex-direction: column; padding-top: 16px; padding-bottom: max(0px, calc(var(--safe-bottom) - var(--keyboard-inset, 0px))); }
+/* Longhands, not `inset`. A shorthand carrying a `var()` is held as a pending
+   substitution, which is the same trap the reduced-motion charge ring hit with
+   `animation` — and here it left the sheet lifting by the wrong amount on
+   WebKit while reading correctly everywhere this was built. */
+.sheet { position: absolute; top: auto; right: 0; left: 0; bottom: var(--keyboard-inset, 0px); max-height: max(180px, calc(92dvh - var(--keyboard-inset, 0px))); overflow: hidden; border-radius: 16px 16px 0 0; background: var(--surface); box-shadow: var(--shadow-float); display: flex; flex-direction: column; padding-top: 16px; padding-bottom: max(0px, calc(var(--safe-bottom) - var(--keyboard-inset, 0px))); }
 
 .sheet-header { height: 52px; padding: 0 12px; border-bottom: 1px solid var(--hair); display: grid; grid-template-columns: 64px 1fr 64px; align-items: center; flex: 0 0 auto; }
 

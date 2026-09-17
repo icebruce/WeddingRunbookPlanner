@@ -85,6 +85,11 @@ export function bindSheetDrag(dialog, { close, isNarrow = () => window.matchMedi
       // like it was trying to get away.
       if (dy < SLOP) return;
       drag.live = true;
+      // The sheet rises into place with an animation of its own, and a running
+      // animation's transform beats an inline one — so a pull that starts
+      // inside those 240 ms moved nothing at all while the sheet carried on
+      // arriving. The hand outranks the entrance: finish it and take over.
+      for (const animation of sheet.getAnimations()) animation.finish();
       // Now that it is a pull rather than a tap, follow the finger even when
       // it leaves the sheet — which it will, because the sheet is going with
       // it.
