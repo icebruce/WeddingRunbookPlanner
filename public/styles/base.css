@@ -335,7 +335,14 @@ body.is-reordering { user-select: none; cursor: grabbing; }
 /* While a card is selected the + is not offered: the toolbar has taken its place. */
 .toolbar ~ .mobile-add { display: none; }
 
+/* Deselecting swaps the toolbar for the +. The swap itself is instant (app.js
+   holds the old toolbar in place, `is-leaving`, for exactly this long before
+   it happens), so the toolbar plays its own way out first rather than just
+   disappearing. */
+.toolbar.is-leaving { animation: toolbar-out var(--dur-base) var(--ease-out) forwards; pointer-events: none; }
+
 @keyframes toolbar-in { from { opacity: 0; transform: translateY(12px); } }
+@keyframes toolbar-out { to { opacity: 0; transform: translateY(12px); } }
 
 /* Neighbours settle into place after the drop, never during it. */
 .card.is-settling { transition: transform var(--dur-base) var(--ease-out); }
