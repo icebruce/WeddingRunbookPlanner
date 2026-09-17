@@ -18,6 +18,7 @@
  * This lives apart from `gestures.js`, which is about the timeline — its whole
  * vocabulary is cards, minutes and the clock, and none of that applies here.
  */
+import { tick } from './haptics.js';
 
 /** Below this, the finger has not said anything yet. */
 const SLOP = 8;
@@ -25,8 +26,8 @@ const SLOP = 8;
 const DISMISS_FRACTION = 0.4;
 /** Or how fast, so a short flick dismisses as readily as a long pull. */
 const DISMISS_VELOCITY = 0.5; // px/ms
-/** The sheet curve, from DESIGN_GUIDE §6. */
-const SPRING = '240ms cubic-bezier(.2, .8, .2, 1)';
+/** The sheet curve, read from the tokens so §6 is written down once. */
+const SPRING = 'var(--dur-sheet) var(--ease-sheet)';
 /** Pulling up has nowhere to go, so it is resisted rather than refused. */
 const RESISTANCE = 4;
 
@@ -64,6 +65,7 @@ export function bindSheetDrag(dialog, { close, isNarrow = () => window.matchMedi
   };
 
   const rest = () => {
+    sheet.classList.remove('is-dragging');
     sheet.style.transition = `transform ${SPRING}`;
     setOffset(0);
     sheet.addEventListener('transitionend', () => { sheet.style.transition = ''; }, { once: true });
@@ -94,6 +96,11 @@ export function bindSheetDrag(dialog, { close, isNarrow = () => window.matchMedi
       // it leaves the sheet — which it will, because the sheet is going with
       // it.
       sheet.setPointerCapture(event.pointerId);
+      // The sheet now carries a transition of its own — it arrives and leaves
+      // on one (styles/sheets.css) — and a transition is exactly what a
+      // direct manipulation must not have. Clearing the inline one is no
+      // longer enough to be rid of it.
+      sheet.classList.add('is-dragging');
       sheet.style.transition = '';
     }
 
@@ -127,7 +134,11 @@ export function bindSheetDrag(dialog, { close, isNarrow = () => window.matchMedi
     // none of this matters; if it stops to ask whether to discard the typing,
     // the sheet is already sitting where it belongs underneath the question.
     rest();
-    if (far || velocity > DISMISS_VELOCITY) close();
+    if (!(far || velocity > DISMISS_VELOCITY)) return;
+    // The pull was enough. The sheet is on its way out under the finger that
+    // sent it, which is the moment to say so rather than after it has gone.
+    tick();
+    close();
   };
 
   dialog.addEventListener('pointerup', release);

@@ -54,12 +54,27 @@ test('a toast can be swiped away', async ({ page, server }) => {
   await page.locator('.toolbar [data-action="lock"]').click();
   const toast = page.locator('.toast');
   await expect(toast).toBeVisible();
-  const box = await toast.boundingBox();
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 20, { steps: 4 });
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 60, { steps: 6 });
-  await page.mouse.up();
+  const drag = async (dx, dy) => {
+    // Re-read it each time: the first drag ends off the toast, which counts as
+    // a click outside the selection and takes the toolbar away — and the toast
+    // floats above whatever occupies the bottom of the screen, so it moves.
+    const box = await toast.boundingBox();
+    const x = box.x + 30;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + dx / 3, y + dy / 3, { steps: 4 });
+    await page.mouse.move(x + dx, y + dy, { steps: 6 });
+    await page.mouse.up();
+  };
+
+  // Down is the one direction that is nearly free — the toast is already at
+  // the bottom of the screen — so it is not a dismissal.
+  await drag(0, 60);
+  await expect(toast).toBeVisible();
+
+  // Sideways is.
+  await drag(60, 0);
   await expect(toast).toBeHidden({ timeout: 2000 });
 });
 
@@ -841,6 +856,85 @@ test('the bars under the top bar stick to its measured height, not to a guess', 
   expect(measured.token).toBe(`${measured.real}px`);
 });
 
+test('a sheet leaves on the same curve it arrived on', async ({ page, server }) => {
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+  await signInAndWaitForPlan(page);
+
+  const card = page.locator('.card').first();
+  if (await isPhoneLayout(page)) {
+    await card.click({ position: { x: 40, y: 10 } });
+    await page.locator('.toolbar [data-action="edit"]').click();
+  } else {
+    await card.dblclick({ position: { x: 40, y: 10 } });
+  }
+  const dialog = page.locator('#activity-dialog');
+  await expect(dialog).toBeVisible();
+
+  // It arrives on a transition rather than a keyframe, so a pull can take it
+  // over mid-entrance (sheet-drag.js finishes whatever is running).
+  expect(await dialog.locator('.sheet').evaluate(node => getComputedStyle(node).transitionProperty))
+    .toMatch(/transform|scale/);
+
+  await dialog.locator('.sheet-close').click();
+
+  // Still on the page for the length of its exit — that is the whole point,
+  // because a dialog torn down on the same tick as `close()` cannot animate —
+  // but closed, inert and untouchable while it goes.
+  const leaving = page.locator('#activity-dialog.is-leaving');
+  await expect(leaving).toHaveCount(1);
+  expect(await leaving.evaluate(node => node.open)).toBe(false);
+  expect(await leaving.evaluate(node => node.inert)).toBe(true);
+  expect(await leaving.evaluate(node => getComputedStyle(node).pointerEvents)).toBe('none');
+
+  // And then gone: one leaving sheet does not become two.
+  await expect(page.locator('#activity-dialog')).toHaveCount(0);
+});
+
+test('a row that comes back during a resize is faded in, not popped', async ({ page, server }) => {
+  test.skip(isPhoneLayout(page), 'a pointer drag of the bottom edge');
+  await server.seed({ plan: seedPlan({ activities: [
+    activity('a', T(10), 120, { title: 'Getting-ready Portraits', location: 'Bridal suite', people: ['Bride', 'Photographer'] })
+  ] }) });
+  await signInAndWaitForPlan(page);
+
+  const card = page.locator('.card[data-activity-id="a"]');
+  await card.click();
+  const hidden = () => card.evaluate(node =>
+    [...node.querySelectorAll('[data-drop]')].filter(row => row.hidden).length);
+
+  const box = await card.locator('[data-role="resize"]').boundingBox();
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  // Down to a quarter of an hour: rows go as the card shrinks under the finger.
+  await page.mouse.move(x, y - 420, { steps: 12 });
+  await page.waitForTimeout(120);
+  expect(await hidden(), 'the card re-fits while it is being resized').toBeGreaterThan(0);
+
+  // Each row comes back at its own point in the drag and its fade is over in
+  // 140 ms, so asking what is running at the end catches nothing. Count them
+  // as they start instead.
+  await page.evaluate(() => {
+    const original = Element.prototype.animate;
+    window.__rowFades = 0;
+    Element.prototype.animate = function animate(...args) {
+      if (this.hasAttribute?.('data-drop')) window.__rowFades += 1;
+      return original.apply(this, args);
+    };
+  });
+
+  // And back. A row that returns appeared out of nothing, so it fades in —
+  // the half of the change the card's own moving edge does not cover.
+  await page.mouse.move(x, y, { steps: 12 });
+  await page.mouse.up();
+
+  expect(await hidden(), 'and they are back').toBe(0);
+  expect(await page.evaluate(() => window.__rowFades), 'the rows that came back were faded in')
+    .toBeGreaterThan(0);
+});
+
 test('the now line eases between ticks rather than stepping', async ({ page, server }) => {
   const now = new Date();
   const minutes = now.getHours() * 60 + now.getMinutes();
@@ -873,7 +967,10 @@ test('a reader with reduced motion still gets a charge before the lift', async (
       name: style.animationName,
       duration: style.animationDuration,
       ring: style.boxShadow,
-      scale: getComputedStyle(card).transform
+      // The press is on the individual `scale` property, so that going from
+      // held to lifted is one property easing rather than two transforms
+      // swapping.
+      scale: getComputedStyle(card).scale
     };
     card.classList.remove('is-charging');
     return result;

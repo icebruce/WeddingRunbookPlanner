@@ -27,6 +27,7 @@ import { buildSchedule, formatDuration, formatTime } from './schedule.js';
 import { moveGroup, moveTo, resizeBottom, resizeTop } from './operations.js';
 import { cssEscape } from './dom.js';
 import { refit } from './render/fit.js';
+import { bump, tick } from './haptics.js';
 
 /** Movement thresholds, in CSS pixels. */
 const TAP_SLOP = 6;
@@ -75,27 +76,6 @@ const AUTOSCROLL_MAX = 720;  // px/s — 3 hours/s, a whole day in about five
 const AUTOSCROLL_RAMP_MS = 120;
 /** How close together two taps on the same card have to land to count as a double-click. */
 const DOUBLE_TAP_MS = 400;
-
-/**
- * A tap on the back of the phone when a card lifts and again when it lands.
- *
- * The lift is the moment the gesture stops being a scroll and starts being a
- * move, and it is the one moment the eye may not be on the card — a thumb
- * covers what it is holding. Where the platform can say so without looking, it
- * should. iOS Safari has no vibration API and simply will not; Chrome on
- * Android and an installed PWA both will, and there is no reason to withhold it
- * from them because another platform cannot.
- *
- * Short and quiet: 8 ms is a tick, not a buzz.
- */
-function tick(ms = 8) {
-  try {
-    navigator.vibrate?.(ms);
-  } catch {
-    // Some browsers expose it and refuse it (a page that has never been
-    // touched, a policy). A gesture is not worth failing over feedback.
-  }
-}
 
 export function createGestures({ root, store, commit, repaint, onDoubleClick, onOpenTimeActivate }) {
   /** The one gesture in progress, if any. */
@@ -313,6 +293,9 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
         if (openTimeCandidate !== pressed) return;
         clearOpenTimeCandidate();
         suppressClickUntil = Date.now() + 700;
+        // Same moment as a card's lift, and the same answer: the press has
+        // won, and the thumb is covering the thing that says so.
+        tick();
         onOpenTimeActivate?.(pressed.before, pressed.start, pressed.end);
       }, LONG_PRESS_MS);
     }
@@ -499,6 +482,8 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
       plan: store.plan,
       item,
       autoscroll: null,
+      /** Whether the drop currently collides, so the change can be announced. */
+      clashing: false,
       armedFor: 0,
       lastFrame: 0,
       // The line the card is dragged against: read once, because a move
@@ -658,19 +643,27 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
     const newStart = active.item.start + active.delta;
     const clashMinutes = drawClash();
 
-    active.bubble.classList.toggle('is-bad', clashMinutes > 0);
-    active.card.classList.toggle('is-clash', clashMinutes > 0);
+    const clashing = clashMinutes > 0;
+    // Crossing into a collision is a change of state, not a degree of one, so
+    // it is announced once on the way in and never again while it lasts. The
+    // eye may be anywhere on a drag this long; the hand is on the card.
+    if (active.touch && clashing !== active.clashing) {
+      active.clashing = clashing;
+      if (clashing) bump();
+    }
+    active.bubble.classList.toggle('is-bad', clashing);
+    active.card.classList.toggle('is-clash', clashing);
     // A snap line answers "where", which is only half the question. When the
     // drop would collide, the readout answers "should you" instead.
-    active.bubble.textContent = clashMinutes > 0
+    active.bubble.textContent = clashing
       ? `Overlaps ${formatDuration(clashMinutes)}`
       : active.ids.length > 1
         ? `Starts ${formatTime(newStart)} · ${active.ids.length} activities`
         : `Starts ${formatTime(newStart)}`;
     positionBubble(active.bubble, active.card, 'top');
     if (Number.isFinite(active.from)) {
-      markSnapLine(newStart, active.from, clashMinutes > 0);
-      markDropLine(newStart, active.from, clashMinutes > 0);
+      markSnapLine(newStart, active.from, clashing);
+      markDropLine(newStart, active.from, clashing);
     }
   }
 

@@ -284,7 +284,7 @@
  * over half a second. Both are drawn with an inline `top` from the renderer,
  * so nothing animates on the first paint; only the clock's later moves do.
  */
-.now-line, .now-pill { transition: top 500ms ease-out; }
+.now-line, .now-pill { transition: top 500ms var(--ease-out); }
 
 .now-line {
   position: absolute;

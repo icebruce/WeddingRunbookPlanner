@@ -268,7 +268,7 @@ Nothing changes until one is chosen. Each choice can be undone.
 - Single step. Covers add, duplicate, delete, reorder, resize, stage, fix/unfix, edit-sheet save, open-time actions.
 - Shown as a toast `<what happened> · Undo` for 6 seconds; also ⌘/Ctrl+Z on desktop.
 - Toasts appear only for: undoable changes and errors. No “Saved” or “Stage updated” toast, and no “N activities shifted” toast — locking, unlocking, resizing and moving one activity never shift another.
-- The six seconds are unattended time. The countdown stops while a pointer is over the toast or focus is inside it, and starts again on the way out; a toast can also be swiped down to dismiss. Undo is the only way back from a delete, so it does not expire while it is being read. A toast is chrome, not “outside”: pressing its Undo never also clears the selection.
+- The six seconds are unattended time. The countdown stops while a pointer is over the toast or focus is inside it, and starts again on the way out; a toast can also be swiped right to dismiss (down is nearly free at the bottom of a screen, and dismissed it by accident). Undo is the only way back from a delete, so it does not expire while it is being read. A toast is chrome, not “outside”: pressing its Undo never also clears the selection.
 
 ### 5.11 Person filter
 - Chips: Everyone + each distinct entry in the plan's people lists. Exact match only (“Bride” does not match “All Guests”).

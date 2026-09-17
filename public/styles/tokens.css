@@ -96,6 +96,23 @@
   --topbar-min: 52px;
   --topbar-height: 52px;
 
+  /*
+   * Motion. DESIGN_GUIDE §6 gives the numbers; this is the only place they are
+   * written down, so a curve cannot drift between the sheet, the toolbar and
+   * the card. Two curves and no more: `--ease-lift` is the one overshoot in
+   * the app, `--ease-sheet` carries anything arriving from an edge, and
+   * everything else is a plain ease-out — sharp for what you did, smooth for
+   * what the system did.
+   */
+  --dur-quick: 140ms;
+  --dur-base: 180ms;
+  --dur-lift: 210ms;
+  --dur-sheet: 240ms;
+  --dur-sheet-out: 200ms;
+  --ease-out: cubic-bezier(0, 0, .2, 1);
+  --ease-lift: cubic-bezier(.2, .9, .3, 1.25);
+  --ease-sheet: cubic-bezier(.2, .8, .2, 1);
+
   --radius: 12px;
   --radius-lg: 16px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);

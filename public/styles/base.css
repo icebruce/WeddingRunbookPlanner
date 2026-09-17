@@ -61,7 +61,7 @@ svg.icon { width: 1.05em; height: 1.05em; fill: none; stroke: currentColor; stro
    * border arriving on a blurred, translucent bar reads as the bar growing.
    */
   border-bottom: 1px solid transparent;
-  transition: border-color 160ms ease-out;
+  transition: border-color 160ms var(--ease-out);
 }
 .topbar.is-collapsed { border-bottom-color: var(--hair); }
 
@@ -206,7 +206,7 @@ body.is-reordering { user-select: none; cursor: grabbing; }
 .add-hint { margin: 6px 0 0; color: var(--soft); font-size: 13px; }
 
 /* Highlight after a summary link scrolls to open time or a conflict. */
-.is-highlighted { animation: highlight 1.6s ease-out; }
+.is-highlighted { animation: highlight 1.6s var(--ease-out); }
 @keyframes highlight {
   0%, 60% { box-shadow: 0 0 0 3px var(--sel-tint), 0 0 0 4px var(--sel); }
   100% { box-shadow: none; }
@@ -255,7 +255,22 @@ body.is-reordering { user-select: none; cursor: grabbing; }
    * is, and the card grows downwards and sideways under the hand.
    */
   transform-origin: 50% 0;
-  transform: translateY(var(--drag-y, 0)) scale(1.03);
+  /*
+   * The travel and the lift are two properties, not one transform.
+   *
+   * `translate` is the hand: written every frame, never eased, because a card
+   * under the finger must not lag it. `scale` is the lift: the one overshoot
+   * in the app (§6), and because the press states below use the same property
+   * the card springs out of the squeeze it was held in rather than popping
+   * from one size to another.
+   *
+   * The individual properties compose as translate, then rotate, then scale —
+   * which is the order this needs, and the reason the travel is no longer
+   * multiplied by the scale the way a single `transform` list did it.
+   */
+  translate: 0 var(--drag-y, 0);
+  scale: 1.03;
+  transition: scale var(--dur-lift) var(--ease-lift), box-shadow var(--dur-base) var(--ease-out);
 }
 /* Dropping it here would overlap something. The card says so while it is still
    in the air, so the conflict is a thing you avoid rather than discover. */
@@ -279,7 +294,7 @@ body.is-reordering { user-select: none; cursor: grabbing; }
   padding: 10px 12px 12px;
   border-radius: 24px;
   /* It arrives from below, as the + it replaces did. */
-  animation: toolbar-in 180ms ease-out;
+  animation: toolbar-in var(--dur-base) var(--ease-out);
   background: color-mix(in srgb, var(--surface) 94%, transparent);
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
@@ -323,14 +338,14 @@ body.is-reordering { user-select: none; cursor: grabbing; }
 @keyframes toolbar-in { from { opacity: 0; transform: translateY(12px); } }
 
 /* Neighbours settle into place after the drop, never during it. */
-.card.is-settling { transition: transform 180ms ease-out; }
-.card.is-pressed { transform: scale(.99); transition: transform 100ms ease-out; }
+.card.is-settling { transition: transform var(--dur-base) var(--ease-out); }
+.card.is-pressed { scale: .99; transition: scale 100ms var(--ease-out); }
 /* The press deepening over the hold, rather than snapping at the end of it:
    with no grip to advertise the gesture, this is what telegraphs the lift, so
    it can be felt building and abandoned before it fires. */
 .card.is-charging {
-  transform: scale(.972);
-  transition: transform var(--hold-ms, 300ms) linear, box-shadow 160ms ease-out;
+  scale: .972;
+  transition: scale var(--hold-ms, 300ms) linear, box-shadow 160ms var(--ease-out);
   box-shadow: var(--shadow-hover);
 }
 
@@ -510,7 +525,7 @@ body.is-moving { cursor: grabbing; }
    whichever is taller — and anything that resizes the bar at the handover is
    the one thing a sticky title must not do. */
 .topbar-title { display: grid; align-items: center; min-width: 0; height: 34px; }
-.topbar-title > * { grid-area: 1 / 1; align-self: center; transition: opacity 160ms ease-out, transform 160ms ease-out; }
+.topbar-title > * { grid-area: 1 / 1; align-self: center; transition: opacity 160ms var(--ease-out), transform 160ms var(--ease-out); }
 
 .collapsed-title { display: flex; flex-direction: column; justify-content: center; line-height: 1.15; opacity: 0; transform: translateY(2px); pointer-events: none; }
 .collapsed-title b { font-size: 17px; font-weight: 650; letter-spacing: -.01em; }

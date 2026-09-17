@@ -20,25 +20,85 @@
 
 .sheet-dialog { width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; }
 
+/*
+ * Every dialog arrives and leaves the same way.
+ *
+ * It used to animate in only. The reason on record was that a <dialog> leaves
+ * the top layer the moment it closes, so an exit meant leaving a closed sheet
+ * lying on the page over the thing the reader had just gone back to. That is
+ * no longer true: `overlay` is a transitionable property, so with
+ * `allow-discrete` the dialog stays in the top layer for exactly as long as
+ * its exit takes and leaves properly at the end of it. app.js keeps the node
+ * around for that long and no longer (`releaseSheet`).
+ *
+ * Out is quicker than in — 200 against 240 — because leaving is the reader's
+ * decision already made, and the two action sheets and the alert, which had no
+ * motion at all, now arrive on the same curve as the sheet they interrupt.
+ */
+.sheet-dialog,
+.action-sheet-dialog,
+.alert-dialog {
+  transition:
+    overlay var(--dur-sheet-out) allow-discrete,
+    display var(--dur-sheet-out) allow-discrete;
+}
+
 /* The scrim lightens as a sheet is pulled down (sheet-drag.js), so the page
    underneath comes back as the sheet goes rather than all at once at the end.
    `--scrim-fade` is set on the dialog; where a backdrop does not inherit it,
    the fallback holds the scrim steady and nothing is lost but the nicety. */
 .sheet-dialog::backdrop { background: rgba(0, 0, 0, calc(.3 * var(--scrim-fade, 1))); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
 
-/*
- * A sheet rises from the bottom of a phone and a dialog settles in the middle
- * of a desktop; the scrim fades with either.
- *
- * Only the way in is animated. A <dialog> leaves the top layer the moment it
- * closes, so animating the way out means keeping a closed sheet on the page
- * for another fifth of a second, over the thing the person has just gone back
- * to. That is a worse answer than closing at once.
- */
-@keyframes sheet-in { from { transform: translateY(100%); } }
-@keyframes scrim-in { from { opacity: 0; } }
-.sheet-dialog[open] .sheet { animation: sheet-in 240ms cubic-bezier(.2, .8, .2, 1); }
-.sheet-dialog[open]::backdrop { animation: scrim-in 240ms cubic-bezier(.2, .8, .2, 1); }
+.sheet-dialog::backdrop,
+.action-sheet-dialog::backdrop,
+.alert-dialog::backdrop {
+  opacity: 0;
+  transition: opacity var(--dur-sheet-out) var(--ease-sheet);
+}
+.sheet-dialog[open]::backdrop,
+.action-sheet-dialog[open]::backdrop,
+.alert-dialog[open]::backdrop { opacity: 1; transition-duration: var(--dur-sheet); }
+@starting-style {
+  .sheet-dialog[open]::backdrop,
+  .action-sheet-dialog[open]::backdrop,
+  .alert-dialog[open]::backdrop { opacity: 0; }
+}
+
+/* A sheet rises from the edge it belongs to. */
+.sheet-dialog .sheet,
+.action-sheet-dialog .action-sheet {
+  transform: translateY(100%);
+  transition: transform var(--dur-sheet-out) var(--ease-sheet);
+}
+.sheet-dialog[open] .sheet,
+.action-sheet-dialog[open] .action-sheet {
+  transform: translateY(0);
+  transition-duration: var(--dur-sheet);
+}
+@starting-style {
+  .sheet-dialog[open] .sheet,
+  .action-sheet-dialog[open] .action-sheet { transform: translateY(100%); }
+}
+
+/* An alert has no edge to come from, so it settles in place. */
+.alert-dialog .alert {
+  opacity: 0;
+  scale: .96;
+  transition: opacity var(--dur-sheet-out) var(--ease-sheet), scale var(--dur-sheet-out) var(--ease-sheet);
+}
+.alert-dialog[open] .alert { opacity: 1; scale: 1; transition-duration: var(--dur-sheet); }
+@starting-style {
+  .alert-dialog[open] .alert { opacity: 0; scale: .96; }
+}
+
+/* While the finger is on it, the sheet follows the finger and nothing eases
+   (sheet-drag.js sets the inline `none`). */
+.sheet-dialog .sheet.is-dragging { transition: none; }
+
+/* A dialog on its way out is a picture, not a surface: it is still in the top
+   layer for the length of its exit, and a fifth of a second of swallowing the
+   taps meant for what is underneath is worse than no animation at all. */
+dialog.is-leaving { pointer-events: none; }
 
 /*
  * `dvh` follows the browser's own chrome, not the keyboard: on iOS the layout
@@ -256,8 +316,19 @@
   .sheet { inset: 50% auto auto 50%; transform: translate(-50%, -50%); width: min(580px, calc(100vw - 48px)); max-height: min(760px, calc(100dvh - 48px)); border-radius: 16px; padding-bottom: 0; }
   .sheet-dialog--wide .sheet { width: min(640px, calc(100vw - 48px)); }
   .sheet { padding-top: 0; }
-  @keyframes dialog-in { from { opacity: 0; transform: translate(-50%, -48%) scale(.98); } }
-  .sheet-dialog[open] .sheet { animation: dialog-in 240ms cubic-bezier(.2, .8, .2, 1); }
+  /* No edge to rise from: it settles in the middle, like the alert. The
+     centring moves to `translate` so the entrance can own `opacity` and
+     `scale` without the two fighting over one `transform`. */
+  .sheet { transform: none; translate: -50% -50%; }
+  .sheet-dialog .sheet {
+    opacity: 0;
+    scale: .98;
+    transition: opacity var(--dur-sheet-out) var(--ease-sheet), scale var(--dur-sheet-out) var(--ease-sheet);
+  }
+  .sheet-dialog[open] .sheet { opacity: 1; scale: 1; transition-duration: var(--dur-sheet); }
+  @starting-style {
+    .sheet-dialog[open] .sheet { opacity: 0; scale: .98; }
+  }
   .sheet::before { display: none; }
   .sheet-header { border-radius: 16px 16px 0 0; }
   .sheet-header h2 { font-size: 16px; }
@@ -414,21 +485,25 @@
   /* The region ignores pointers so it never blocks the timeline; the toast
      itself accepts them, because Undo has to be pressable. */
   pointer-events: auto;
-  /* A toast is swiped away downwards, the way it came in, so the drag owns the
-     vertical axis outright — there is nothing inside it to scroll. */
-  touch-action: none;
+  /* A toast is swiped away sideways, so the drag owns the horizontal axis and
+     the vertical one is left to the page: a finger that lands on the toast
+     while scrolling the day still scrolls the day. */
+  touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
+  /* Two axes, two properties: it rises into place, and it is pushed out
+     sideways. One `transform` would have the entrance and the finger writing
+     over each other. */
   opacity: 0;
-  transform: translateY(8px);
-  transition: opacity 200ms ease-out, transform 200ms ease-out;
+  translate: 0 8px;
+  transition: opacity var(--dur-sheet-out) var(--ease-out), translate var(--dur-sheet-out) var(--ease-out);
 }
-.toast.is-visible { opacity: 1; transform: translateY(var(--toast-drag, 0px)); }
+.toast.is-visible { opacity: 1; translate: var(--toast-drag, 0px) 0; }
 /* While the finger is down the toast follows it exactly — no easing on a
    direct manipulation, the same rule a card or an edge follows. */
 .toast.is-dragging { transition: none; }
 /* Let go past the threshold and it carries on the way it was going. */
-.toast.is-swiped-out { transform: translateY(120%); }
+.toast.is-swiped-out { translate: 120% 0; }
 .toast-action { border: 0; background: none; color: #7FB3FF; font: inherit; font-size: 15px; font-weight: 650; margin-left: auto; }
 .toast--error { background: rgba(120, 28, 24, .97); }
 
