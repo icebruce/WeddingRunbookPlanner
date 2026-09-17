@@ -26,8 +26,26 @@ const SLOP = 8;
 const DISMISS_FRACTION = 0.4;
 /** Or how fast, so a short flick dismisses as readily as a long pull. */
 const DISMISS_VELOCITY = 0.5; // px/ms
-/** The sheet curve, read from the tokens so §6 is written down once. */
-const SPRING = 'var(--dur-sheet) var(--ease-sheet)';
+/**
+ * The sheet curve, read from the tokens so §6 is written down once.
+ *
+ * Longhands, not the `transition` shorthand. A shorthand carrying a `var()` is
+ * held as a pending substitution — the same trap `.sheet`'s own `inset` and
+ * the reduced-motion charge ring's `animation` both hit, and both on WebKit,
+ * where it reads correctly everywhere this was built and does nothing on the
+ * one engine that matters most here.
+ */
+const SPRING = {
+  transitionProperty: 'transform',
+  transitionDuration: 'var(--dur-sheet)',
+  transitionTimingFunction: 'var(--ease-sheet)'
+};
+
+function setTransition(sheet, on) {
+  for (const [property, value] of Object.entries(SPRING)) {
+    sheet.style[property] = on ? value : '';
+  }
+}
 /** Pulling up has nowhere to go, so it is resisted rather than refused. */
 const RESISTANCE = 4;
 
@@ -66,9 +84,9 @@ export function bindSheetDrag(dialog, { close, isNarrow = () => window.matchMedi
 
   const rest = () => {
     sheet.classList.remove('is-dragging');
-    sheet.style.transition = `transform ${SPRING}`;
+    setTransition(sheet, true);
     setOffset(0);
-    sheet.addEventListener('transitionend', () => { sheet.style.transition = ''; }, { once: true });
+    sheet.addEventListener('transitionend', () => setTransition(sheet, false), { once: true });
   };
 
   dialog.addEventListener('pointerdown', event => {
@@ -101,7 +119,7 @@ export function bindSheetDrag(dialog, { close, isNarrow = () => window.matchMedi
       // direct manipulation must not have. Clearing the inline one is no
       // longer enough to be rid of it.
       sheet.classList.add('is-dragging');
-      sheet.style.transition = '';
+      setTransition(sheet, false);
     }
 
     drag.offset = dy > 0 ? dy : dy / RESISTANCE;

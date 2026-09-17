@@ -40,6 +40,7 @@ const browserGlobals = {
   ResizeObserver: 'readonly',
   CustomEvent: 'readonly',
   Element: 'readonly',
+  PointerEvent: 'readonly',
   Event: 'readonly',
   FormData: 'readonly',
   AbortController: 'readonly',

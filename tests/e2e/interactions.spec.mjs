@@ -572,15 +572,34 @@ test('pressing Undo does not also clear the selection', async ({ page, server })
  * an inline one — so anything measured during those 240 ms is measuring the
  * entrance, not the thing under test.
  */
+/**
+ * Wait until the sheet has actually arrived.
+ *
+ * "Nothing is running" is not enough now that the entrance is a transition
+ * rather than a keyframe animation: a transition that has not started yet is
+ * not in `getAnimations()` either, so the old check answered yes before the
+ * sheet had moved at all and handed the next line a sheet still on its way up.
+ * Where it is, is the honest question.
+ */
 async function sheetAtRest(page) {
   await page.waitForFunction(() => {
     const sheet = document.querySelector('.sheet');
-    return Boolean(sheet) && sheet.getAnimations().every(a => a.playState !== 'running');
+    if (!sheet) return false;
+    if (sheet.getAnimations().some(a => a.playState === 'running')) return false;
+    return Math.abs(new window.DOMMatrixReadOnly(getComputedStyle(sheet).transform).m42) < 0.5;
   });
 }
 
-/** Pull the open sheet down by `distance`, optionally letting go at the end. */
-async function pullSheet(page, distance, { release = true, from = '.sheet-header' } = {}) {
+/**
+ * Pull the open sheet down by `distance`, optionally letting go at the end.
+ *
+ * `settleMs` is the pause before release, and it is not padding: a sheet leaves
+ * if it is pulled *far* or thrown *fast*, and a synthetic drag runs at whatever
+ * rate the harness manages — a 60 px pull dispatched in 40 ms is a flick by any
+ * honest reading. A test about the distance rule has to hold still long enough
+ * to be asking about distance.
+ */
+async function pullSheet(page, distance, { release = true, from = '.sheet-header', settleMs = 0 } = {}) {
   const grip = await page.locator(from).boundingBox();
   const x = grip.x + grip.width / 2;
   const y = grip.y + grip.height / 2;
@@ -588,6 +607,7 @@ async function pullSheet(page, distance, { release = true, from = '.sheet-header
   await page.mouse.down();
   await page.mouse.move(x, y + 12, { steps: 2 });
   await page.mouse.move(x, y + distance, { steps: 8 });
+  if (settleMs) await page.waitForTimeout(settleMs);
   if (release) await page.mouse.up();
 }
 
@@ -605,14 +625,40 @@ test('a sheet follows the finger and springs back from a short pull', async ({ p
   await expect(page.locator('#activity-dialog')).toBeVisible();
   await sheetAtRest(page);
 
-  await pullSheet(page, 60, { release: false });
+  await pullSheet(page, 60, { release: false, settleMs: 250 });
   // It follows the finger exactly: no easing on a direct manipulation.
   expect(await sheetOffset(page)).toBeGreaterThan(40);
   await page.mouse.up();
 
-  // Well short of the threshold, so it comes back and stays open.
+  // Well short of the threshold, and let go of rather than thrown, so it comes
+  // back and stays open.
   await expect(page.locator('#activity-dialog')).toBeVisible();
   await expect.poll(() => sheetOffset(page)).toBe(0);
+});
+
+test('a short pull thrown fast dismisses anyway', async ({ page, server }) => {
+  test.skip(!isPhoneLayout(page), 'the bottom sheet is the narrow layout');
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+  await signInAndWaitForPlan(page);
+  await page.locator('.card').first().click();
+  await page.locator('.toolbar [data-action="edit"]').click();
+  await expect(page.locator('#activity-dialog')).toBeVisible();
+  await sheetAtRest(page);
+
+  // Nowhere near 40 % of the sheet's height, but flicked — which is how a
+  // sheet is really thrown away, and the rule the distance test above must not
+  // be accidentally measuring.
+  await page.evaluate(() => {
+    const sheet = document.querySelector('.sheet');
+    const send = (type, y) => sheet.dispatchEvent(new PointerEvent(type, {
+      bubbles: true, pointerId: 1, clientX: 40, clientY: y
+    }));
+    send('pointerdown', 100);
+    send('pointermove', 120);
+    send('pointermove', 180);
+    send('pointerup', 180);
+  });
+  await expect(page.locator('#activity-dialog')).toBeHidden();
 });
 
 test('a long pull dismisses the sheet', async ({ page, server }) => {
@@ -937,7 +983,9 @@ test('a row that comes back during a resize is faded in, not popped', async ({ p
   await page.mouse.move(x, y, { steps: 12 });
   await page.mouse.up();
 
-  expect(await hidden(), 'and they are back').toBe(0);
+  // The drop commits and repaints, and the fit pass that follows runs in a
+  // frame of its own — so this is polled rather than read once.
+  await expect.poll(hidden, { message: 'and they are back' }).toBe(0);
   expect(await page.evaluate(() => window.__rowFades), 'the rows that came back were faded in')
     .toBeGreaterThan(0);
 });
