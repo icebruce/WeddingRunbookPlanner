@@ -1,8 +1,17 @@
 name: CI
 
+# A branch push and its pull request are two separate events, and running on
+# both ran the whole suite twice for one commit: e.g. runs 107 (push) and 108
+# (pull_request) on the same SHA, a minute apart, ~10 minutes of end-to-end each.
+# The concurrency group below cannot collapse them, because a push is
+# `refs/heads/<branch>` while its pull request is `refs/pull/<n>/merge`.
+#
+# Branch work is covered by the pull_request event, which is the better of the
+# two anyway: it tests the merge commit, so it catches a conflict with main that
+# a branch-head run would miss. main keeps a direct run of its own after merge.
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
