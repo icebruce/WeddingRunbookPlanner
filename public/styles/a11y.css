@@ -56,7 +56,8 @@ button, [role="button"], summary, .filter-chip, .stage-choice {
 .person-remove::after,
 .people-add-trigger::after,
 .open-time-add::after,
-.handle::before {
+.handle::before,
+.open-time::before {
   content: '';
   position: absolute;
   top: 50%;
@@ -69,6 +70,13 @@ button, [role="button"], summary, .filter-chip, .stage-choice {
 .tag, .stage-tag:not(.stage-tag--button), .now-tag, .mode-pill { min-height: 0; }
 .card-controls button, .stepper button, .icon-button, .delete-version, .filter-clear,
 .person-remove, .people-add-trigger, .handle, .open-time-add { min-height: 0; }
+/* .open-time also carries role="button" (a11y touch-target rule above), and
+   the same bug that once hit .handle hits it too: min-height:44px would
+   inflate a short gap's own box well past its true duration, pushing its
+   bottom edge — and the handle riding on it — down into whatever card
+   follows. Its ::before above gives the tap a 44px target without touching
+   the box a short gap is actually drawn at. */
+.open-time { min-height: 0; }
 
 /*
  * F25 — focus is never removed, and never relies on colour alone.
