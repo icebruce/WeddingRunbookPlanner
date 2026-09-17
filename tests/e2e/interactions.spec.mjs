@@ -235,3 +235,71 @@ test('a failure during the saving hold is not masked by a stale Saved', async ({
   await expect(page.locator('.save-indicator--not-saved')).toBeVisible({ timeout: 10_000 });
   await page.unroute('**/api/plan');
 });
+
+test('a card re-fits while it is being resized, not after', async ({ page, server }) => {
+  test.skip(isPhoneLayout(page), 'a pointer drag of the bottom edge');
+  await server.seed({ plan: seedPlan({ activities: [
+    activity('a', T(10), 120, { title: 'Getting-ready Portraits', location: 'Bridal suite', people: ['Bride', 'Photographer'] })
+  ] }) });
+  await signInAndWaitForPlan(page);
+
+  const card = page.locator('.card[data-activity-id="a"]');
+  await card.click();
+  // Two hours: everything is on show.
+  await expect(card.locator('.card-people')).toBeVisible();
+  await expect(card.locator('.card-location')).toBeVisible();
+
+  const handle = card.locator('[data-role="resize"]');
+  const box = await handle.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  // Drag the bottom edge up by 105 minutes' worth of pixels, and stop there.
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 - 420, { steps: 12 });
+  await page.waitForTimeout(120);
+
+  // Still mid-gesture: the card is 15 minutes tall and has already let go of
+  // what does not fit, rather than slicing it off behind overflow: hidden.
+  const height = await card.evaluate(node => node.getBoundingClientRect().height);
+  expect(height).toBeLessThan(80);
+  await expect(card.locator('.card-people')).toBeHidden();
+  await expect(card).toHaveClass(/is-clipped/);
+  const overflow = await card.locator('.card-body').evaluate(
+    node => node.scrollHeight - node.clientHeight);
+  expect(overflow).toBeLessThanOrEqual(1);
+
+  await page.mouse.up();
+});
+
+test('the fit pass costs a handful of layouts, not one per card', async ({ page, server }) => {
+  const many = Array.from({ length: 24 }, (_, i) => activity(`a${i}`, T(7) + i * 35, 30, {
+    title: `Activity number ${i} with a reasonably long title`,
+    location: 'St. Peter and Paul Orthodox Sobor, side entrance',
+    people: ['Bride', 'Groom', 'Photographer', 'Videographer', 'Planner']
+  }));
+  await server.seed({ plan: seedPlan({ activities: many }) });
+  await signInAndWaitForPlan(page);
+  await expect(page.locator('.card')).toHaveCount(24);
+
+  // Count forced synchronous layouts across one whole fit pass by counting the
+  // reads that can cause one. Before the phase split this was one per card at
+  // minimum; it is now a fixed handful whatever the length of the day.
+  const reads = await page.evaluate(async () => {
+    let count = 0;
+    const proto = window.Element.prototype;
+    const original = Object.getOwnPropertyDescriptor(proto, 'scrollHeight');
+    Object.defineProperty(proto, 'scrollHeight', {
+      configurable: true,
+      get() { count += 1; return original.get.call(this); }
+    });
+    const { fitCards } = await import('/src/render/fit.js');
+    await new Promise(resolve => {
+      fitCards(document.querySelector('#app'), resolve);
+    });
+    Object.defineProperty(proto, 'scrollHeight', original);
+    return count;
+  });
+  // 24 cards: one read each in the measure phase plus one each in the single
+  // correction round. The point is that it does not grow with the rows dropped.
+  console.log(`scrollHeight reads for 24 cards: ${reads}`);
+  expect(reads).toBeLessThanOrEqual(24 * 2 + 4);
+});

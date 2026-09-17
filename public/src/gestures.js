@@ -26,6 +26,7 @@ import { PX_PER_MIN, applyLaneStyle, buildLayout, overlapBox } from './layout.js
 import { buildSchedule, formatDuration, formatTime } from './schedule.js';
 import { moveGroup, moveTo, resizeBottom, resizeTop } from './operations.js';
 import { cssEscape } from './dom.js';
+import { refit } from './render/fit.js';
 
 /** Movement thresholds, in CSS pixels. */
 const TAP_SLOP = 6;
@@ -687,6 +688,7 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
       const card = cardFor(entry.item.id);
       if (!card) continue;
 
+      const heightChanged = card.style.height !== `${entry.height}px`;
       card.style.top = `${entry.top}px`;
       card.style.height = `${entry.height}px`;
       applyLaneStyle(card, entry.lane, entry.totalLanes);
@@ -695,6 +697,15 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
       const duration = card.querySelector('.card-time strong');
       if (time) time.textContent = entry.item.rangeLabel;
       if (duration) duration.textContent = formatDuration(entry.item.duration);
+
+      // A card's height is its duration, and what it can show follows from its
+      // height — so a card being resized has to re-fit as it goes. Without
+      // this, dragging an hour down to a quarter of one left the people, the
+      // location and the stage tag sliced off mid-row behind the body's
+      // `overflow: hidden` until the finger came up, which is the one moment
+      // in the app when density is visibly changing and the card was the last
+      // to know.
+      if (heightChanged) refit(card);
     }
 
     const end = root.querySelector('.timeline-end');
