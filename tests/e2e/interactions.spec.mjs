@@ -152,6 +152,32 @@ test('a chip row that fits gets no false edge', async ({ page, server }) => {
   await expect(row).not.toHaveClass(/has-more-before/);
 });
 
+test('a sheet with no keyboard up is a whole sheet', async ({ page, server }) => {
+  test.skip(!isPhoneLayout(page), 'the bottom sheet is the narrow layout');
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+  await signInAndWaitForPlan(page);
+  await page.locator('.card').first().click();
+  await page.locator('.toolbar [data-action="edit"]').click();
+  await expect(page.locator('#activity-dialog')).toBeVisible();
+
+  // The regression this exists for: --keyboard-inset was derived from
+  // innerHeight minus visualViewport.height, which are not the same box on
+  // every engine and are not meaningful at all before layout. On WebKit that
+  // read as nearly the whole screen with nothing typed into, took the sheet's
+  // max-height below zero, and left a sheet of no height that the pull gesture
+  // then dismissed on any movement — because every distance is past 40% of
+  // nothing.
+  const inset = await page.evaluate(() =>
+    Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--keyboard-inset')) || 0);
+  expect(inset).toBe(0);
+
+  const { height, viewport } = await page.evaluate(() => ({
+    height: document.querySelector('.sheet').offsetHeight,
+    viewport: window.innerHeight
+  }));
+  expect(height).toBeGreaterThan(viewport * 0.3);
+});
+
 test('the sheet lifts above the on-screen keyboard', async ({ page, server }) => {
   test.skip(!isPhoneLayout(page), 'the bottom sheet is the narrow layout');
   await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });

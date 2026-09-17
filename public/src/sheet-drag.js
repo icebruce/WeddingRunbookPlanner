@@ -111,8 +111,12 @@ export function bindSheetDrag(dialog, { close, isNarrow = () => window.matchMedi
     drag = null;
     if (!live) return;
 
+    const height = sheet.offsetHeight;
     const velocity = offset / Math.max(1, Date.now() - at);
-    const far = offset > sheet.offsetHeight * DISMISS_FRACTION;
+    // A sheet with no measurable height cannot say how far is far enough, and
+    // `offset > 0 * 0.4` is true of every drag there has ever been. Fail
+    // closed: the sheet stays, and Cancel still works.
+    const far = height > 0 && offset > height * DISMISS_FRACTION;
 
     // Back to rest either way. If `close` really closes, the dialog goes and
     // none of this matters; if it stops to ask whether to discard the typing,

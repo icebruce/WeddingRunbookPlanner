@@ -374,16 +374,37 @@ function watchChipOverflow() {
  * typed into can sit under it with no way back but a manual scroll. The
  * visual viewport is the only thing that knows the keyboard is there.
  *
- * The inset is zero wherever the platform already shrinks the layout viewport
- * itself (Android's default), so this never double-counts.
+ * How much of the screen it covers is measured against the viewport's own
+ * resting height, learned by watching, rather than against `innerHeight`.
+ * Those two are not the same box on every engine: WebKit reports them against
+ * different things, and `visualViewport.height` is not meaningful at all until
+ * the page has laid out. Subtracting one from the other gave a resting inset
+ * of nearly the whole screen on iOS, which took `max-height` below zero and
+ * collapsed the editor sheet to nothing — the pull gesture then dismissed on
+ * any movement, because every distance is past 40 % of no height.
+ *
+ * Against its own resting height the answer is exactly zero when there is no
+ * keyboard, whatever the engine thinks `innerHeight` means. The baseline is
+ * relearned on a window resize, which is a rotation or a window being dragged
+ * — never a keyboard, because a keyboard that moved the layout viewport would
+ * not need any of this.
  */
 function trackKeyboardInset() {
   const viewport = window.visualViewport;
   if (!viewport) return;
 
+  let restingExtent = 0;
+
   const update = () => {
-    const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
-    document.documentElement.style.setProperty('--keyboard-inset', `${Math.round(inset)}px`);
+    const extent = viewport.height + viewport.offsetTop;
+    // Nothing useful to read yet. Writing a number now is how the sheet ends
+    // up with no height at all.
+    if (!(extent > 0)) return;
+
+    restingExtent = Math.max(restingExtent, extent);
+    const inset = Math.round(Math.max(0, restingExtent - extent));
+    document.documentElement.style.setProperty('--keyboard-inset', `${inset}px`);
+
     // The sheet has just been resized under the field; put it back in view.
     const focused = document.activeElement;
     if (inset > 0 && focused?.closest?.('.sheet-body')) {
@@ -393,6 +414,10 @@ function trackKeyboardInset() {
 
   viewport.addEventListener('resize', update);
   viewport.addEventListener('scroll', update);
+  window.addEventListener('resize', () => {
+    restingExtent = 0;
+    update();
+  });
   update();
 }
 
