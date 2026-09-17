@@ -73,7 +73,7 @@ function accessibleName(item, stage) {
   return parts.join(', ');
 }
 
-export function renderCard(card, { ui, filter = null, nowMinutes = null }) {
+export function renderCard(card, { ui, filter = null, nowMinutes = null, hideTopHandle = false, hideBottomHandle = false }) {
   const { item } = card;
   const stage = stageOf(item.stage);
   const groupSelected = ui.groupSelection?.includes(item.id);
@@ -154,8 +154,12 @@ export function renderCard(card, { ui, filter = null, nowMinutes = null }) {
          a locked card has nothing here for a pointer to move. They only join
          the tab order once the card is selected, so an unselected card's
          hidden handles do not clutter keyboard navigation. They are real
-         buttons so the arrow keys can move an edge without a pointer. -->
-    ${draggable ? `<button type="button" class="handle handle--top" data-role="resize-top" data-id="${id}" data-focus-key="resize-top:${id}" tabindex="${selected ? '0' : '-1'}" aria-label="Move the start of ${title}"></button>
-      <button type="button" class="handle handle--bottom" data-role="resize" data-id="${id}" data-focus-key="resize:${id}" tabindex="${selected ? '0' : '-1'}" aria-label="Move the end of ${title}"></button>` : ''}
+         buttons so the arrow keys can move an edge without a pointer.
+         Either is also skipped when a thin open-time block sits right on
+         that edge (render/timeline.js) — its own always-visible handle
+         already covers it, and drawing both stacks two identical controls
+         on the same pixels the moment this card is selected or hovered. -->
+    ${draggable && !hideTopHandle ? `<button type="button" class="handle handle--top" data-role="resize-top" data-id="${id}" data-focus-key="resize-top:${id}" tabindex="${selected ? '0' : '-1'}" aria-label="Move the start of ${title}"></button>` : ''}
+    ${draggable && !hideBottomHandle ? `<button type="button" class="handle handle--bottom" data-role="resize" data-id="${id}" data-focus-key="resize:${id}" tabindex="${selected ? '0' : '-1'}" aria-label="Move the end of ${title}"></button>` : ''}
   </article>`;
 }
