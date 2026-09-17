@@ -271,6 +271,13 @@ test('short open time collapses to one line', async ({ page, server }) => {
 
   await expect(page.locator('.open-time')).toHaveClass(/open-time--thin/);
   await expect(page.locator('.open-time')).toContainText('10 min open');
+
+  // A thin block has no "selected" state to reveal handles with, so both
+  // are shown without it — and, unlike a tall block, without needing a
+  // mouse hover either. Both render even though ceremony is locked.
+  const handles = page.locator('.open-time .handle');
+  await expect(handles).toHaveCount(2);
+  await expect(handles.first()).toHaveCSS('opacity', '1');
 });
 
 test('an overlap puts the two activities in lanes, both on their real times', async ({ page, server }) => {

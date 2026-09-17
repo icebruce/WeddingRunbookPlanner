@@ -98,8 +98,20 @@ export function createStore(initial = {}) {
     /**
      * Change UI state. Regions to repaint are named by the caller, because the
      * store has no opinion about what a piece of UI state is drawn by.
+     *
+     * A card and an open-time block keep separate selection fields — the
+     * block has none of a card's toolbar, lock or edit baggage to carry —
+     * but only one of them is ever "the" selection. Setting one to a real
+     * value clears the other automatically, so every caller that selects a
+     * card doesn't also need to remember an open-time block might currently
+     * be the thing showing its own handles, and vice versa.
      */
     setUi(changes, { regions = ['all'] } = {}) {
+      if ('selectedId' in changes && changes.selectedId != null && !('selectedOpenTime' in changes)) {
+        changes = { ...changes, selectedOpenTime: null };
+      } else if ('selectedOpenTime' in changes && changes.selectedOpenTime != null && !('selectedId' in changes)) {
+        changes = { ...changes, selectedId: null };
+      }
       let changed = false;
       for (const [key, value] of Object.entries(changes)) {
         if (ui[key] === value) continue;

@@ -31,9 +31,12 @@ function ruler(layout) {
  * A tall block behaves like a card: tapping its body selects it (revealing
  * the resize handles) rather than opening the actions sheet directly; only
  * its own + button opens that. A thin block has no room for the + at all, so
- * tapping it still opens the sheet the way the whole block used to — and it
- * gets no handles either, since a 44 px touch target (a11y.css) would reach
- * across most or all of a block that short and eat the tap meant for it.
+ * tapping it still opens the sheet the way the whole block used to; it has
+ * no "selected" state to reveal handles with, so its handles are simply
+ * always visible instead (timeline.css's `.open-time--thin .handle` rule) —
+ * with a smaller touch target than the usual 44 px (timeline.css overrides
+ * `.open-time .handle::before`), so it doesn't reach across the whole block
+ * and swallow the tap meant for the sheet.
  *
  * The handles are the same `.handle` control a card uses, just aimed at a
  * neighbour: the top one is the previous activity's own bottom handle in
@@ -42,7 +45,9 @@ function ruler(layout) {
  * (`data-role="resize-top"` against `beforeId`, the activity this gap is
  * right before) — see gestures.js and schedule.js's `afterId`/`afterTitle`.
  * Reusing those roles means the existing pointer and keyboard resize wiring
- * needs no changes at all to pick them up.
+ * needs no changes at all to pick them up. Both are always shown, even when
+ * the neighbour they'd resize is locked — dragging one then simply does
+ * nothing, the same way it would from that activity's own handle.
  */
 function openTimeBlock(gap, ui, viewOnly) {
   const thin = gap.height < 70;
@@ -63,14 +68,13 @@ function openTimeBlock(gap, ui, viewOnly) {
   // different elements can drive the same edge, and app.js's keyboard
   // handler returns focus to whichever one was actually used, by reading it
   // straight off that element rather than reconstructing it from role+id.
-  // Either is absent when the activity it would resize is locked — same
-  // rule a card's own handle follows.
-  const handles = (viewOnly || thin) ? '' : `${gap.afterLocked ? '' : `<button type="button" class="handle handle--top" data-role="resize" data-id="${escapeHtml(gap.afterId)}"
-      tabindex="${selected ? '0' : '-1'}" data-focus-key="resize:gap:${escapeHtml(gap.beforeId)}"
-      aria-label="${escapeHtml(`Resize the end of ${gap.afterTitle}`)}"></button>`}
-    ${gap.beforeLocked ? '' : `<button type="button" class="handle handle--bottom" data-role="resize-top" data-id="${escapeHtml(gap.beforeId)}"
-      tabindex="${selected ? '0' : '-1'}" data-focus-key="resize-top:gap:${escapeHtml(gap.beforeId)}"
-      aria-label="${escapeHtml(`Resize the start of ${gap.beforeTitle}`)}"></button>`}`;
+  const tabbable = selected || thin;
+  const handles = viewOnly ? '' : `<button type="button" class="handle handle--top" data-role="resize" data-id="${escapeHtml(gap.afterId)}"
+      tabindex="${tabbable ? '0' : '-1'}" data-focus-key="resize:gap:${escapeHtml(gap.beforeId)}"
+      aria-label="${escapeHtml(`Resize the end of ${gap.afterTitle}`)}"></button>
+    <button type="button" class="handle handle--bottom" data-role="resize-top" data-id="${escapeHtml(gap.beforeId)}"
+      tabindex="${tabbable ? '0' : '-1'}" data-focus-key="resize-top:gap:${escapeHtml(gap.beforeId)}"
+      aria-label="${escapeHtml(`Resize the start of ${gap.beforeTitle}`)}"></button>`;
 
   return `<div class="open-time ${thin ? 'open-time--thin' : ''} ${selected ? 'is-selected' : ''}" style="top:${gap.top}px;height:${gap.height}px"
     ${bodyAttrs} data-focus-key="open-time:${escapeHtml(gap.beforeId)}" aria-label="${label}">
