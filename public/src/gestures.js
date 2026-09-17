@@ -458,10 +458,15 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
     // A tap is over: whatever happens now, it is not a click.
     suppressClickUntil = Date.now() + 700;
 
+    const ids = groupFor(id);
+    const locked = new Set(scheduleOf(store.plan).items.filter(entry => entry.locked).map(entry => entry.id));
+
     active = {
       kind: 'move',
       id,
-      ids: groupFor(id),
+      ids,
+      /** The subset that a commit will really move — see `moveGroup`. */
+      movableIds: ids.filter(entry => !locked.has(entry)),
       card,
       handle: card,
       pointerId,
@@ -595,7 +600,11 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
     // is driven from here, so the two never fight over `transform`.
     active.card.style.setProperty('--drag-y', `${offset}px`);
 
-    for (const id of active.ids) {
+    // Only the ones that will actually move. `moveGroup` leaves a locked
+    // activity where it is, and a preview that carries it along anyway is
+    // promising a change that will not happen — invisible while the snap back
+    // was instant, plain as day now that a committed change settles.
+    for (const id of active.movableIds) {
       if (id === active.id) continue;
       const other = cardFor(id);
       if (!other) continue;
@@ -780,18 +789,37 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
       active.handle.removeEventListener('pointermove', onResizeMove);
       document.body.classList.remove('is-resizing');
     }
+    /**
+     * What the gesture moved, and how far, so it can be left there.
+     *
+     * The repaint that follows every exit from a gesture takes its "before"
+     * picture from the screen as it stands (render/settle.js). Clearing the
+     * travel here would measure a committed move from the time it started at,
+     * and the card would glide back to where it began before setting off for
+     * where it already is. Left in place, a commit measures no movement at all
+     * and stays still, and a cancel measures the whole of it and eases back —
+     * which is the behaviour the design guide asks for in both cases.
+     *
+     * The paint replaces every card node, so none of this is left behind.
+     */
+    let carried = null;
     if (active.kind === 'move') {
       if (active.autoscroll) cancelAnimationFrame(active.autoscroll);
       active.bubble.remove();
+      // The lift's scale and shadow go with the class; the travel does not.
       active.card.classList.remove('is-lifted', 'is-clash');
       active.handle.removeEventListener('pointermove', onMoveMove);
       document.body.classList.remove('is-moving');
+      carried = { ids: new Set(active.movableIds), offset: active.delta * PX_PER_MIN };
     }
+
     for (const card of root.querySelectorAll('.card')) {
-      card.style.transform = '';
       card.style.removeProperty('--drag-y');
       card.style.visibility = '';
       card.classList.remove('is-settling');
+      card.style.transform = carried?.ids.has(card.dataset.activityId)
+        ? `translateY(${carried.offset}px)`
+        : '';
     }
     active = null;
   }

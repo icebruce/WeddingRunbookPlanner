@@ -303,3 +303,211 @@ test('the fit pass costs a handful of layouts, not one per card', async ({ page,
   console.log(`scrollHeight reads for 24 cards: ${reads}`);
   expect(reads).toBeLessThanOrEqual(24 * 2 + 4);
 });
+
+/**
+ * Record every settle animation the page starts, by name.
+ *
+ * Recorded rather than sampled: a settle lasts 180 ms and two round trips to
+ * the browser can outlast it, so asking afterwards what is running is a race.
+ * Named, because a card's hover lift and its selection ring are both
+ * `box-shadow` transitions of exactly the same duration and `getAnimations`
+ * returns those too.
+ *
+ * Cards are keyed by their activity, open-time blocks by the activity they sit
+ * before — with a prefix, because those are the same ids.
+ */
+/** Wait until no settle is in flight, so a measurement is of a card at rest. */
+async function settled(page) {
+  await page.waitForFunction(() => ![...document.querySelectorAll('.card, .open-time')]
+    .some(node => node.getAnimations().some(animation => animation.id === 'settle')));
+}
+
+async function recordSettles(page) {
+  await page.evaluate(() => {
+    window.__settles = [];
+    const real = window.Element.prototype.animate;
+    window.Element.prototype.animate = function (frames, options) {
+      if (options?.id === 'settle') {
+        window.__settles.push({
+          key: this.classList.contains('card') ? `card:${this.dataset.activityId}`
+            : this.classList.contains('open-time') ? `gap:${this.dataset.before}`
+              : 'end',
+          from: frames[0].transform,
+          ms: options.duration
+        });
+      }
+      return real.call(this, frames, options);
+    };
+  });
+  return {
+    async take() {
+      const all = await page.evaluate(() => {
+        const seen = window.__settles;
+        window.__settles = [];
+        return seen;
+      });
+      return all;
+    }
+  };
+}
+
+test('an undone move settles rather than teleporting', async ({ page, server }) => {
+  await server.seed({ plan: seedPlan({ activities: [
+    activity('a', T(10), 60, { title: 'Portraits' }),
+    activity('b', T(14), 60, { title: 'Ceremony' })
+  ] }) });
+  await signInAndWaitForPlan(page);
+
+  const card = page.locator('.card[data-activity-id="a"]');
+  await card.click();
+  // Move it with the keyboard, so no gesture is involved at all.
+  await card.press('Alt+ArrowDown');
+  await expect(page.locator('.toast')).toBeVisible();
+
+  // Let the move's own settle finish first. Undoing mid-settle is a different
+  // question, and the honest answer to it is the next test.
+  await settled(page);
+
+  // Undo puts it back, and that return is animated: five minutes is 20 px.
+  const settles = await recordSettles(page);
+  await page.evaluate(() => document.querySelector('.toast-action').click());
+  const seen = (await settles.take()).filter(entry => entry.key === 'card:a');
+  expect(seen).toHaveLength(1);
+  expect(seen[0].ms).toBe(180);
+  expect(seen[0].from).toBe('translate(0px, 20px)');
+});
+
+test('undoing mid-settle continues from where the card is, not from where it was', async ({ page, server }) => {
+  await server.seed({ plan: seedPlan({ activities: [
+    activity('a', T(10), 60, { title: 'Portraits' }),
+    activity('b', T(14), 60, { title: 'Ceremony' })
+  ] }) });
+  await signInAndWaitForPlan(page);
+
+  const card = page.locator('.card[data-activity-id="a"]');
+  await card.click();
+  await card.press('Alt+ArrowDown');
+
+  // No wait: the move is still gliding, so the card has barely left 10:00 —
+  // and undo is putting it back to 10:00. There is almost nothing to travel,
+  // and the settle says so rather than replaying the whole twenty pixels.
+  const settles = await recordSettles(page);
+  await page.evaluate(() => document.querySelector('.toast-action').click());
+  const seen = (await settles.take()).filter(entry => entry.key === 'card:a');
+  const travel = seen.length
+    ? Math.abs(Number.parseFloat(seen[0].from.match(/,\s*(-?[\d.]+)px/)[1]))
+    : 0;
+  expect(travel).toBeLessThan(20);
+  await expect(card).toHaveAttribute('data-start', String(T(10)));
+});
+
+test('a committed drag does not glide back to where it started', async ({ page, server }) => {
+  test.skip(isPhoneLayout(page), 'a pointer drag');
+  await server.seed({ plan: seedPlan({ activities: [
+    activity('a', T(10), 60, { title: 'Portraits' }),
+    activity('b', T(15), 60, { title: 'Ceremony' })
+  ] }) });
+  await signInAndWaitForPlan(page);
+
+  const settles = await recordSettles(page);
+  const card = page.locator('.card[data-activity-id="a"]');
+  const box = await card.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + 30);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y + 30 + 240, { steps: 10 });
+  await page.mouse.up();
+
+  // The card is already where the finger put it, so there is nothing to
+  // settle. Anything animating it here would be a slide back to 10:00 and out
+  // again, which is worse than the snap it replaced.
+  //
+  // The open time below it is a different matter: that gap really did get
+  // shorter, and it settles. Moving the earliest activity also re-bases the
+  // whole visible range, which in page pixels moves every card on the
+  // timeline — so this also pins down that the settle measures the clock and
+  // not the page.
+  const seen = await settles.take();
+  expect(seen.filter(entry => entry.key === 'card:a')).toHaveLength(0);
+  expect(seen.filter(entry => entry.key === 'card:b')).toHaveLength(0);
+  await expect(card).not.toHaveAttribute('data-start', String(T(10)));
+});
+
+test('a cancelled drag eases back instead of snapping', async ({ page, server }) => {
+  test.skip(isPhoneLayout(page), 'a pointer drag');
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+  await signInAndWaitForPlan(page);
+
+  const settles = await recordSettles(page);
+  const card = page.locator('.card[data-activity-id="a"]');
+  const box = await card.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + 30);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y + 30 + 200, { steps: 10 });
+  await page.keyboard.press('Escape');
+
+  const seen = (await settles.take()).filter(entry => entry.key === 'card:a');
+  expect(seen.length).toBeGreaterThan(0);
+  expect(seen[0].ms).toBe(180);
+  await expect(card).toHaveAttribute('data-start', String(T(10)));
+});
+
+test('a locked activity in a group is not carried by the preview', async ({ page, server }) => {
+  test.skip(isPhoneLayout(page), 'ctrl-click group selection is a pointer gesture');
+  await server.seed({ plan: seedPlan({ activities: [
+    activity('a', T(10), 60, { title: 'Portraits' }),
+    activity('b', T(12), 60, { title: 'Ceremony', locked: true })
+  ] }) });
+  await signInAndWaitForPlan(page);
+
+  await page.locator('.card[data-activity-id="a"]').click();
+  await page.locator('.card[data-activity-id="b"]').click({ modifiers: ['ControlOrMeta'] });
+  await expect(page.locator('.card.is-group-selected')).toHaveCount(2);
+
+  const box = await page.locator('.card[data-activity-id="a"]').boundingBox();
+  const lockedBefore = await page.locator('.card[data-activity-id="b"]').boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + 30);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y + 30 + 120, { steps: 8 });
+
+  // Mid-drag: the locked one has not budged, because committing will not move
+  // it either. A preview that carried it would be promising a change that
+  // never happens.
+  const lockedDuring = await page.locator('.card[data-activity-id="b"]').boundingBox();
+  expect(Math.abs(lockedDuring.y - lockedBefore.y)).toBeLessThanOrEqual(1);
+  await page.mouse.up();
+  await expect(page.locator('.card[data-activity-id="b"]')).toHaveAttribute('data-start', String(T(12)));
+});
+
+test('nothing settles when the reader has asked for reduced motion', async ({ browser, server }) => {
+  const context = await browser.newContext({ baseURL: server.baseURL, reducedMotion: 'reduce' });
+  const page = await context.newPage();
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+  await signInAndWaitForPlan(page);
+
+  const card = page.locator('.card[data-activity-id="a"]');
+  await card.click();
+  await card.press('Alt+ArrowDown');
+  const settles = await recordSettles(page);
+  await page.evaluate(() => document.querySelector('.toast-action').click());
+  expect(await settles.take()).toHaveLength(0);
+  await context.close();
+});
+
+test('pressing Undo does not also clear the selection', async ({ page, server }) => {
+  await server.seed({ plan: seedPlan({ activities: [
+    activity('a', T(10), 60, { title: 'Portraits' }),
+    activity('b', T(14), 60, { title: 'Ceremony' })
+  ] }) });
+  await signInAndWaitForPlan(page);
+
+  const card = page.locator('.card[data-activity-id="a"]');
+  await card.click();
+  await expect(card).toHaveClass(/is-selected/);
+  await card.press('Alt+ArrowDown');
+  await settled(page);
+
+  await page.evaluate(() => document.querySelector('.toast-action').click());
+  // The toast is chrome, not "outside": undoing must not take the toolbar out
+  // from under the thumb that is about to use it again.
+  await expect(page.locator('.card[data-activity-id="a"]')).toHaveClass(/is-selected/);
+});

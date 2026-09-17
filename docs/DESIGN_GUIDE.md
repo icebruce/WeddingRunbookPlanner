@@ -242,6 +242,8 @@ White A4/Letter, 44/52 px margins, header rule 1.5 px black; phase group labels 
 | Selection ring, handles, toolbar in/out | 180 ms | ease-out (toolbar slides 12 px + fade) |
 | Sheet / dialog | 240 ms in, 200 ms out | `cubic-bezier(.2,.8,.2,1)` |
 | Neighbours during drag, cards after a committed change | 180 ms `transform` | ease-out |
+
+A region is repainted by replacing its HTML, so the settle after a committed change is done with FLIP (`render/settle.js`): measure, paint, invert, release. It is measured against the clock rather than the page — the visible range starts half an hour before the first activity, so moving that activity re-bases every pixel on the timeline, and a page-space comparison would animate the whole day sliding for one card's nudge. Cards, open-time blocks and the end marker all settle; a card that ends up where it already is does not move, which is why a committed drag stays put and a cancelled one eases back. Interrupting a settle continues from where the card actually is, not from where it started.
 | Active resize edge, dragged card | **none** (follows pointer) | — |
 
 **Sharp for what you did; smooth for what the system did.** The lift is the only moment that overshoots, because it confirms an act. Everything that follows from it — the settle, neighbours moving, a cancelled drag returning — stays on the calm curve.

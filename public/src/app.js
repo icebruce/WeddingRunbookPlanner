@@ -31,6 +31,7 @@ import { renderPrint } from './render/print.js';
 import { renderStrip } from './render/strip.js';
 import { renderHeading, renderSummary, renderTimeline } from './render/timeline.js';
 import { fitCards, hiddenDetails, watchFit } from './render/fit.js';
+import { createSettle } from './render/settle.js';
 import { createToaster } from './render/toast.js';
 import { renderToolbar } from './render/toolbar.js';
 import { normalizeDuration } from './validate.js';
@@ -277,9 +278,14 @@ function repaint(regions = ['all']) {
 
 function paintRegions(names) {
   const context = { plan: store.plan, ui: store.ui };
+  // The timeline is rebuilt wholesale, so the only record of where everything
+  // just was is the screen itself. Take it before the paint; play the
+  // difference straight after, before anything else gets a chance to scroll.
+  const settle = names.includes('timeline') ? captureSettle() : null;
   for (const name of names) {
     paint(app.querySelector(`[data-region="${name}"]`), REGIONS[name](context));
   }
+  settle?.();
   if (names.includes('heading')) refreshCollapsedTitle();
   if (names.includes('toolbar')) measureBottomFurniture();
   if (names.some(name => STICKY_REGIONS.has(name))) measureStickyInset();
@@ -575,6 +581,15 @@ window.addEventListener('popstate', () => {
     store.setUi({ selectedId: null }, { regions: ['timeline', 'toolbar'] });
   }
 });
+
+/**
+ * Committed changes move rather than teleport (DESIGN_GUIDE §6).
+ *
+ * Nothing settles while a gesture is running: an edge or a card being dragged
+ * follows the pointer exactly, and a repaint that happened to land mid-drag
+ * must not start easing the thing under the finger.
+ */
+const captureSettle = createSettle(app, { enabled: () => !gestures.active });
 
 const gestures = createGestures({
   root: app,
@@ -987,10 +1002,14 @@ document.addEventListener('click', event => {
     store.setUi({ openMenu: null });
     return;
   }
-  if (store.ui.selectedId && !event.target.closest('.card, dialog, .topbar, .toolbar')) {
+  // A toast is chrome, not "outside". Pressing its Undo used to clear the
+  // selection as well as undoing — the toolbar vanished from under the thumb
+  // that was about to use it again, and the timeline repainted twice for the
+  // one change.
+  if (store.ui.selectedId && !event.target.closest('.card, dialog, .topbar, .toolbar, .toast')) {
     store.setUi({ selectedId: null }, { regions: ['timeline', 'toolbar'] });
   }
-  if (store.ui.selectedOpenTime && !event.target.closest('.open-time, dialog')) {
+  if (store.ui.selectedOpenTime && !event.target.closest('.open-time, dialog, .toast')) {
     store.setUi({ selectedOpenTime: null }, { regions: ['timeline'] });
   }
 });
