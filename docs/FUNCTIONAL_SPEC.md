@@ -182,7 +182,7 @@ The summary line shows `20 min conflict ›`.
 | Drag top/bottom edge | Resizes |
 | Click lock | Lock / unlock (exempts from group move; has no other effect) |
 | Click stage tag | Stage menu |
-| Click pencil | Opens the Edit dialog (which also offers Duplicate and Delete) |
+| Double-click a card | Opens the Edit dialog (which also offers Duplicate and Delete). There is no pencil and no ⋯ on the card face |
 | Click open time | Open-time menu beside it |
 
 ### 4.3 Keyboard (desktop)
@@ -267,7 +267,8 @@ Nothing changes until one is chosen. Each choice can be undone.
 ### 5.10 Undo
 - Single step. Covers add, duplicate, delete, reorder, resize, stage, fix/unfix, edit-sheet save, open-time actions.
 - Shown as a toast `<what happened> · Undo` for 6 seconds; also ⌘/Ctrl+Z on desktop.
-- Toasts appear only for: undoable changes, schedule shifts (`2 activities shifted · +15 min`), errors. No “Saved” or “Stage updated” toasts.
+- Toasts appear only for: undoable changes and errors. No “Saved” or “Stage updated” toast, and no “N activities shifted” toast — locking, unlocking, resizing and moving one activity never shift another.
+- The six seconds are unattended time. The countdown stops while a pointer is over the toast or focus is inside it, and starts again on the way out; a toast can also be swiped down to dismiss. Undo is the only way back from a delete, so it does not expire while it is being read. A toast is chrome, not “outside”: pressing its Undo never also clears the selection.
 
 ### 5.11 Person filter
 - Chips: Everyone + each distinct entry in the plan's people lists. Exact match only (“Bride” does not match “All Guests”).
@@ -299,7 +300,7 @@ Sheet (phone) / dialog (desktop):
 - Save the current plan with a name (1–80 characters).
 - List: **Current plan** first (marked, “Edited 2 min ago on this phone”), then saved versions newest first. Each shows name, date/time, and a summary `12 activities · 11:30 AM – 10:45 PM`.
 - **Restore**: asks for confirmation, then saves the current plan as `Before restore – <time>` automatically, then restores.
-- **Delete**: swipe left (phone) or ⋯ (desktop); undoable via toast.
+- **Delete**: a delete button on the row; undoable via toast.
 - Automatic versions are labelled “saved automatically”. Up to 40 versions; the oldest automatic ones are removed first.
 
 ### 5.19 Plan settings
