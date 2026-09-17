@@ -160,6 +160,7 @@ The summary line shows `20 min conflict ›`.
 | Drag top/bottom handle of selected card | Resizes (§5.5) |
 | Drag a lifted card | Moves it to a new time (§5.6) |
 | Tap open time | Open-time actions |
+| Pull a sheet down | Dismisses it, asking first if there is unsaved typing — the same as Cancel |
 | Tap summary link | Scrolls to open time or conflict |
 
 **Selected card** shows: blue ring; bottom handle; top handle unless locked. Handles are small visible bars with large invisible touch areas. The add button is replaced by the **selection toolbar**:

@@ -511,3 +511,106 @@ test('pressing Undo does not also clear the selection', async ({ page, server })
   // from under the thumb that is about to use it again.
   await expect(page.locator('.card[data-activity-id="a"]')).toHaveClass(/is-selected/);
 });
+
+/** Pull the open sheet down by `distance`, optionally letting go at the end. */
+async function pullSheet(page, distance, { release = true, from = '.sheet-header' } = {}) {
+  const grip = await page.locator(from).boundingBox();
+  const x = grip.x + grip.width / 2;
+  const y = grip.y + grip.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y + 12, { steps: 2 });
+  await page.mouse.move(x, y + distance, { steps: 8 });
+  if (release) await page.mouse.up();
+}
+
+const sheetOffset = page => page.locator('.sheet').evaluate(node => {
+  const value = new window.DOMMatrixReadOnly(getComputedStyle(node).transform);
+  return value.m42;
+});
+
+test('a sheet follows the finger and springs back from a short pull', async ({ page, server }) => {
+  test.skip(!isPhoneLayout(page), 'the bottom sheet is the narrow layout');
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+  await signInAndWaitForPlan(page);
+  await page.locator('.card').first().click();
+  await page.locator('.toolbar [data-action="edit"]').click();
+  await expect(page.locator('#activity-dialog')).toBeVisible();
+
+  await pullSheet(page, 60, { release: false });
+  // It follows the finger exactly: no easing on a direct manipulation.
+  expect(await sheetOffset(page)).toBeGreaterThan(40);
+  await page.mouse.up();
+
+  // Well short of the threshold, so it comes back and stays open.
+  await expect(page.locator('#activity-dialog')).toBeVisible();
+  await expect.poll(() => sheetOffset(page)).toBe(0);
+});
+
+test('a long pull dismisses the sheet', async ({ page, server }) => {
+  test.skip(!isPhoneLayout(page), 'the bottom sheet is the narrow layout');
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+  await signInAndWaitForPlan(page);
+  await page.locator('.card').first().click();
+  await page.locator('.toolbar [data-action="edit"]').click();
+  await expect(page.locator('#activity-dialog')).toBeVisible();
+
+  const height = await page.locator('.sheet').evaluate(node => node.offsetHeight);
+  await pullSheet(page, Math.round(height * 0.6));
+  await expect(page.locator('#activity-dialog')).toBeHidden();
+});
+
+test('pulling a sheet down with typing in it still asks first', async ({ page, server }) => {
+  test.skip(!isPhoneLayout(page), 'the bottom sheet is the narrow layout');
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+  await signInAndWaitForPlan(page);
+  await page.locator('.card').first().click();
+  await page.locator('.toolbar [data-action="edit"]').click();
+  await page.locator('#activity-dialog input[name="title"]').fill('Something else entirely');
+
+  const height = await page.locator('.sheet').evaluate(node => node.offsetHeight);
+  await pullSheet(page, Math.round(height * 0.6));
+
+  // Swiping down and pressing Cancel are the same thing, so both ask.
+  await expect(page.locator('#alert-root dialog')).toBeVisible();
+  // And the editor is still there, sitting at rest under the question, so
+  // "Keep editing" comes back to something that has not moved.
+  await expect(page.locator('#activity-dialog')).toBeVisible();
+  await expect.poll(() => sheetOffset(page)).toBe(0);
+
+  await page.locator('#alert-root .sheet-close').click();
+  await expect(page.locator('#activity-dialog input[name="title"]')).toHaveValue('Something else entirely');
+});
+
+test('a sheet scrolled down is not dragged away by a downward swipe', async ({ page, server }) => {
+  test.skip(!isPhoneLayout(page), 'the bottom sheet is the narrow layout');
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+  await signInAndWaitForPlan(page);
+  await page.locator('.card').first().click();
+  await page.locator('.toolbar [data-action="edit"]').click();
+
+  const scrolled = await page.locator('.sheet-body').evaluate(node => {
+    node.scrollTop = node.scrollHeight;
+    return node.scrollTop;
+  });
+  test.skip(scrolled === 0, 'this editor fits without scrolling at this size');
+
+  await pullSheet(page, 200, { from: '.sheet-body' });
+  // Below the top of the body, a downward drag means scrolling back up.
+  await expect(page.locator('#activity-dialog')).toBeVisible();
+  expect(await page.locator('.sheet').evaluate(node => node.style.transform)).toBe('');
+});
+
+test('the desktop dialog is not draggable', async ({ page, server }) => {
+  test.skip(isPhoneLayout(page), 'this is the wide layout');
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+  await signInAndWaitForPlan(page);
+  await page.locator('.card').first().dblclick();
+  await expect(page.locator('#activity-dialog')).toBeVisible();
+
+  await pullSheet(page, 220);
+  await expect(page.locator('#activity-dialog')).toBeVisible();
+  // A centred dialog carries its own `translate(-50%, -50%)`, so the test is
+  // whether the drag wrote anything of its own — not what the total comes to.
+  expect(await page.locator('.sheet').evaluate(node => node.style.transform)).toBe('');
+});

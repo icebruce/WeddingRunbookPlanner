@@ -14,7 +14,11 @@
 
 .sheet-dialog { width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; }
 
-.sheet-dialog::backdrop { background: rgba(0, 0, 0, .3); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
+/* The scrim lightens as a sheet is pulled down (sheet-drag.js), so the page
+   underneath comes back as the sheet goes rather than all at once at the end.
+   `--scrim-fade` is set on the dialog; where a backdrop does not inherit it,
+   the fallback holds the scrim steady and nothing is lost but the nicety. */
+.sheet-dialog::backdrop { background: rgba(0, 0, 0, calc(.3 * var(--scrim-fade, 1))); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
 
 /*
  * A sheet rises from the bottom of a phone and a dialog settles in the middle
@@ -54,6 +58,11 @@
  * The grabber. A sheet that rises from the bottom of a phone says so with a
  * bar at the top, and drawing it here keeps it out of six pieces of markup.
  */
+/* The grabber is also the one part of the sheet whose only job is to be
+   dragged, so it takes the gesture outright rather than sharing the body's
+   pan. */
+.sheet-header, .sheet::before { touch-action: none; }
+
 .sheet::before {
   content: '';
   position: absolute;

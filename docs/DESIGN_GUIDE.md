@@ -193,6 +193,7 @@ Pulse: `box-shadow` ring expanding 0 → 7 px and fading, 1.8 s, infinite; disab
 
 ### 4.7 Sheets, dialogs, menus
 - **Sheet (phone):** 16 px top radius, grabber 36×5, header 52 px with `Cancel` (17 `--sel`), title (17/600), `Done` (17/650 `--sel`); body padding 18/16, section gap 22. Scrim `rgba(0,0,0,.3)`.
+  The grabber means what it means everywhere else: the sheet can be pulled down to dismiss. It follows the finger exactly, resists an upward pull, and the scrim lightens as it goes. Letting go past 40 % of its height, or above 0.5 px/ms, dismisses through the same path as Cancel — so a sheet with typing in it still asks, with the sheet back at rest underneath the question. The pull starts anywhere on the sheet's own chrome, and inside the scrolling body only at the very top, because below that a downward drag means scrolling back up. Wide layouts get a centred dialog and no pull.
 - **Dialog (desktop):** 580 px wide, 16 px radius, same header at 15/16 px, two-column body grid where fields are short.
 - **Grouped fields:** `--surface-2`, 12 px radius, 50 px rows (42 desktop), 0.5 px dividers; label left (body), value right (`--soft`).
 - **Inputs:** 46 px (40 desktop), `--surface-2`, 12 px radius, 17 px text (15 desktop); focus 2 px `--sel` ring on `--surface`; error 1.5 px `--bad` ring plus message below (15 `--bad` with warning icon).

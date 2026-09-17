@@ -16,6 +16,7 @@ import { readDeviceCopy, writeDeviceCopy } from './device.js';
 import { cssEscape, escapeHtml, focusByKey, paint, uid } from './dom.js';
 import { AUTO_VIEW_ONLY_MS, createClock, minutesNow, readOverride, shouldBeOn, stripState, writeOverride } from './dayof.js';
 import { createGestures } from './gestures.js';
+import { bindSheetDrag } from './sheet-drag.js';
 import { PX_PER_MIN } from './layout.js';
 import { icon } from './icons.js';
 import { SAVE_STATES, createSavePipeline } from './save.js';
@@ -664,6 +665,9 @@ function bindSheet(dialog) {
     close();
   });
   dialog.querySelectorAll('.sheet-close').forEach(button => button.addEventListener('click', close));
+  // The grabber at the top of a sheet promises this. Same `close` as Cancel,
+  // so a sheet with typing in it still asks before throwing it away.
+  bindSheetDrag(dialog, { close });
   dialog.addEventListener('click', event => {
     if (event.target === dialog) close();
   });
