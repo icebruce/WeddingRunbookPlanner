@@ -434,6 +434,45 @@ test.describe('resize', () => {
       const stored = (await server.read()).plan.activities;
       expect(stored.find(a => a.id === 'arrive').duration).toBe(30, 'the locked activity did not resize');
     });
+
+    test('a locked neighbour\'s handle looks disabled', async ({ page, server, isMobile }) => {
+      test.skip(Boolean(isMobile), 'measured with a mouse');
+      await server.seed({ plan: seedPlan({
+        activities: [
+          activity('arrive', T(13), 30, { title: 'Arrival & Buffer', locked: true }),
+          activity('ceremony', T(14), 60, { title: 'Ceremony' })
+        ]
+      }) });
+      await signInAndWaitForPlan(page);
+
+      const gap = page.locator('.open-time');
+      await gap.locator('strong').click();
+      await expect(gap.locator('.handle--top')).toHaveClass(/handle--locked/);
+      await expect(gap.locator('.handle--top')).toHaveAttribute('aria-disabled', 'true');
+      await expect(gap.locator('.handle--bottom')).not.toHaveClass(/handle--locked/);
+    });
+
+    test('a thin gap next to a selected card draws one handle on that edge, not two stacked', async ({ page, server, isMobile }) => {
+      test.skip(Boolean(isMobile), 'measured with a mouse');
+      await server.seed({ plan: seedPlan({
+        activities: [
+          activity('reception', T(17, 15), 20, { title: 'Reception' }),
+          activity('dinner', T(17, 45), 55, { title: 'Dinner' })
+        ]
+      }) });
+      await signInAndWaitForPlan(page);
+
+      await expect(page.locator('.open-time')).toHaveClass(/open-time--thin/);
+
+      // Selecting Dinner would normally reveal its own top handle — but the
+      // thin gap right above it already always shows one covering the exact
+      // same edge, so the card leaves its out (render/timeline.js).
+      await page.locator('.card[data-activity-id="dinner"]').click({ position: { x: 40, y: 10 } });
+      await expect(page.locator('.card[data-activity-id="dinner"]')).toHaveClass(/is-selected/);
+      await expect(page.locator('.card[data-activity-id="dinner"] .handle--top')).toHaveCount(0);
+      await expect(page.locator('.card[data-activity-id="dinner"] .handle--bottom')).toBeVisible();
+      await expect(page.locator('.open-time .handle--bottom')).toBeVisible();
+    });
   });
 });
 

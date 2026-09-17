@@ -68,13 +68,16 @@ function openTimeBlock(gap, ui, viewOnly) {
   // different elements can drive the same edge, and app.js's keyboard
   // handler returns focus to whichever one was actually used, by reading it
   // straight off that element rather than reconstructing it from role+id.
+  // `handle--locked` is a faded look only — the drag itself already does
+  // nothing against a locked activity (startResize, gestures.js); this just
+  // says so up front instead of only after a pointless drag.
   const tabbable = selected || thin;
-  const handles = viewOnly ? '' : `<button type="button" class="handle handle--top" data-role="resize" data-id="${escapeHtml(gap.afterId)}"
-      tabindex="${tabbable ? '0' : '-1'}" data-focus-key="resize:gap:${escapeHtml(gap.beforeId)}"
-      aria-label="${escapeHtml(`Resize the end of ${gap.afterTitle}`)}"></button>
-    <button type="button" class="handle handle--bottom" data-role="resize-top" data-id="${escapeHtml(gap.beforeId)}"
-      tabindex="${tabbable ? '0' : '-1'}" data-focus-key="resize-top:gap:${escapeHtml(gap.beforeId)}"
-      aria-label="${escapeHtml(`Resize the start of ${gap.beforeTitle}`)}"></button>`;
+  const handles = viewOnly ? '' : `<button type="button" class="handle handle--top ${gap.afterLocked ? 'handle--locked' : ''}" data-role="resize" data-id="${escapeHtml(gap.afterId)}"
+      tabindex="${tabbable ? '0' : '-1'}" data-focus-key="resize:gap:${escapeHtml(gap.beforeId)}" aria-disabled="${gap.afterLocked}"
+      aria-label="${escapeHtml(gap.afterLocked ? `${gap.afterTitle} is locked` : `Resize the end of ${gap.afterTitle}`)}"></button>
+    <button type="button" class="handle handle--bottom ${gap.beforeLocked ? 'handle--locked' : ''}" data-role="resize-top" data-id="${escapeHtml(gap.beforeId)}"
+      tabindex="${tabbable ? '0' : '-1'}" data-focus-key="resize-top:gap:${escapeHtml(gap.beforeId)}" aria-disabled="${gap.beforeLocked}"
+      aria-label="${escapeHtml(gap.beforeLocked ? `${gap.beforeTitle} is locked` : `Resize the start of ${gap.beforeTitle}`)}"></button>`;
 
   return `<div class="open-time ${thin ? 'open-time--thin' : ''} ${selected ? 'is-selected' : ''}" style="top:${gap.top}px;height:${gap.height}px"
     ${bodyAttrs} data-focus-key="open-time:${escapeHtml(gap.beforeId)}" aria-label="${label}">
@@ -114,6 +117,21 @@ export function renderTimeline({ plan, ui }) {
   const layout = buildLayout(plan, schedule);
   const nowMinutes = ui.dayOf ? (ui.nowMinutes ?? null) : null;
 
+  // A thin open-time block's handles are always visible (render/timeline.js,
+  // openTimeBlock) — never gated behind selecting or hovering the block,
+  // because it has no "selected" state to gate them with. Whichever
+  // activity sits on each side of one already has its matching edge
+  // covered, so that activity's own handle is left out of its own card
+  // below, or hovering/selecting the card would draw a second, identical
+  // handle right on top of the block's.
+  const thinGapCoversBottom = new Set();
+  const thinGapCoversTop = new Set();
+  for (const gap of layout.openTimes) {
+    if (gap.height >= 70) continue;
+    thinGapCoversBottom.add(gap.afterId);
+    thinGapCoversTop.add(gap.beforeId);
+  }
+
   // `data-from` is the minute the grid starts at. The clock moves the now-line
   // and the live progress bar in place from it, twice a minute, rather than
   // repainting every card to shift one line two pixels.
@@ -121,7 +139,11 @@ export function renderTimeline({ plan, ui }) {
     <div class="timeline-ruler" aria-hidden="true">${ruler(layout)}${nowLine(layout, nowMinutes)}</div>
     <div class="timeline-plan">
       ${layout.openTimes.map(gap => openTimeBlock(gap, ui, Boolean(ui.dayOf && !ui.editingOnDay))).join('')}
-      ${layout.cards.map(card => renderCard(card, { ui, filter: ui.filter, nowMinutes })).join('')}
+      ${layout.cards.map(card => renderCard(card, {
+        ui, filter: ui.filter, nowMinutes,
+        hideTopHandle: thinGapCoversTop.has(card.item.id),
+        hideBottomHandle: thinGapCoversBottom.has(card.item.id)
+      })).join('')}
       ${menuLayer(layout, ui)}
     </div>
     <div class="timeline-end" style="top:${layout.endTop + 10}px">

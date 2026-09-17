@@ -231,6 +231,12 @@
 .handle::after { content: ''; width: 34px; height: 9px; border-radius: 4.5px; background: var(--surface); border: 2px solid var(--sel); }
 .handle--top { top: -8px; }
 .handle--bottom { bottom: -8px; }
+/* Only an open-time block's handles ever carry this (render/timeline.js) —
+   a card's own is never drawn locked, because a locked card has no handles
+   at all. Dragging one already does nothing against a locked activity; this
+   is what says so before that pointless drag, not a different cursor. */
+.handle--locked { cursor: default; }
+.handle--locked::after { border-color: var(--faint); }
 .card.is-selected .handle { opacity: 1; pointer-events: auto; }
 
 .card:focus-visible { outline: 2px solid var(--sel); outline-offset: 2px; }
