@@ -20,7 +20,7 @@
  * and whether it has reported by the time the shutter falls is a race.
  */
 import { test, expect, activity, seedPlan } from './fixtures.mjs';
-import { isPhoneLayout, signInAndWaitForPlan } from './helpers.mjs';
+import { isPhoneLayout, openActivityEditor, signInAndWaitForPlan } from './helpers.mjs';
 
 /*
  * The mockups draw a phone and a desktop, so those are the two that have
@@ -142,8 +142,7 @@ const SCENES = [
   {
     name: 'editing-sheet',
     async run(page) {
-      await card(page, 'portraits').locator('.card-edit').click();
-      await expect(page.locator('#activity-dialog')).toBeVisible();
+      await openActivityEditor(page, card(page, 'portraits'));
     }
   },
   {

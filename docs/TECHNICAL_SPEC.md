@@ -78,7 +78,7 @@ WeddingRunbookPlanner/
 │       ├── schedule.js       # pure scheduling
 │       ├── layout.js         # pure geometry: positions, lanes, ruler ticks
 │       ├── render/ header.js  timeline.js  card.js  toolbar.js  sheets.js  strip.js  toast.js  print.js  pickers.js
-│       ├── gestures.js       # select, long-press, resize, drag-to-time, group select/move, autoscroll
+│       ├── gestures.js       # select, hold-to-lift, resize, drag-to-time, group select/move, autoscroll
 │       ├── operations.js     # pure plan operations (resize, moveTo, moveGroup, toggleLock, ...)
 │       ├── save.js           # autosave pipeline, device copy, sync
 │       ├── dayof.js          # clock, day-of state, strip content
@@ -253,11 +253,12 @@ Pointer Events only; one active gesture at a time.
 
 | Gesture | Target | Rules |
 |---|---|---|
-| Select | card body | `pointerup` without movement > 6 px and no long-press. Ctrl/Cmd-click adds the card to a `groupSelection` (2+ cards) instead of replacing the single selection. |
-| Long-press edit | card body (touch) | 500 ms; cancel on move > 10 px, `pointercancel`, or scroll; immediate `.pressed`; suppress following click; not from controls |
+| Select | card body | `pointerup` without movement > 6 px and no lift. Ctrl/Cmd-click adds the card to a `groupSelection` (2+ cards) instead of replacing the single selection. A tap that landed on one of the card's own buttons selects nothing — the button's click handles it. |
+| Edit | card body | double-click or double-tap, tracked in `gestures.js` rather than via native `dblclick` (a repaint can replace the card between taps). Enter on a selected card and the phone toolbar's Edit are the non-gesture routes. |
 | Resize | `.handle.top`, `.handle.bottom` | `touch-action:none` on handles only; pointer capture; visual bar 36×5, hit area 44 px tall × 120 px wide; neither handle rendered for a locked activity |
-| Move | card grip (`.card-grip`, always visible on any unlocked, non-view-only card) | pointer capture; dragging sets the card's absolute start via `moveTo` (continuous drag-to-time, not a discrete reorder/index move). With an active `groupSelection`, dragging any selected card's grip moves the whole group together by the same delta via `moveGroup`; locked activities inside the group are skipped. |
-| Scroll | everything else | card body `touch-action: pan-y`; never `preventDefault` before a gesture starts |
+| Move | card body (`.card.is-draggable`) | No handle. Touch lifts after a 300 ms still hold; a pointer lifts after 3 px of movement. The hold also arms over the card's own buttons, and the click it leaves behind is suppressed. Pointer capture on the card; a document-level non-passive `touchmove` calls `preventDefault` while a gesture is active, because a *pointer* event's `preventDefault` cannot stop a `pan-y` scroll. Origins are tracked in **document space** (`clientY + scrollY`) so autoscroll alone carries the card. Dragging sets the card's absolute start via `moveTo` (continuous drag-to-time, not a discrete reorder/index move). With an active `groupSelection`, dragging any selected card moves the whole group together by the same delta via `moveGroup`; locked activities inside the group are skipped. |
+| Overlap preview | during a move | the previewed plan is scheduled through `buildSchedule`, and each involved card is marked with the same `.is-overlap` treatment and `--overlap-top/--overlap-height` vars that `renderCard` uses, so the preview and the committed state are one picture. Every exit from a move repaints, so nothing is unwound by hand. |
+| Scroll | everything else | card body `touch-action: pan-y`; never `preventDefault` before a gesture starts. A scroll cancels a pending press only if it carries the card out from under the finger — momentum settling must not refuse a hold. |
 | Back guard | hardware/gesture back (phone) | see §8.6 — closes the open sheet/menu/selection instead of navigating away |
 
 Performance rules during resize/move:

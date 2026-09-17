@@ -162,14 +162,23 @@ body.is-reordering { user-select: none; cursor: grabbing; }
   pointer-events: none;
   white-space: nowrap;
 }
+/* While the drop would collide, the bubble stops reporting a time and reports
+   the collision instead. */
+.resize-bubble.is-bad { background: var(--bad); color: #fff; }
 
 /* The dragged card itself: lifted, not faded — it is still the thing being
-   directly manipulated, not left behind. */
+   directly manipulated, not left behind.
+   No tilt. On a timeline the card's own edges are read against the snap line,
+   and rotating them puts the two out of parallel exactly when the reading
+   matters most; the shadow carries the elevation instead. */
 .card.is-lifted {
   z-index: 30;
   box-shadow: var(--shadow-lifted), 0 0 0 1px var(--sel);
-  transform: rotate(-.6deg) scale(1.02) translateY(var(--drag-y, 0));
+  transform: scale(1.03) translateY(var(--drag-y, 0));
 }
+/* Dropping it here would overlap something. The card says so while it is still
+   in the air, so the conflict is a thing you avoid rather than discover. */
+.card.is-lifted.is-clash { box-shadow: var(--shadow-lifted), 0 0 0 1.5px var(--bad); }
 
 @media (prefers-reduced-motion: reduce) {
   .is-highlighted { animation: none; box-shadow: 0 0 0 3px var(--sel); }
@@ -235,6 +244,14 @@ body.is-reordering { user-select: none; cursor: grabbing; }
 /* Neighbours settle into place after the drop, never during it. */
 .card.is-settling { transition: transform 180ms ease-out; }
 .card.is-pressed { transform: scale(.99); transition: transform 100ms ease-out; }
+/* The press deepening over the hold, rather than snapping at the end of it:
+   with no grip to advertise the gesture, this is what telegraphs the lift, so
+   it can be felt building and abandoned before it fires. */
+.card.is-charging {
+  transform: scale(.972);
+  transition: transform var(--hold-ms, 300ms) linear, box-shadow 160ms ease-out;
+  box-shadow: var(--shadow-hover);
+}
 
 /* Nothing selects text or shows a callout while a gesture is running. */
 body.is-moving, body.is-resizing { user-select: none; -webkit-user-select: none; }

@@ -150,7 +150,7 @@ export const SCAN = `(() => {
 
     const measured = ratio(colour.rgb, backdrop(node));
     if (measured + 0.05 < 3) {
-      const owner = node.closest('button, [role="button"], a, .card-grip, .tag, .stage-tag') || node.parentElement || node;
+      const owner = node.closest('button, [role="button"], a, .tag, .stage-tag') || node.parentElement || node;
       problems.push({
         kind: 'icon-contrast',
         where: where(owner),

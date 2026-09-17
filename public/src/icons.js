@@ -7,7 +7,6 @@ const paths = {
   lock: '<rect x="6.5" y="10" width="11" height="9" rx="2" fill="currentColor" stroke="none"/><path d="M9 10V7.5a3 3 0 0 1 6 0V10"/>',
   'lock-open': '<rect x="6.5" y="10" width="11" height="9" rx="2"/><path d="M9 10V7.5a3 3 0 0 1 5.6-1.5"/>',
   note: '<path d="M6 4h9l4 4v12H6Z"/><path d="M14 4v5h5M9 13h6M9 16.5h4"/>',
-  grip: '<circle cx="9" cy="7" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="7" r="1.1" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.1" fill="currentColor" stroke="none"/><circle cx="9" cy="17" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="17" r="1.1" fill="currentColor" stroke="none"/>',
   reorder: '<path d="M4 8h16M4 12h16M4 16h16"/>',
   moon: '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/>',
   flag: '<path d="M6 21V4h12l-2.5 4L18 12H6"/>',

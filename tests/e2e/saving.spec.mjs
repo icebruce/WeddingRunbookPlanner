@@ -249,11 +249,12 @@ test('the conflict dialog blocks editing until it is answered', async ({ page, c
   await expect(page.locator('#conflict-dialog')).toBeVisible();
 
   // Nothing behind the dialog can be reached: the plan is not edited further
-  // until it is settled which copy the day carries on from. The control is
-  // still drawn — it is the modal dialog above it that makes it unreachable,
-  // so the test is whether it can be pressed, not whether it is painted.
-  const reachable = await page.locator('.card').first().locator('.card-edit')
-    .click({ timeout: 1500 }).then(() => true).catch(() => false);
+  // until it is settled which copy the day carries on from. The card is still
+  // drawn — it is the modal dialog above it that makes it unreachable, so the
+  // test is whether the gesture that opens the editor can land, not whether
+  // the card is painted.
+  const reachable = await page.locator('.card').first()
+    .dblclick({ position: { x: 40, y: 10 }, timeout: 1500 }).then(() => true).catch(() => false);
   expect(reachable).toBe(false);
   await expect(page.locator('#activity-dialog')).toHaveCount(0);
 });

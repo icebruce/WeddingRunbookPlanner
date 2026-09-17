@@ -412,11 +412,10 @@ const gestures = createGestures({
   store,
   commit: (action, payload) => commit(action, payload),
   repaint,
-  // A long press is the phone's way into the editor; double-click is the
-  // pointer equivalent. An open-time block's own tap selects it now
-  // (gestures.js), so the same pair of gestures is its way into the actions
-  // sheet, mirroring the card's pencil/long-press/double-click trio.
-  onLongPress: id => openEditor(id),
+  // Double-click and double-tap open a card's editor. A long press is not an
+  // alternative to them any more — on a card it is what lifts it to be moved.
+  // An open-time block has nothing to lift, so it keeps the long press as its
+  // own way into the actions sheet, alongside a double-click.
   onDoubleClick: id => openEditor(id),
   onOpenTimeActivate: (beforeId, start, end) => openOpenTimeSheet(beforeId, start, end)
 });

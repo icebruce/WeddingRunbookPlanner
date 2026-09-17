@@ -16,6 +16,11 @@ const dense = () => seedPlan({
 });
 
 const card = (page, id) => page.locator(`.card[data-activity-id="${id}"]`);
+/** A point on the card clear of its own controls, with the card centred first. */
+const dragFrom = async (page, id) => {
+  const box = await boxInView(page, card(page, id));
+  return { x: Math.round(box.x + 60), y: Math.round(box.y + box.height / 2) };
+};
 const startOf = async (page, id) => Number(await card(page, id).getAttribute('data-start'));
 
 async function select(page, id) {
@@ -52,18 +57,19 @@ test.describe('scrolling always wins', () => {
     });
   }
 
-  test('a swipe over the grip of an unselected card still scrolls with a short tap-and-move', async ({ page, server, isMobile }) => {
+  test('a swipe that starts on a card scrolls, because it never held still', async ({ page, server, isMobile }) => {
     test.skip(!isMobile, 'this is the touch behaviour');
     await server.seed({ plan: dense() });
     await signInAndWaitForPlan(page);
 
-    // Without the short hold, a swipe on the grip is a scroll, not a drag —
-    // the grip itself is what needs the hold; the rest of the card never did.
+    // What separates a move from a scroll is stillness, not where the finger
+    // landed: moving straight away is a scroll anywhere on the card.
     const box = await card(page, 'portraits').boundingBox();
     await touchDrag(page, centreOf(box), { x: box.x + box.width / 2, y: box.y - 200 }, { steps: 10 });
     await page.waitForTimeout(700);
 
     expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(30);
+    await expect(page.locator('.card.is-lifted')).toHaveCount(0);
   });
 });
 
@@ -78,15 +84,16 @@ test('tapping selects, and tapping outside deselects', async ({ page, server }) 
   await expect(page.locator('.card.is-selected')).toHaveCount(0);
 });
 
-test('the grip is always there, whether or not the card is selected — a locked one has none', async ({ page, server }) => {
+test('a card carries no drag chrome at all — the body is the drag surface', async ({ page, server }) => {
   await server.seed({ plan: dense() });
   await signInAndWaitForPlan(page);
 
-  await expect(card(page, 'travel').locator('.card-grip')).toHaveCount(1);
-  await expect(card(page, 'ceremony').locator('.card-grip')).toHaveCount(0);
+  await expect(page.locator('.card-grip')).toHaveCount(0);
+  await expect(card(page, 'travel')).toHaveClass(/is-draggable/);
+  await expect(card(page, 'ceremony')).not.toHaveClass(/is-draggable/);
 
   await select(page, 'travel');
-  await expect(card(page, 'travel').locator('.card-grip')).toHaveCount(1);
+  await expect(card(page, 'travel')).toHaveClass(/is-draggable/);
 });
 
 test('a selected card offers handles; a locked one has no top handle at all', async ({ page, server }) => {
@@ -132,18 +139,33 @@ test('D2, F6: the toolbar replaces the + and says what the card hid', async ({ p
 test.describe('long press', () => {
   test.skip(({ browserName }) => !supportsTouchDrag(browserName), 'touch input needs CDP');
 
-  test('opens the editor', async ({ page, server, isMobile }) => {
+  test('lifts the card to be moved, and does not open the editor', async ({ page, server, isMobile }) => {
     test.skip(!isMobile, 'long press is a touch gesture');
     await server.seed({ plan: dense() });
     await signInAndWaitForPlan(page);
 
     await touchTap(page, await cardPoint(page, card(page, 'ready')), { holdMs: 700 });
 
+    // The hold belongs to the move now. Released without travelling, it commits
+    // nothing — and it is emphatically not a way into the editor.
+    await expect(page.locator('#activity-dialog')).toHaveCount(0);
+    expect((await server.read()).revision).toBe(1);
+  });
+
+  test('a double tap is what opens the editor on touch', async ({ page, server, isMobile }) => {
+    test.skip(!isMobile, 'this is the touch route into the editor');
+    await server.seed({ plan: dense() });
+    await signInAndWaitForPlan(page);
+
+    const point = await cardPoint(page, card(page, 'ready'));
+    await touchTap(page, point);
+    await touchTap(page, point);
+
     await expect(page.locator('#activity-dialog')).toBeVisible();
     await expect(page.locator('#activity-dialog input[name="title"]')).toHaveValue('Getting Ready');
   });
 
-  test('a second finger does not open somebody else\'s card', async ({ page, server, isMobile }) => {
+  test('a second finger does not lift somebody else\'s card', async ({ page, server, isMobile }) => {
     test.skip(!isMobile, 'long press is a touch gesture');
     await server.seed({ plan: dense() });
     await signInAndWaitForPlan(page);
@@ -153,16 +175,16 @@ test.describe('long press', () => {
 
     // The second press used to overwrite the first while its timer was still
     // armed, and the timer read whatever the candidate had become — so the
-    // editor opened for the card the first finger was not on.
+    // hold fired for the card the first finger was not on.
     await touchTwo(page, first, second);
 
-    const open = await page.locator('#activity-dialog').count();
-    if (open) {
-      await expect(page.locator('#activity-dialog input[name="title"]'), 'the first finger decides')
-        .toHaveValue('Getting Ready');
+    const lifted = page.locator('.card.is-lifted');
+    if (await lifted.count()) {
+      await expect(lifted, 'the first finger decides').toHaveAttribute('data-activity-id', 'ready');
     }
     // And nothing is left looking pressed.
     await expect(page.locator('.card.is-pressed')).toHaveCount(0);
+    await expect(page.locator('.card.is-charging')).toHaveCount(0);
   });
 
   test('is cancelled by a scroll', async ({ page, server, isMobile }) => {
@@ -171,11 +193,12 @@ test.describe('long press', () => {
     await signInAndWaitForPlan(page);
 
     const from = await cardPoint(page, card(page, 'ready'));
-    // Hold briefly, then move: this is a scroll, not a press.
+    // Held for less than the lift takes, then moved: this is a scroll.
     await touchDrag(page, from, { x: from.x, y: from.y - 200 }, { steps: 8, holdMs: 200 });
     await page.waitForTimeout(700);
 
-    await expect(page.locator('#activity-dialog')).toHaveCount(0);
+    await expect(page.locator('.card.is-lifted')).toHaveCount(0);
+    expect((await server.read()).revision, 'nothing was moved').toBe(1);
   });
 
   test('on a tall open-time block, opens its actions sheet — a tap alone selects it instead', async ({ page, server, isMobile }) => {
@@ -490,34 +513,57 @@ test.describe('resize', () => {
 test.describe('moving a card', () => {
   test.skip(({ browserName }) => !supportsTouchDrag(browserName), 'pointer drags need CDP for touch projects');
 
-  test('the grip drags a card to any time — including a drop in what was empty space', async ({ page, server, isMobile }) => {
-    test.skip(Boolean(isMobile), 'the grip is the pointer route; touch holds it first');
+  test('the card body drags to any time — including a drop in what was empty space', async ({ page, server, isMobile }) => {
+    test.skip(Boolean(isMobile), 'a mouse lifts on movement; touch holds first');
+    await server.seed({ plan: dense() });
+    await signInAndWaitForPlan(page);
+
+    // Down into the hour that is open between Arrival & Buffer and Ceremony.
+    const before = await startOf(page, 'buffer');
+    const from = await dragFrom(page, 'buffer');
+
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    // Down by 100 px — 25 minutes at four pixels a minute.
+    await page.mouse.move(from.x, from.y + 100, { steps: 12 });
+    // Landing in a gap, so the readout is a time and not a verdict.
+    await expect(page.locator('.resize-bubble')).toContainText('Starts');
+    await expect(page.locator('.card.is-clash')).toHaveCount(0);
+    await page.mouse.up();
+
+    await expect(page.locator('.save-indicator')).toHaveText('Saved');
+    expect(await startOf(page, 'buffer')).toBe(before + 25);
+  });
+
+  test('a hold lifts a card on touch, and the card travels with the finger', async ({ page, server, isMobile }) => {
+    test.skip(!isMobile, 'this is the touch route');
     await server.seed({ plan: dense() });
     await signInAndWaitForPlan(page);
 
     const before = await startOf(page, 'travel');
-    const grip = await card(page, 'travel').locator('.card-grip').boundingBox();
+    // The card's middle, stage pill and all: a hold lifts the card wherever it
+    // lands, so the controls the card draws do not punch holes in the surface.
+    const from = centreOf(await boxInView(page, card(page, 'travel')));
 
-    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
-    await page.mouse.down();
-    // Up by 100 px — 25 minutes at four pixels a minute.
-    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2 - 100, { steps: 12 });
-    await expect(page.locator('.resize-bubble')).toContainText('Starts');
-    await page.mouse.up();
+    // Held still past the lift threshold, then moved: a drag, not a scroll.
+    await touchDrag(page, from, { x: from.x, y: from.y - 100 }, { steps: 12, holdMs: 450 });
 
     await expect(page.locator('.save-indicator')).toHaveText('Saved');
     expect(await startOf(page, 'travel')).toBe(before - 25);
   });
 
-  test('dropping a card back where it started changes nothing', async ({ page, server, isMobile }) => {
-    test.skip(Boolean(isMobile), 'the grip is the pointer route');
+  test('a lift under a five-minute step lands nowhere and changes nothing', async ({ page, server, isMobile }) => {
+    test.skip(Boolean(isMobile), 'a mouse lifts on movement');
     await server.seed({ plan: dense() });
     await signInAndWaitForPlan(page);
 
-    const grip = await card(page, 'travel').locator('.card-grip').boundingBox();
-    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+    const from = await dragFrom(page, 'travel');
+    await page.mouse.move(from.x, from.y);
     await page.mouse.down();
-    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2 + 2, { steps: 4 });
+    // Past the 3 px lift threshold but inside the 10 px that a 5-minute step
+    // needs: the card visibly lifts and still commits nothing.
+    await page.mouse.move(from.x, from.y + 6, { steps: 4 });
+    await expect(page.locator('.card.is-lifted')).toHaveCount(1);
     await page.mouse.up();
 
     await page.waitForTimeout(1200);
@@ -525,16 +571,16 @@ test.describe('moving a card', () => {
   });
 
   test('Esc during a drag restores the original time', async ({ page, server, isMobile }) => {
-    test.skip(Boolean(isMobile), 'the grip is the pointer route');
+    test.skip(Boolean(isMobile), 'a mouse lifts on movement');
     await server.seed({ plan: dense() });
     await signInAndWaitForPlan(page);
 
     const before = await startOf(page, 'travel');
-    const grip = await card(page, 'travel').locator('.card-grip').boundingBox();
+    const from = await dragFrom(page, 'travel');
 
-    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+    await page.mouse.move(from.x, from.y);
     await page.mouse.down();
-    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2 - 100, { steps: 10 });
+    await page.mouse.move(from.x, from.y - 100, { steps: 10 });
     await page.keyboard.press('Escape');
     await page.mouse.up();
 
@@ -543,12 +589,41 @@ test.describe('moving a card', () => {
     expect(await startOf(page, 'travel')).toBe(before);
   });
 
-  test('a locked activity has no grip', async ({ page, server, isMobile }) => {
-    test.skip(Boolean(isMobile), 'the grip is the pointer route');
+  test('a drop that would collide says so before it is dropped', async ({ page, server, isMobile }) => {
+    test.skip(Boolean(isMobile), 'a mouse lifts on movement');
     await server.seed({ plan: dense() });
     await signInAndWaitForPlan(page);
-    await expect(card(page, 'ceremony').locator('.card-grip')).toHaveCount(0);
-    await expect(card(page, 'travel').locator('.card-grip')).toHaveCount(1);
+
+    const from = await dragFrom(page, 'travel');
+    const ceremony = await card(page, 'ceremony').boundingBox();
+
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    // Onto the locked Ceremony, which cannot move out of the way.
+    await page.mouse.move(from.x, ceremony.y + 20, { steps: 14 });
+
+    // The verdict replaces the time, and both sides of the collision are marked.
+    await expect(page.locator('.resize-bubble')).toContainText('Overlaps');
+    await expect(page.locator('.card.is-lifted.is-clash')).toHaveCount(1);
+    await expect(card(page, 'ceremony')).toHaveClass(/is-overlap/);
+
+    await page.keyboard.press('Escape');
+    await page.mouse.up();
+  });
+
+  test('a locked activity cannot be lifted', async ({ page, server, isMobile }) => {
+    test.skip(Boolean(isMobile), 'a mouse lifts on movement');
+    await server.seed({ plan: dense() });
+    await signInAndWaitForPlan(page);
+    await expect(card(page, 'ceremony')).not.toHaveClass(/is-draggable/);
+    await expect(card(page, 'travel')).toHaveClass(/is-draggable/);
+
+    const from = await dragFrom(page, 'ceremony');
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(from.x, from.y - 100, { steps: 10 });
+    await expect(page.locator('.card.is-lifted')).toHaveCount(0);
+    await page.mouse.up();
   });
 });
 
@@ -571,11 +646,11 @@ test.describe('group selection', () => {
     const [portraitsBefore, travelBefore, bufferBefore] = await Promise.all(
       ['portraits', 'travel', 'buffer'].map(id => startOf(page, id)));
 
-    const grip = await card(page, 'travel').locator('.card-grip').boundingBox();
-    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+    const from = await dragFrom(page, 'travel');
+    await page.mouse.move(from.x, from.y);
     await page.mouse.down();
     // Down by 60 px — 15 minutes at four pixels a minute.
-    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2 + 60, { steps: 10 });
+    await page.mouse.move(from.x, from.y + 60, { steps: 10 });
     await expect(page.locator('.resize-bubble')).toContainText('3 activities');
     await page.mouse.up();
 
@@ -596,10 +671,10 @@ test.describe('group selection', () => {
     const ceremonyBefore = await startOf(page, 'ceremony');
     const bufferBefore = await startOf(page, 'buffer');
 
-    const grip = await card(page, 'buffer').locator('.card-grip').boundingBox();
-    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+    const from = await dragFrom(page, 'buffer');
+    await page.mouse.move(from.x, from.y);
     await page.mouse.down();
-    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2 + 40, { steps: 8 });
+    await page.mouse.move(from.x, from.y + 40, { steps: 8 });
     await page.mouse.up();
 
     await expect(page.locator('.save-indicator')).toHaveText('Saved');
@@ -721,18 +796,19 @@ test.describe('the same gestures with a finger', () => {
     await expect(page.locator('.open-time[data-before="portraits"]')).toContainText('10 min open');
   });
 
-  test('D23: moving needs a short hold on the grip first', async ({ page, server, isMobile }) => {
+  test('D23: moving needs the card held still first', async ({ page, server, isMobile }) => {
     test.skip(!isMobile, 'this is the touch route');
     await server.seed({ plan: dense() });
     await signInAndWaitForPlan(page);
 
     const before = await startOf(page, 'travel');
-    const handle = await boxInView(page, card(page, 'travel').locator('.card-grip'));
-    const from = centreOf(handle);
+    const from = centreOf(await boxInView(page, card(page, 'travel')));
     const to = { x: from.x, y: Math.max(12, from.y - 100) };
 
-    const gesture = await touchDrag(page, from, to, { steps: 12, holdMs: 260, release: false });
-    await expect(page.locator('.resize-bubble')).toContainText('Starts');
+    const gesture = await touchDrag(page, from, to, { steps: 12, holdMs: 450, release: false });
+    // Travel sits exactly in the gap between Portraits and Arrival & Buffer, so
+    // moving it at all collides — what this asserts is that the hold lifted it.
+    await expect(page.locator('.card.is-lifted')).toHaveCount(1);
     await gesture.end();
 
     await expect(page.locator('.save-indicator')).toHaveText('Saved');
@@ -744,11 +820,32 @@ test.describe('the same gestures with a finger', () => {
     await server.seed({ plan: dense() });
     await signInAndWaitForPlan(page);
 
-    const handle = await boxInView(page, card(page, 'travel').locator('.card-grip'));
-    const from = centreOf(handle);
+    await boxInView(page, card(page, 'travel'));
+    const from = centreOf(await boxInView(page, card(page, 'travel')));
     await touchDrag(page, from, { x: from.x, y: from.y - 220 }, { steps: 10, holdMs: 0, settleMs: 4 });
     await page.waitForTimeout(700);
 
     expect((await server.read()).revision, 'nothing was moved').toBe(1);
+  });
+
+  test('sideways drift during the hold does not cancel it', async ({ page, server, isMobile }) => {
+    test.skip(!isMobile, 'this is the touch route');
+    await server.seed({ plan: dense() });
+    await signInAndWaitForPlan(page);
+
+    const before = await startOf(page, 'travel');
+    await boxInView(page, card(page, 'travel'));
+    const from = await cardPoint(page, card(page, 'travel'));
+
+    // A thumb pivots around its knuckle: lateral drift is not a scroll signal,
+    // so it gets 20 px of tolerance where vertical movement gets 10.
+    const gesture = await touchDrag(page, from, { x: from.x + 14, y: from.y },
+      { steps: 4, holdMs: 450, release: false });
+    await gesture.move(from.x + 14, from.y - 100);
+    await expect(page.locator('.card.is-lifted')).toHaveCount(1);
+    await gesture.end(from.x + 14, from.y - 100);
+
+    await expect(page.locator('.save-indicator')).toHaveText('Saved');
+    expect(await startOf(page, 'travel')).toBe(before - 25);
   });
 });

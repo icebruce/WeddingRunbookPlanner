@@ -65,7 +65,7 @@ Saturday, November 21, 2026 · Ceremony at St. Peter and Paul Orthodox Sobor, 2:
 - All typed clock times round to the nearest 5 minutes.
 - Times after midnight belong to the next day when they follow a late activity (e.g. 1:15 AM after an 11 PM activity) — a plan's day can run past 1440 minutes.
 - Growing, shrinking or moving an activity never moves any other activity. Two activities are allowed to occupy the same minutes; that is drawn as an overlap (§3.5), not resolved or hidden.
-- The one deliberate way several activities move together is a **group move** (§5.6): select two or more, drag any of their grips, and every unlocked activity in the selection shifts by the same amount. A locked activity in the selection stays put.
+- The one deliberate way several activities move together is a **group move** (§5.6): select two or more, drag any of them, and every unlocked activity in the selection shifts by the same amount. A locked activity in the selection stays put.
 - Open time is never stored on an activity — it is always derived fresh from the current gaps between activities (§5.9).
 
 ---
@@ -126,7 +126,7 @@ At the approved scale this gives:
 
 **Stage colour:** a vertical bar on the card's left in the stage's phase colour, inset top and bottom, scaling with the card.
 
-**Desktop card:** one row with grip, bar, time and duration, stage tag, title with glyphs, lock and pencil (Edit) buttons; second row with location left and people right. Cards under 30 minutes hide people and show the dots. There is no ⋯ menu on the card face — Duplicate and Delete live in the activity editor (§5.2), reached via the pencil.
+**Desktop card:** one row with bar, time and duration, stage tag, title with glyphs, and the lock button; second row with location left and people right. There is no drag handle and no pencil: the body is the drag surface and a double-click opens the editor. Cards under 30 minutes hide people and show the dots. There is no ⋯ menu on the card face — Duplicate and Delete live in the activity editor (§5.2).
 
 ### 3.4 Open time block
 
@@ -153,15 +153,16 @@ The summary line shows `20 min conflict ›`.
 | Gesture | Result |
 |---|---|
 | Swipe anywhere on a card or the timeline | Scrolls. Never resizes or moves. |
-| Tap card | Selects it (blue ring, handles, grip, toolbar) |
+| Tap card | Selects it (blue ring, handles, toolbar) |
+| Double-tap card | Opens the edit sheet |
 | Tap empty timeline / outside | Deselects |
-| Long-press card (~500 ms) | Opens the edit sheet. Cancelled if the finger moves >10 px or scrolling starts. Pressed feedback appears immediately. |
+| Press and hold a card (300 ms) | Lifts it to be moved (§5.6). Pressed feedback is immediate and deepens across the hold. Cancelled by >10 px of vertical movement (20 px sideways), which makes it a scroll. |
 | Drag top/bottom handle of selected card | Resizes (§5.5) |
-| Drag the card's grip | Moves the card to a new time (§5.6) |
+| Drag a lifted card | Moves it to a new time (§5.6) |
 | Tap open time | Open-time actions |
 | Tap summary link | Scrolls to open time or conflict |
 
-**Selected card** shows: blue ring; grip (always visible on any unlocked card, not only when selected); bottom handle; top handle unless locked. Handles are small visible bars with large invisible touch areas. The add button is replaced by the **selection toolbar**:
+**Selected card** shows: blue ring; bottom handle; top handle unless locked. Handles are small visible bars with large invisible touch areas. The add button is replaced by the **selection toolbar**:
 
 - Context line: `Getting-ready Portraits · 12:45 – 1:15 PM`
 - Second line (only if the card hides anything): the hidden details, e.g. the full people list.
@@ -171,12 +172,12 @@ The summary line shows `20 min conflict ›`.
 
 | Action | Result |
 |---|---|
-| Hover card | Controls brighten; resize handles appear (top unless locked) |
+| Hover card | Controls brighten; resize handles appear (top unless locked); an unlocked card shows the grab cursor |
 | Click card | Selects |
 | Ctrl/Cmd-click card | Adds it to a group selection (2+ cards), for a group move (§5.6) |
 | Click empty area | Deselects, clears group selection |
 | Double-click card | Edit dialog |
-| Drag grip | Moves the card to a new time; with a group selection, drags every unlocked card in it together by the same amount |
+| Drag a card by its body (3 px) | Moves the card to a new time; with a group selection, drags every unlocked card in it together by the same amount |
 | Drag top/bottom edge | Resizes |
 | Click lock | Lock / unlock (exempts from group move; has no other effect) |
 | Click stage tag | Stage menu |
@@ -217,7 +218,7 @@ Done validates and applies; errors appear inline under the field and keep the sh
 ### 5.3 Locking
 - Locking or unlocking an activity never changes its start or duration, and never moves any other activity. Its only effect is whether the activity participates in a group move (§5.6).
 - Toast: `Locked <title> · Undo` / `Unlocked <title> · Undo`. There is no "N activities shifted" shift toast for locking — nothing shifts.
-- A locked activity cannot be resized or moved by any gesture (no grip, no resize handles) until unlocked.
+- A locked activity cannot be resized or moved by any gesture (it cannot be lifted, and has no resize handles) until unlocked.
 
 ### 5.4 Stage
 - Phone: toolbar → Stage → list sheet with current stage ticked. Desktop: click the stage tag → menu.
@@ -239,12 +240,13 @@ Available on the selected card (phone) or hovered/selected card (desktop). Locke
 - Undo offered after commit.
 
 ### 5.6 Move and group move
-- **Single card:** drag its grip anywhere on the timeline to set its start directly — a continuous drag-to-time, not a discrete reorder by position. The target 5-minute line and time highlight as the card is dragged, the same as a resize. Locked activities have no grip and cannot be dragged.
-- **Group move:** Ctrl/Cmd-click (desktop) or the equivalent multi-select gesture adds cards to a group selection (2+ cards); dragging any selected card's grip moves every *unlocked* card in the selection by the same amount of time. A locked card in the selection stays exactly where it is — this is the one deliberate way several activities move together, and it never happens as a side effect of any other change.
-- Near the top/bottom of the screen the page scrolls automatically while dragging.
+- **The card body is the drag surface.** There is no handle. A pointer lifts a card after 3 px of movement; a finger lifts it by holding it still for 300 ms, because what separates a move from a scroll is stillness, not which pixels were touched. The hold arms over the card's own buttons too — the stage pill and people tags would otherwise punch holes in the drag surface — and the click it leaves behind is suppressed, so the button never also fires.
+- **Single card:** drag it anywhere on the timeline to set its start directly — a continuous drag-to-time, not a discrete reorder by position. The target 5-minute line and time highlight as the card is dragged, the same as a resize. Locked activities cannot be lifted.
+- **Group move:** Ctrl/Cmd-click (desktop) or the equivalent multi-select gesture adds cards to a group selection (2+ cards); dragging any selected card moves every *unlocked* card in the selection by the same amount of time. A locked card in the selection stays exactly where it is — this is the one deliberate way several activities move together, and it never happens as a side effect of any other change.
+- Near the top/bottom of the screen the page scrolls automatically while dragging. Speed rises with the square of how far past the edge the pointer is, so the boundary is a creep and the corner crosses the day in seconds; it eases in rather than jolting, and scrolling alone carries the card, so the finger does not have to keep moving.
 - Release commits exactly what was shown. Esc or cancel restores the original positions.
-- Dropping back on the same time changes nothing (no save).
-- If the result creates an overlap, it is shown in the preview, not prevented.
+- Dropping back on the same time changes nothing (no save). Any movement under one 5-minute step resolves to no change, so an accidental lift cannot alter the plan.
+- **If the drop would overlap, the card says so while it is still in the air:** the exact colliding minutes are hatched on both cards, both are outlined, and the readout reports the conflict instead of a time. It is shown, never prevented.
 - Desktop keyboard alternative for a single unlocked card: Alt + ↑/↓ moves it 5 min earlier/later (§4.3).
 
 ### 5.7 Duplicate
@@ -334,7 +336,7 @@ The site can be added to the home screen with its own icon and name “Our Weddi
 - On other dates, the switch lets the user rehearse with the real clock.
 
 ### 6.2 What changes
-- **View only**: header shows `🔒 View only` and **Edit**. Nothing can be moved, resized, fixed or deleted. Desktop hides grips, lock toggles and resize handles; the solid lock on fixed activities stays.
+- **View only**: header shows `🔒 View only` and **Edit**. Nothing can be moved, resized, fixed or deleted. Desktop hides lock toggles and resize handles, and no card can be lifted; the solid lock on fixed activities stays.
 - **Live strip** under the header: pulsing green dot · `NOW` · current activity · `23 min left` (green) on the first line; `Next 1:55 PM Arrival & Buffer` on the second; a thin green progress line along the bottom edge. Desktop: one line, with location of the next activity.
 - **Time line**: green line at the current time with a green dot and time pill in the ruler, running behind cards.
 - **Current activity**: green outline, pulsing `Now` tag, green progress bar.
@@ -392,7 +394,7 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 - Visible focus ring on every focusable control.
 - Touch targets at least 44 × 44 pt.
 - Text contrast ≥ 4.5:1; icons and control outlines ≥ 3:1.
-- Every gesture has a non-gesture alternative: long-press → toolbar Edit; drag → Alt+↑/↓ (desktop); resize → Duration stepper.
+- Every gesture has a non-gesture alternative: double-tap/double-click → toolbar Edit (phone) and Enter on a selected card; drag → Alt+↑/↓ (desktop); resize → Duration stepper.
 - Reduced motion: no pulsing, no movement animations (instant changes).
 - Dialogs trap focus and return it to the triggering control. Focus is never lost after an action.
 - Live strip is a status region, announced only on activity change.
@@ -405,7 +407,7 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 
 **Cards:** no two cards visually overlap except in conflict columns; rows drop in the defined order; dots appear exactly when something is hidden; people show full names then `+N`; stage bar matches phase colour.
 
-**Phone gestures:** a swipe starting anywhere on a card scrolls and never changes data; long-press opens edit; scroll cancels long-press; handles and grip appear only on unlocked cards; locked cards have no handles or grip.
+**Phone gestures:** a swipe starting anywhere on a card scrolls and never changes data; a 300 ms hold lifts it to be moved; movement cancels the hold; a double tap opens edit; handles appear only on unlocked, selected cards; locked cards have no handles and cannot be lifted.
 
 **Resize:** edge follows pointer within 1 px; commits on 5-minute lines; resizing one activity never moves another; Esc restores; undo works.
 
@@ -425,7 +427,7 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 
 ## 10. QA scenarios (minimum)
 
-1. Plan with no overlaps · 2. Activity with open time before it · 3. Two activities overlapping · 4. Three-way overlap · 5. Shrink an activity so it no longer overlaps · 6. Grow an activity into a following one (creates an overlap, nothing is pushed) · 7. 5-, 10-, 15-, 25-, 30-minute and 3-hour cards · 8. Top resize, bottom resize, both in sequence · 9. Resize one activity with an overlapping neighbour unaffected · 10. Drag a card's grip to an earlier time, a later time, onto another activity's time, cancel · 10a. Group-select two+ cards (one locked), drag: locked one stays, others move by the same delta; cancel restores all · 11. Scroll starting on every part of a card (phone) · 12. Long-press edit, long-press cancelled by scroll · 13. Stage change, lock/unlock with no shift · 14. Many people, long location, long title · 15. Plan crossing midnight, view range ending after midnight · 16. Activity outside the configured view range · 17. Offline edit → reload → reconnect · 18. Server 500 and 400 on save · 19. Session expiry mid-edit · 20. Two devices editing · 21. Version save/restore/delete · 22. Day-of before/during/open/conflict/after · 23. Edit on the day and auto-return · 24. Person filter + print · 25. Empty plan + template · 26. Dark appearance on all screens · 27. Keyboard-only desktop pass · 28. Screen reader pass on phone · 29. 320 px, 390 px, 430 px, 740 px, 1024 px, 1440 px widths, phone landscape · 30. iPad with touch (no hover) · 31. Phone hardware/gesture back closes an open sheet, menu, or card selection instead of leaving the app.
+1. Plan with no overlaps · 2. Activity with open time before it · 3. Two activities overlapping · 4. Three-way overlap · 5. Shrink an activity so it no longer overlaps · 6. Grow an activity into a following one (creates an overlap, nothing is pushed) · 7. 5-, 10-, 15-, 25-, 30-minute and 3-hour cards · 8. Top resize, bottom resize, both in sequence · 9. Resize one activity with an overlapping neighbour unaffected · 10. Drag a card to an earlier time, a later time, onto another activity's time (the overlap previews before the drop), cancel · 10a. Group-select two+ cards (one locked), drag: locked one stays, others move by the same delta; cancel restores all · 11. Scroll starting on every part of a card (phone) · 12. Hold to lift, hold cancelled by movement, double-tap to edit · 13. Stage change, lock/unlock with no shift · 14. Many people, long location, long title · 15. Plan crossing midnight, view range ending after midnight · 16. Activity outside the configured view range · 17. Offline edit → reload → reconnect · 18. Server 500 and 400 on save · 19. Session expiry mid-edit · 20. Two devices editing · 21. Version save/restore/delete · 22. Day-of before/during/open/conflict/after · 23. Edit on the day and auto-return · 24. Person filter + print · 25. Empty plan + template · 26. Dark appearance on all screens · 27. Keyboard-only desktop pass · 28. Screen reader pass on phone · 29. 320 px, 390 px, 430 px, 740 px, 1024 px, 1440 px widths, phone landscape · 30. iPad with touch (no hover) · 31. Phone hardware/gesture back closes an open sheet, menu, or card selection instead of leaving the app.
 
 ---
 
@@ -459,6 +461,6 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 | D24 | Status control in the phone menu; stays in desktop top bar | Header pill on all sizes |
 | D25 | People tags: full names then `+N`, never initials | First five names, then initials |
 | D26 | Timeline model rewrite (commit `2939550`): every activity stores its own absolute `start`; nothing propagates or auto-pushes; `locked` only exempts an activity from a deliberate group move | Flexible/Fixed propagation chain with stored `gapBefore` and automatic conflict resolution |
-| D27 | Group move: Ctrl/Cmd-click selects multiple cards, dragging any selected grip moves every unlocked one by the same delta | No multi-activity move; reorder moved one activity by list position |
+| D27 | Group move: Ctrl/Cmd-click selects multiple cards, dragging any selected card moves every unlocked one by the same delta | No multi-activity move; reorder moved one activity by list position |
 | D28 | Single date+time picker (flatpickr, vendored) replaces the Flexible/Fixed radio and separate time field in the activity editor | Starts: Flexible \| Fixed radio |
 | D29 | Phone back-button/gesture closes the open sheet, menu, or card selection instead of leaving the app (a dummy history entry pushed while an overlay is open) | Back navigated away from the app with an overlay still open |

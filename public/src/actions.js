@@ -8,7 +8,7 @@
  */
 import { defineAction } from './state.js';
 import { normalizeDuration } from './validate.js';
-import { buildSchedule } from './schedule.js';
+import { buildSchedule, formatTime } from './schedule.js';
 import {
   addInOpenTime,
   duplicate,
@@ -85,9 +85,12 @@ defineAction('activity.resizeTop', fromOperation(
   activity => `Resized ${activity.title}`
 ));
 
+// The new time is in the label, not just the title: a move made by dragging is
+// undone from the toast, and "Moved Ceremony" does not say whether it landed
+// where it was meant to.
 defineAction('activity.moveTo', fromOperation(
   (plan, { id, start }) => moveTo(plan, id, start),
-  activity => `Moved ${activity.title}`
+  (activity, { start }) => `Moved ${activity.title} to ${formatTime(start)}`
 ));
 
 defineAction('activity.moveGroup', (plan, { ids, deltaMinutes }) => {

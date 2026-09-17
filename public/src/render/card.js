@@ -103,6 +103,9 @@ export function renderCard(card, { ui, filter = null, nowMinutes = null }) {
     selected && 'is-selected',
     groupSelected && 'is-group-selected',
     item.locked && 'is-locked',
+    // The card body is the drag surface: there is no separate handle to point
+    // a gesture at, so the class is what says whether this one can be moved.
+    draggable && 'is-draggable',
     item.overlaps?.length && 'is-overlap',
     faded && 'is-faded',
     stageOpen && 'is-menu-open'
@@ -139,15 +142,11 @@ export function renderCard(card, { ui, filter = null, nowMinutes = null }) {
     tabindex="0" data-action="select" data-id="${id}" data-focus-key="card:${id}"
     aria-label="${escapeHtml(accessibleName(item, stage))}">
     <span class="card-rule" aria-hidden="true"></span>
-    ${draggable ? `<span class="card-grip" data-role="move" data-id="${id}" aria-hidden="true">${icon('grip')}</span>` : ''}
     <div class="card-body">${body}</div>
     ${viewOnly ? '' : `<div class="card-controls">
       <button class="lock-button ${item.locked ? 'is-locked' : ''}" type="button"
         data-action="lock" data-id="${id}" data-focus-key="lock:${id}" aria-pressed="${item.locked}"
         aria-label="${item.locked ? `Unlock ${title}` : `Lock ${title} against a group move`}">${icon(item.locked ? 'lock' : 'lock-open')}</button>
-      <button class="icon-button card-edit" type="button"
-        data-action="edit" data-id="${id}" data-focus-key="edit:${id}"
-        aria-label="Edit ${title}">${icon('pencil')}</button>
     </div>`}
     <!-- Handles are in the DOM on any unlocked, draggable card, so a mouse
          can reveal them by hovering (CSS hides/shows them — see cards.css);
