@@ -48,6 +48,8 @@ Defined once in `public/styles/tokens.css` as CSS custom properties on `:root`, 
 | `--fixed` (= `--ink`) | `#1C1C1E` | `#F2F2F0` | Solid lock only |
 | `--amber` / `--amber-tint` | `#8A5A00` / `#FFF1D6` | `#F2C46B` / `#3A2C10` | Sunset marker, “Editing” label on the day |
 | `--ok` | `#34A853` | `#34C759` | “Saved” dot only |
+
+The save dot never animates. A save lasts the 650 ms debounce plus a round trip, and a one-second pulse over that window dies mid-fade — a flicker in the corner of the eye on every nudge of a card. “Saving…” stays up for 700 ms minimum once shown, so the paths that skip the debounce (version save, sign-out, the flush on returning to the tab) cannot blink it; what is shown when that debt is paid is whatever is true *then*, never a stale “Saved”.
 | `--brand` | `#D65A73` | `#E27A90` | Heart in the brand mark only |
 
 Red never means “fixed”. Green never means “selected”. Blue never means “live”.
@@ -207,7 +209,7 @@ Primary 50 px (phone) / 40 px (desktop), 14/12 px radius, `--ink` fill, white 17
 
 ### 4.9 Empty, loading, error
 - Empty plan card: centered, 18 px radius, icon well 48 px (brand colour icon), Title 3, subhead text, primary + secondary buttons.
-- Loading: skeleton of 3 cards at their rest height pattern; no spinner for < 400 ms.
+- Loading: nothing at all for the first 400 ms, then a skeleton of 3 cards at their rest height pattern (240 / 120 / 360 px), in the real page padding, so the plan arrives into the shape it was drawn in. Never a spinner.
 - Load failure: centered message + Retry (primary); never an empty timeline.
 
 ### 4.10 Print

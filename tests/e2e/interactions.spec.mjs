@@ -177,3 +177,61 @@ test('the sheet lifts above the on-screen keyboard', async ({ page, server }) =>
   const liftedBottom = await page.locator('.sheet').evaluate(n => n.getBoundingClientRect().bottom);
   expect(restingBottom - liftedBottom).toBeGreaterThanOrEqual(295);
 });
+
+test('a fast load shows nothing at all, and a slow one shows a skeleton', async ({ page, server }) => {
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+
+  // Hold the plan back so the skeleton has a reason to appear.
+  await page.route('**/api/plan*', async route => {
+    await new Promise(resolve => setTimeout(resolve, 1200));
+    await route.continue();
+  });
+  await signInAndWaitForPlan(page).catch(() => {});
+  await page.goto('/');
+
+  // Nothing for the first 400 ms — a load that quick should look instant.
+  await page.waitForTimeout(150);
+  expect(await page.locator('.skeleton-card').count()).toBe(0);
+
+  await expect(page.locator('.skeleton-card').first()).toBeVisible({ timeout: 2000 });
+  expect(await page.locator('.skeleton-card').count()).toBe(3);
+  // It is three cards at their real rest heights, not three identical bars.
+  const heights = await page.locator('.skeleton-card').evaluateAll(
+    nodes => nodes.map(n => Math.round(n.getBoundingClientRect().height)));
+  expect(new Set(heights).size).toBeGreaterThan(1);
+
+  await page.unroute('**/api/plan*');
+});
+
+test('the saving dot does not pulse', async ({ page }) => {
+  await signInAndWaitForPlan(page);
+  const name = await page.evaluate(() => {
+    const probe = document.createElement('span');
+    probe.className = 'save-indicator save-indicator--saving';
+    const dot = document.createElement('span');
+    dot.className = 'save-dot';
+    probe.append(dot);
+    document.body.append(probe);
+    const value = getComputedStyle(dot).animationName;
+    probe.remove();
+    return value;
+  });
+  expect(name).toBe('none');
+});
+
+test('a failure during the saving hold is not masked by a stale Saved', async ({ page, server }) => {
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+  await signInAndWaitForPlan(page);
+
+  await page.route('**/api/plan', route =>
+    route.request().method() === 'PUT'
+      ? route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"nope"}' })
+      : route.continue());
+
+  await page.locator('.card').first().click();
+  await page.locator(isPhoneLayout(page) ? '.toolbar [data-action="lock"]' : '.card .lock-button').first().click();
+
+  // Whatever the indicator does in between, it must land on the truth.
+  await expect(page.locator('.save-indicator--not-saved')).toBeVisible({ timeout: 10_000 });
+  await page.unroute('**/api/plan');
+});

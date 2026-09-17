@@ -48,12 +48,51 @@ const toast = createToaster(
 const store = createStore();
 const DEVICE_ID = deviceId();
 
+/**
+ * How long "Saving…" stays up once it has been shown.
+ *
+ * Most saves wait out the 650 ms debounce first, so they are readable on their
+ * own. The ones that skip it — a version being saved, signing out, the flush
+ * on coming back to the tab — can answer in fifty milliseconds, and a word
+ * that appears and leaves inside a twentieth of a second is a flicker in the
+ * corner of the eye rather than a report. Every other state is shown at once:
+ * "Offline" and "Not saved" are things to act on, not things to pace.
+ */
+const SAVING_MIN_MS = 700;
+let shownSaveState = SAVE_STATES.saved;
+let savingShownAt = 0;
+let saveHoldTimer = null;
+
+function showSaveState(state) {
+  shownSaveState = state;
+  if (state === SAVE_STATES.saving) savingShownAt = Date.now();
+  // The offline bar reads the same state as the header, so both repaint.
+  store.setUi({ saveState: state }, { regions: ['header', 'offline'] });
+}
+
+function presentSaveState(next) {
+  clearTimeout(saveHoldTimer);
+  saveHoldTimer = null;
+
+  const owed = SAVING_MIN_MS - (Date.now() - savingShownAt);
+  if (next !== SAVE_STATES.saving && shownSaveState === SAVE_STATES.saving && owed > 0) {
+    // Show whatever is true when the debt is paid, not what was true now: a
+    // failure landing during the hold must not be masked by a stale "Saved".
+    saveHoldTimer = setTimeout(() => {
+      saveHoldTimer = null;
+      showSaveState(saver.state);
+    }, owed);
+    return;
+  }
+  showSaveState(next);
+}
+
 const saver = createSavePipeline({
   save: (plan, revision, device) => api.save(plan, revision, device),
   getPlan: () => store.plan,
   deviceId: DEVICE_ID,
   // The offline bar reads the same state as the header, so both repaint.
-  onStateChange: next => store.setUi({ saveState: next }, { regions: ['header', 'offline'] }),
+  onStateChange: presentSaveState,
   onSaved: ({ revision, updatedAt }) => {
     store.setRevision(revision, updatedAt);
     writeDeviceCopy(store.plan, { revision, dirty: false });
@@ -127,6 +166,13 @@ const REGIONS = {
 
 let currentScreen = null;
 let currentDialogKey = null;
+/**
+ * A load that resolves this fast should look instant, so nothing is drawn at
+ * all until it has not (DESIGN_GUIDE 4.9). A skeleton that appears for eighty
+ * milliseconds is a flash, which is worse than the blank it replaced.
+ */
+const LOADING_DELAY_MS = 400;
+let loadingTimer = null;
 /** Set once per visit to the day-of view, so the scroll happens on arrival only. */
 let scrolledToNow = false;
 // Focus is returned to whatever opened the sheet when it closes, so a dialog
@@ -134,6 +180,14 @@ let scrolledToNow = false;
 let dialogOpener = null;
 /** The pending "unhighlight" timer from the last summary-link jump. */
 let highlightTimer = null;
+
+function showLoading() {
+  app.innerHTML = '';
+  clearTimeout(loadingTimer);
+  loadingTimer = setTimeout(() => {
+    if (currentScreen === 'loading') app.innerHTML = loadingScreen();
+  }, LOADING_DELAY_MS);
+}
 
 function screenOf(ui) {
   if (ui.loadError && !store.plan) return 'error';
@@ -161,8 +215,26 @@ function signInScreen() {
   </main>`;
 }
 
+/**
+ * The loading skeleton (DESIGN_GUIDE 4.9).
+ *
+ * Three cards at their rest-height pattern rather than a spinner: the plan
+ * then arrives into the shape it was already drawn in, instead of the screen
+ * cutting from a message to a timeline. It is `aria-hidden` and the region
+ * carries the one sentence a screen reader needs — a skeleton read aloud is
+ * three empty boxes.
+ */
+const SKELETON_HEIGHTS = [240, 120, 360];
+
 function loadingScreen() {
-  return `<main class="loading-view"><div class="loading-mark">${icon('heart')}</div><p>Opening your plan…</p></main>`;
+  return `<main class="loading-view planner" aria-busy="true" aria-label="Opening your plan">
+    <div class="skeleton-heading" aria-hidden="true">
+      <div class="skeleton-line"></div><div class="skeleton-line"></div>
+    </div>
+    <div class="skeleton-timeline" aria-hidden="true">
+      ${SKELETON_HEIGHTS.map(height => `<div class="skeleton-card" style="height:${height}px"></div>`).join('')}
+    </div>
+  </main>`;
 }
 
 /** A failed load is never shown as an empty plan or as a sign-in prompt. */
@@ -181,9 +253,10 @@ function repaint(regions = ['all']) {
 
   if (screen !== currentScreen) {
     currentScreen = screen;
+    if (screen !== 'loading') clearTimeout(loadingTimer);
     if (screen === 'error') app.innerHTML = errorScreen(ui.loadError);
     else if (screen === 'signin') app.innerHTML = signInScreen();
-    else if (screen === 'loading') app.innerHTML = loadingScreen();
+    else if (screen === 'loading') showLoading();
     else {
       app.innerHTML = SHELL;
       paintRegions(Object.keys(REGIONS));
