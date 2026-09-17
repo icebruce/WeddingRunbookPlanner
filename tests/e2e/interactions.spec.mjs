@@ -65,6 +65,11 @@ test('a toast can be swiped away', async ({ page, server }) => {
     await page.mouse.down();
     await page.mouse.move(x + dx / 3, y + dy / 3, { steps: 4 });
     await page.mouse.move(x + dx, y + dy, { steps: 6 });
+    // The move promise resolves once CDP has queued the input, not once the
+    // page's own pointermove handler has run — under CI load the release can
+    // overtake it, so onSwipeRelease sees `moved` still false and the swipe
+    // reads as a tap. Give the handler a turn before letting go.
+    await page.waitForTimeout(50);
     await page.mouse.up();
   };
 
