@@ -152,21 +152,23 @@ Pinned filter row: 44 px, `--sel-tint` glass, `Showing **Photographer** · 2 of 
 - “More” dots: three 3.5 px dots, 2.5 px apart, 9 px from right, 7 px from bottom.
 - Glyphs after title: lock 15 px `--fixed` (solid), note 15 px `--faint`, `● Now` tag 20 px `--live-tint`/`--live`.
 - Tags: 26 px tall, 13 px radius, 13/550; stage tag uses phase tint with phase-coloured icon; people tags use `--fill`; `+N` uses `--fill-strong` and 650.
-- Grip: shown on any unlocked card whenever it can be dragged (not only when selected or hovered) — it is a persistent drag-to-time control, not a reorder-on-selection handle.
+- No drag handle. The card body is the drag surface; where there is a mouse, the grab cursor is the whole affordance. The stage bar therefore sits at its specced 10 px from the left, and the body starts at 26 px.
 
-**Desktop card:** columns `grip 22 | bar | time 132 | stage 138 | title & meta (1fr) | controls`. Row 1: time range (13 `--soft`) over duration (14/600), stage tag, title (16/600) with glyphs, lock and pencil/Edit (34 px buttons, `#9A9CA3`, locked `--fixed`). There is no ⋯ button on the card face — Duplicate and Delete live in the Edit dialog. Row 2: location left, people right. Under 30 min: padding 7, people hidden, dots shown.
+**Desktop card:** columns `bar | time 132 | stage 138 | title & meta (1fr) | lock`. Row 1: time range (13 `--soft`) over duration (14/600), stage tag, title (16/600) with glyphs, lock (34 px button, `#9A9CA3`, locked `--fixed`). There is no pencil and no ⋯ button on the card face — a double-click opens the editor, and Duplicate and Delete live in it. Row 2: location left, people right. Under 30 min: padding 7, people hidden, dots shown.
 
 **States**
 
 | State | Treatment |
 |---|---|
 | Rest | Rest elevation |
-| Hover (desktop) | Hover elevation; controls `#5F6269`; resize handles 34×9 hollow `--sel` capsule at top (unless locked) and bottom |
+| Hover (desktop) | Hover elevation; controls `#5F6269`; resize handles 34×9 hollow `--sel` capsule at top (unless locked) and bottom; grab cursor on an unlocked card |
 | Pressed (touch) | Scale 0.99, 100 ms |
+| Charging (touch) | Scale 0.972 over the 300 ms hold, linear, with hover elevation. The press visibly deepens so the lift is telegraphed rather than sprung — with no handle to advertise the gesture, this is the affordance. |
 | Focus | 2 px `--sel` ring offset 2 px |
-| Selected | 2 px `--sel` ring + `0 8px 22px rgba(10,108,255,.14)`; handles 34×9 hollow `--sel` capsule top (unless locked) and bottom; grip (not a selection-only reorder icon — see above); body right padding 44 px |
+| Selected | 2 px `--sel` ring + `0 8px 22px rgba(10,108,255,.14)`; handles 34×9 hollow `--sel` capsule top (unless locked) and bottom; body right padding 46 px |
 | Resizing | Selected + snap line/label + bubble (`--ink` background, white 13/600, 10 px radius) |
-| Dragging (move) | Lifted elevation; the card itself follows the pointer with a live snap line/label at its new time, same treatment as resizing; a group move (§5.6 of `FUNCTIONAL_SPEC.md`) animates the other selected, unlocked cards to their new positions on release |
+| Dragging (move) | Lifted elevation, scale 1.03, **no tilt** — on a timeline the card's edges are read against the snap line, and rotating them puts the two out of parallel exactly when the reading matters; the shadow carries the elevation instead. The card follows the pointer with a live snap line/label at its new time, same treatment as resizing; a group move (§5.6 of `FUNCTIONAL_SPEC.md`) animates the other selected, unlocked cards to their new positions on release |
+| Drop would overlap | Lifted card outlined 1.5 px `--bad`; both cards hatched over the exact colliding minutes and outlined as any overlap is; the snap line, its label and the bubble all turn `--bad` and the bubble reports `Overlaps N min` in place of the time |
 | Live | 1.5 px `--live` outline + soft green shadow; `● Now` tag; green progress |
 | Past (day-of) | Opacity 0.45 |
 | Filtered out | Opacity 0.32 |
@@ -230,10 +232,14 @@ White A4/Letter, 44/52 px margins, header rule 1.5 px black; phase group labels 
 | What | Duration | Easing |
 |---|---|---|
 | Hover, pressed | 100–160 ms | ease-out |
+| Charging press (touch) | the hold's own 300 ms | linear |
+| Lift | 210 ms | `cubic-bezier(.2,.9,.3,1.25)` — the one overshoot in the app |
 | Selection ring, handles, toolbar in/out | 180 ms | ease-out (toolbar slides 12 px + fade) |
 | Sheet / dialog | 240 ms in, 200 ms out | `cubic-bezier(.2,.8,.2,1)` |
 | Neighbours during drag, cards after a committed change | 180 ms `transform` | ease-out |
 | Active resize edge, dragged card | **none** (follows pointer) | — |
+
+**Sharp for what you did; smooth for what the system did.** The lift is the only moment that overshoots, because it confirms an act. Everything that follows from it — the settle, neighbours moving, a cancelled drag returning — stays on the calm curve.
 | Live pulse | 1.8 s loop | ease-out |
 | Toast | 200 ms | ease-out |
 
@@ -245,8 +251,9 @@ Motion happens after release, never during. `prefers-reduced-motion: reduce` rem
 
 - Touch targets ≥ 44 × 44 pt; visible glyphs may be smaller.
 - Handles: visible 34×9 hollow `--sel` capsule (`--surface` fill, 2 px border), centered astride the card's top/bottom edge line, not inset from it; hit area 44 px tall × 120 px wide, centered on the edge, extending outward only on the selected card.
-- Long-press 500 ms with immediate pressed state; reorder hold 150 ms.
-- Movement thresholds: 6 px for tap vs drag, 10 px to cancel long-press.
+- Hold to lift a card: 300 ms, with immediate pressed state that deepens across the hold. Long enough to rule out the stationary beat before a swipe, short enough not to feel like a wait — Apple's 500 ms is for presses that are *contended*, and here the only rival is scrolling, which movement already settles.
+- Movement thresholds: 6 px for tap vs drag; **3 px** for a pointer to lift a card (AppKit's own drag threshold, safe because anything under 10 px rounds to zero minutes); **10 px vertical / 20 px horizontal** to cancel a hold. The cancel is judged per axis, not by distance: the competing gesture is a vertical scroll, and sideways drift is a thumb pivoting around its knuckle.
+- Autoscroll while dragging: edge zone 72 px for a fine pointer, 15 % of the viewport (64–120 px) for a coarse one, tightening to 64 px at the bottom on touch because a thumb rests low. Speed 60 → 720 px/s, rising with the square of the depth past the boundary, eased in over 120 ms and scaled by elapsed time rather than counted per frame.
 - `-webkit-touch-callout: none` and `user-select: none` on cards and handles; text in sheets remains selectable.
 
 ---

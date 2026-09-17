@@ -1,11 +1,16 @@
 /**
- * Direct manipulation: select, long-press, resize and drag.
+ * Direct manipulation: select, hold to lift, resize and drag.
  *
  * The rule that shapes all of it: a swipe that starts anywhere on a card
  * scrolls the day. Cards carry `touch-action: pan-y` and nothing here calls
  * preventDefault before a gesture has actually begun, so the browser is free to
- * take the touch as a scroll. Only the handles and the grip — which is always
- * visible, left edge only — opt out with `touch-action: none`.
+ * take the touch as a scroll.
+ *
+ * There is no drag handle. The card body is the drag surface, which is what
+ * every calendar already teaches, and what distinguishes a move from a scroll
+ * is *stillness*, not which pixels were touched: hold a card without moving and
+ * it lifts. A mouse has no such ambiguity — nothing scrolls by dragging — so it
+ * lifts on movement alone, at AppKit's own 3 px threshold.
  *
  * A drag moves an activity to wherever it is dropped: there is no list to
  * reorder into, because clock time *is* position. Ctrl/Cmd-click adds a card
@@ -17,25 +22,56 @@
  * write to the DOM happens in one `requestAnimationFrame`, so an edge follows
  * the finger without the layout being rebuilt per event (F7).
  */
-import { PX_PER_MIN, applyLaneStyle, buildLayout } from './layout.js';
+import { PX_PER_MIN, applyLaneStyle, buildLayout, overlapBox } from './layout.js';
 import { buildSchedule, formatDuration, formatTime } from './schedule.js';
-import { resizeBottom, resizeTop } from './operations.js';
+import { moveGroup, moveTo, resizeBottom, resizeTop } from './operations.js';
 import { cssEscape } from './dom.js';
 
 /** Movement thresholds, in CSS pixels. */
 const TAP_SLOP = 6;
-const LONG_PRESS_CANCEL = 10;
-const LONG_PRESS_MS = 500;
-const MOVE_HOLD_MS = 150;
-const AUTOSCROLL_EDGE = 64;
-const AUTOSCROLL_STEP = 12;
+/**
+ * A mouse lifts on movement alone. 3 px is AppKit's own drag threshold — and it
+ * is safe to be this eager because a move under 10 px rounds to zero minutes,
+ * so the eager lift is a state you can see and back out of, not a change.
+ */
+const POINTER_SLOP = 3;
+/**
+ * Cancelling the hold is judged per axis, not by distance. The gesture this
+ * competes with is a vertical scroll, so vertical movement is the signal;
+ * sideways drift is a thumb pivoting around its knuckle and means nothing.
+ */
+const HOLD_CANCEL_Y = 10;
+const HOLD_CANCEL_X = 20;
+/**
+ * Long enough to rule out the stationary beat before a swipe, short enough not
+ * to feel like a wait. Apple reserves 500 ms for presses that are *contended*
+ * (the Home screen owes one press to both rearrange and a context menu); here
+ * the only rival is scrolling, and movement already settles that.
+ */
+const HOLD_MS = 300;
+/**
+ * Autoscroll: proportional to depth into the edge, and eased in over time.
+ *
+ * A finger needs a generous edge, because it cannot be placed precisely and it
+ * covers what it is aiming at. A mouse needs a mean one: a deep zone at the
+ * bottom of a window is triggered just by reaching for something low down.
+ */
+const AUTOSCROLL_ZONE_RATIO = 0.15;
+const AUTOSCROLL_ZONE_MIN = 64;
+const AUTOSCROLL_ZONE_MAX = 120;
+const AUTOSCROLL_ZONE_FINE = 72;
+/** A thumb rests low while dragging, so the bottom zone is the tighter one. */
+const AUTOSCROLL_ZONE_BOTTOM_TOUCH = 64;
+const AUTOSCROLL_MIN = 60;   // px/s — 15 min/s, slow enough to hold steady on
+const AUTOSCROLL_MAX = 720;  // px/s — 3 hours/s, a whole day in about five
+const AUTOSCROLL_RAMP_MS = 120;
 /** How close together two taps on the same card have to land to count as a double-click. */
 const DOUBLE_TAP_MS = 400;
 
-export function createGestures({ root, store, commit, repaint, onLongPress, onDoubleClick }) {
+export function createGestures({ root, store, commit, repaint, onDoubleClick }) {
   /** The one gesture in progress, if any. */
   let active = null;
-  /** A press that has not yet become a tap, a long press or a scroll. */
+  /** A press that has not yet become a tap, a lift or a scroll. */
   let candidate = null;
   let frame = null;
   let suppressClickUntil = 0;
@@ -72,14 +108,27 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
 
   function onCardPointerDown(event) {
     // One finger at a time. A second press used to overwrite the first
-    // candidate while its long-press timer was still armed, and the timer read
-    // whatever `candidate` had become — so two fingers opened the editor for
-    // the wrong card and left the first one looking pressed for good.
+    // candidate while its hold timer was still armed, and the timer read
+    // whatever `candidate` had become — so two fingers lifted the wrong card
+    // and left the first one looking pressed for good.
     if (active || candidate || event.button > 0) return;
     const card = event.target.closest('.card');
     if (!card) return;
-    // Controls and handles run their own gestures.
-    if (event.target.closest('button, .handle, .card-grip, .stage-menu')) return;
+    // Handles run their own gesture, and an open menu is not part of the card.
+    if (event.target.closest('.handle, .stage-menu')) return;
+
+    const draggable = card.classList.contains('is-draggable');
+    /**
+     * A tap on one of the card's own buttons belongs to that button. A *hold*
+     * does not: the stage pill and the people tags cover much of a phone card,
+     * and excluding them outright would punch holes in the drag surface exactly
+     * where a thumb lands. So the hold arms over them too, and the click it
+     * leaves behind is suppressed (`suppressingClick`) so the button never also
+     * fires. A pointer keeps the plain exclusion — a mouse on a button that
+     * drifts three pixels meant to press the button.
+     */
+    const onButton = Boolean(event.target.closest('button'));
+    if (onButton && !draggable) return;
 
     const id = card.dataset.activityId;
     card.classList.add('is-pressed');
@@ -87,43 +136,60 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
     candidate = {
       id,
       card,
+      onButton,
       pointerId: event.pointerId,
       x: event.clientX,
       y: event.clientY,
       touch: event.pointerType !== 'mouse',
       groupPick: event.ctrlKey || event.metaKey,
-      longPress: null
+      hold: null
     };
 
-    // A long press opens the editor. It is the phone's alternative to
-    // double-click, and it is cancelled by any movement that looks like a
-    // scroll — which is why the pressed state appears at once but nothing is
-    // committed until the timer fires.
-    if (candidate.touch) {
+    // Holding a card still is what lifts it. The pressed state appears at once
+    // and deepens across the hold (`is-charging`), so with no grip to advertise
+    // the gesture the card itself does: you can feel the lift coming and let go
+    // before it fires. Any movement that looks like a scroll abandons it.
+    if (candidate.touch && draggable) {
+      const pressed = candidate;
+      card.style.setProperty('--hold-ms', `${HOLD_MS}ms`);
+      requestAnimationFrame(() => {
+        if (candidate === pressed) card.classList.add('is-charging');
+      });
       // The press this timer belongs to, captured rather than read back: by
       // the time it fires, `candidate` may be somebody else's.
-      const pressed = candidate;
-      pressed.longPress = setTimeout(() => {
+      pressed.hold = setTimeout(() => {
         if (candidate !== pressed) return;
-        clearCandidate();
-        suppressClickUntil = Date.now() + 700;
-        onLongPress?.(pressed.id);
-      }, LONG_PRESS_MS);
+        beginMove(pressed, pressed.y);
+      }, HOLD_MS);
     }
   }
 
   function onCardPointerMove(event) {
     if (!candidate || candidate.pointerId !== event.pointerId) return;
-    const moved = Math.hypot(event.clientX - candidate.x, event.clientY - candidate.y);
-    if (moved > LONG_PRESS_CANCEL || (!candidate.touch && moved > TAP_SLOP)) clearCandidate();
+    const dx = Math.abs(event.clientX - candidate.x);
+    const dy = Math.abs(event.clientY - candidate.y);
+
+    if (candidate.touch) {
+      if (dy > HOLD_CANCEL_Y || dx > HOLD_CANCEL_X) clearCandidate();
+      return;
+    }
+    // A mouse cannot scroll by dragging, so there is nothing to disambiguate:
+    // movement is the whole signal, and the card lifts at once.
+    if (Math.hypot(dx, dy) > POINTER_SLOP) {
+      if (candidate.onButton || !candidate.card.classList.contains('is-draggable')) clearCandidate();
+      else beginMove(candidate, event.clientY);
+    }
   }
 
   function onCardPointerUp(event) {
     if (!candidate || candidate.pointerId !== event.pointerId) return;
     const moved = Math.hypot(event.clientX - candidate.x, event.clientY - candidate.y);
-    const { id, touch, groupPick } = candidate;
+    const { id, groupPick, onButton } = candidate;
     clearCandidate();
     if (moved > TAP_SLOP) return;
+    // The hold did not fire, so this really was a tap on the button: leave it
+    // to its own click handler rather than also selecting the card.
+    if (onButton) return;
 
     if (groupPick) {
       lastTap = null;
@@ -138,21 +204,40 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
       return;
     }
 
-    // A mouse only: touch's equivalent gesture is the long press above.
-    if (!touch && onDoubleClick && lastTap && lastTap.id === id && Date.now() - lastTap.time <= DOUBLE_TAP_MS) {
+    // Both pointers: the long press belongs to the move now, so a double tap is
+    // what opens the editor on touch, exactly as a double click does elsewhere.
+    if (onDoubleClick && lastTap && lastTap.id === id && Date.now() - lastTap.time <= DOUBLE_TAP_MS) {
       lastTap = null;
       onDoubleClick(id);
       return;
     }
-    lastTap = touch ? null : { id, time: Date.now() };
+    lastTap = { id, time: Date.now() };
 
     store.setUi({ selectedId: id, groupSelection: [], openMenu: null }, { regions: ['timeline', 'toolbar'] });
   }
 
+  /**
+   * A scroll used to cancel any press outright, on the grounds that it was
+   * never a press. That is too blunt now that the press is what lifts a card:
+   * momentum carries a flick on for a moment, and a finger landing while the
+   * day is still gliding to a stop would have its hold quietly refused.
+   *
+   * What actually invalidates the press is the card being carried out from
+   * under the finger. While it is still underneath, the press means what it
+   * meant, and the lift reads its origin at lift time, so the scroll in
+   * between costs nothing.
+   */
+  function onScrollDuringPress() {
+    if (!candidate) return;
+    const box = candidate.card.getBoundingClientRect();
+    if (candidate.y < box.top || candidate.y > box.bottom) clearCandidate();
+  }
+
   function clearCandidate() {
     if (!candidate) return;
-    clearTimeout(candidate.longPress);
-    candidate.card.classList.remove('is-pressed');
+    clearTimeout(candidate.hold);
+    candidate.card.classList.remove('is-pressed', 'is-charging');
+    candidate.card.style.removeProperty('--hold-ms');
     candidate = null;
   }
 
@@ -282,117 +367,139 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
     return selection.length > 1 && selection.includes(id) ? selection : [id];
   }
 
-  function startMove(event, id, { hold }) {
-    if (active || event.button > 0) return;
-    const card = cardFor(id);
-    if (!card) return;
-
+  /**
+   * Lifts the card a press was already on. The press is the gesture's own
+   * beginning, so the origin is where the finger first landed, not where it is
+   * now — otherwise a mouse lift would silently swallow its first 3 px.
+   *
+   * Positions are kept in document space (`clientY + scrollY`). Viewport space
+   * looks equivalent right up until autoscroll runs: the page moves under a
+   * stationary finger, `clientY` never changes, and the card stays pinned to
+   * the time it started at while the day slides past it.
+   */
+  function beginMove(pressed, clientY) {
+    const { id, card, pointerId } = pressed;
     const item = scheduleOf(store.plan).items.find(entry => entry.id === id);
-    if (!item || item.locked) return;
+    if (!item || item.locked) return clearCandidate();
 
-    event.preventDefault();
-    event.stopPropagation();
     clearCandidate();
+    card.setPointerCapture(pointerId);
+    // A tap is over: whatever happens now, it is not a click.
+    suppressClickUntil = Date.now() + 700;
 
-    const handle = event.currentTarget;
-    handle.setPointerCapture(event.pointerId);
-
-    const ids = groupFor(id);
-
-    const begin = () => {
-      active = {
-        kind: 'move',
-        id,
-        ids,
-        card,
-        handle,
-        pointerId: event.pointerId,
-        originY: event.clientY,
-        delta: 0,
-        plan: store.plan,
-        item,
-        // The line the card is dragged against: read once, because a move
-        // never changes the day's visible range the way committing one can.
-        from: Number(root.querySelector('.timeline-grid')?.dataset.from),
-        bubble: createBubble()
-      };
-      document.body.classList.add('is-moving');
-      card.classList.add('is-lifted');
-      drawMove();
+    active = {
+      kind: 'move',
+      id,
+      ids: groupFor(id),
+      card,
+      handle: card,
+      pointerId,
+      originDocY: clientY + window.scrollY,
+      pointerY: clientY,
+      delta: 0,
+      plan: store.plan,
+      item,
+      autoscroll: null,
+      armedFor: 0,
+      lastFrame: 0,
+      // The line the card is dragged against: read once, because a move
+      // never changes the day's visible range the way committing one can.
+      from: Number(root.querySelector('.timeline-grid')?.dataset.from),
+      bubble: createBubble()
     };
 
-    if (hold) {
-      // A short hold before the card lifts, so a finger resting on the grip
-      // while scrolling does not start a drag (D23). The hold has to be still:
-      // moving before it completes means this was a scroll, not a drag, and
-      // the timer is abandoned.
-      const origin = { x: event.clientX, y: event.clientY };
-      let timer = null;
+    document.body.classList.add('is-moving');
+    card.classList.add('is-lifted');
+    drawMove();
 
-      const abort = () => {
-        if (timer) clearTimeout(timer);
-        timer = null;
-        handle.removeEventListener('pointermove', watch);
-        handle.removeEventListener('pointerup', abort);
-        handle.removeEventListener('pointercancel', abort);
-      };
-      const watch = moveEvent => {
-        if (!timer) return;
-        if (Math.hypot(moveEvent.clientX - origin.x, moveEvent.clientY - origin.y) > LONG_PRESS_CANCEL) abort();
-      };
-
-      timer = setTimeout(() => {
-        timer = null;
-        handle.removeEventListener('pointermove', watch);
-        begin();
-      }, MOVE_HOLD_MS);
-
-      handle.addEventListener('pointermove', watch);
-      handle.addEventListener('pointerup', abort);
-      handle.addEventListener('pointercancel', abort);
-    } else {
-      begin();
-    }
-
-    handle.addEventListener('pointermove', onMoveMove);
-    handle.addEventListener('pointerup', onMoveEnd, { once: true });
-    handle.addEventListener('pointercancel', cancelGesture, { once: true });
+    card.addEventListener('pointermove', onMoveMove, { passive: false });
+    card.addEventListener('pointerup', onMoveEnd, { once: true });
+    card.addEventListener('pointercancel', cancelGesture, { once: true });
   }
 
   function onMoveMove(event) {
     if (active?.kind !== 'move' || active.pointerId !== event.pointerId) return;
     active.pointerY = event.clientY;
-    const deltaMinutes = Math.round((event.clientY - active.originY) / PX_PER_MIN / 5) * 5;
-    if (deltaMinutes === active.delta) { runAutoscroll(); return; }
-    active.delta = deltaMinutes;
+    const deltaMinutes = readDelta();
     runAutoscroll();
+    if (deltaMinutes === active.delta) return;
+    active.delta = deltaMinutes;
     schedulePaint(drawMove);
   }
 
-  function runAutoscroll() {
-    const distanceTop = active.pointerY;
-    const distanceBottom = window.innerHeight - active.pointerY;
-    const direction = distanceTop < AUTOSCROLL_EDGE ? -1 : distanceBottom < AUTOSCROLL_EDGE ? 1 : 0;
+  /** Where the card is now, in whole five-minute steps, measured in the document. */
+  function readDelta() {
+    const docY = active.pointerY + window.scrollY;
+    return Math.round((docY - active.originDocY) / PX_PER_MIN / 5) * 5;
+  }
 
-    if (!direction) {
-      if (active.autoscroll) {
-        cancelAnimationFrame(active.autoscroll);
-        active.autoscroll = null;
-      }
+  /** How deep the pointer is into an autoscroll edge, and which way. */
+  function autoscrollEdge() {
+    const fine = matchMedia('(pointer: fine)').matches;
+    const zone = fine
+      ? AUTOSCROLL_ZONE_FINE
+      : Math.min(AUTOSCROLL_ZONE_MAX,
+        Math.max(AUTOSCROLL_ZONE_MIN, window.innerHeight * AUTOSCROLL_ZONE_RATIO));
+    // A thumb naturally rests low on a phone, so a bottom zone as deep as the
+    // top one would be triggered just by holding the card comfortably.
+    const bottomZone = fine ? zone : Math.min(AUTOSCROLL_ZONE_BOTTOM_TOUCH, zone);
+
+    const fromTop = active.pointerY;
+    const fromBottom = window.innerHeight - active.pointerY;
+    if (fromTop < zone) return { way: -1, depth: (zone - fromTop) / zone };
+    if (fromBottom < bottomZone) return { way: 1, depth: (bottomZone - fromBottom) / bottomZone };
+    return { way: 0, depth: 0 };
+  }
+
+  /**
+   * Speed rises with the square of how far past the boundary the pointer is,
+   * so the edge of the zone is a creep slow enough to hold a position on and
+   * the far corner crosses the day in a few seconds. It also eases in over
+   * AUTOSCROLL_RAMP_MS, so entering the zone accelerates rather than jolting,
+   * and it is scaled by elapsed time rather than counted per frame, so it runs
+   * at the same speed on a 120 Hz screen as on a 60 Hz one.
+   */
+  function runAutoscroll() {
+    if (autoscrollEdge().way === 0) {
+      if (active.autoscroll) cancelAnimationFrame(active.autoscroll);
+      active.autoscroll = null;
+      active.armedFor = 0;
+      active.lastFrame = 0;
       return;
     }
     if (active.autoscroll) return;
 
-    const step = () => {
+    active.lastFrame = 0;
+    const step = now => {
       if (active?.kind !== 'move') return;
-      const top = active.pointerY;
-      const bottom = window.innerHeight - active.pointerY;
-      const way = top < AUTOSCROLL_EDGE ? -1 : bottom < AUTOSCROLL_EDGE ? 1 : 0;
+      const { way, depth } = autoscrollEdge();
       if (!way) {
         active.autoscroll = null;
+        active.armedFor = 0;
+        active.lastFrame = 0;
         return;
       }
-      window.scrollBy(0, way * AUTOSCROLL_STEP);
+      // The first frame has no elapsed time to measure yet, so it scrolls
+      // nothing and only starts the clock.
+      if (!active.lastFrame) active.lastFrame = now;
+      const seconds = Math.min(0.05, (now - active.lastFrame) / 1000);
+      active.lastFrame = now;
+      active.armedFor += seconds * 1000;
+
+      const ramp = Math.min(1, active.armedFor / AUTOSCROLL_RAMP_MS);
+      const speed = (AUTOSCROLL_MIN + (AUTOSCROLL_MAX - AUTOSCROLL_MIN) * depth * depth) * ramp;
+
+      const before = window.scrollY;
+      window.scrollBy(0, way * speed * seconds);
+      // Scrolling alone moves the card, because the origin is in document
+      // space — the finger does not have to keep moving for the drag to travel.
+      if (window.scrollY !== before) {
+        const deltaMinutes = readDelta();
+        if (deltaMinutes !== active.delta) {
+          active.delta = deltaMinutes;
+          drawMove();
+        }
+      }
       active.autoscroll = requestAnimationFrame(step);
     };
     active.autoscroll = requestAnimationFrame(step);
@@ -426,11 +533,61 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
     }
 
     const newStart = active.item.start + active.delta;
-    active.bubble.textContent = active.ids.length > 1
-      ? `Starts ${formatTime(newStart)} · ${active.ids.length} activities`
-      : `Starts ${formatTime(newStart)}`;
+    const clashMinutes = drawClash();
+
+    active.bubble.classList.toggle('is-bad', clashMinutes > 0);
+    active.card.classList.toggle('is-clash', clashMinutes > 0);
+    // A snap line answers "where", which is only half the question. When the
+    // drop would collide, the readout answers "should you" instead.
+    active.bubble.textContent = clashMinutes > 0
+      ? `Overlaps ${formatDuration(clashMinutes)}`
+      : active.ids.length > 1
+        ? `Starts ${formatTime(newStart)} · ${active.ids.length} activities`
+        : `Starts ${formatTime(newStart)}`;
     positionBubble(active.bubble, active.card, 'top');
-    if (Number.isFinite(active.from)) markSnapLine(newStart, active.from);
+    if (Number.isFinite(active.from)) markSnapLine(newStart, active.from, clashMinutes > 0);
+  }
+
+  /**
+   * Shows what the drop would collide with while the card is still in the air,
+   * so an overlap is something you steer around rather than discover afterwards.
+   * Both sides of the collision get the outline every overlapping card already
+   * wears, and only the exact colliding minutes are hatched — the same
+   * treatment `renderCard` draws, reused rather than reinvented, so the preview
+   * and the committed state are the same picture.
+   *
+   * Every exit from a move repaints the timeline, so nothing here is undone by
+   * hand: the next paint is the reset.
+   */
+  function drawClash() {
+    const moved = active.ids.length > 1
+      ? moveGroup(active.plan, active.ids, active.delta)
+      : moveTo(active.plan, active.id, active.item.start + active.delta);
+    const schedule = scheduleOf(moved ? moved.plan : active.plan);
+
+    const involved = new Map();
+    let total = 0;
+    for (const id of active.ids) {
+      const entry = schedule.items.find(candidateItem => candidateItem.id === id);
+      if (!entry?.overlaps?.length) continue;
+      total += entry.overlapMinutes;
+      involved.set(id, entry);
+      for (const overlap of entry.overlaps) {
+        const other = schedule.items.find(candidateItem => candidateItem.id === overlap.withId);
+        if (other) involved.set(other.id, other);
+      }
+    }
+
+    for (const card of root.querySelectorAll('.card')) {
+      const entry = involved.get(card.dataset.activityId);
+      card.classList.toggle('is-overlap', Boolean(entry));
+      const box = entry ? overlapBox(entry) : null;
+      if (box) {
+        card.style.setProperty('--overlap-top', `${box.top}px`);
+        card.style.setProperty('--overlap-height', `${box.height}px`);
+      }
+    }
+    return total;
   }
 
   function onMoveEnd() {
@@ -488,14 +645,15 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
     return layout;
   }
 
-  /** The five-minute line being snapped to turns blue and shows its time. */
-  function markSnapLine(minute, from) {
+  /** The five-minute line being snapped to turns blue — or red, if landing there collides. */
+  function markSnapLine(minute, from, bad = false) {
     clearSnapLine();
     const top = (minute - from) * PX_PER_MIN;
     const tick = [...root.querySelectorAll('.tick')]
       .find(node => Math.abs(parseFloat(node.style.top) - top) < 0.5);
     if (!tick) return;
     tick.classList.add('tick--snap');
+    tick.classList.toggle('tick--snap-bad', bad);
     tick.dataset.previousLabel = tick.querySelector('b')?.textContent ?? '';
     let label = tick.querySelector('b');
     if (!label) {
@@ -508,7 +666,7 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
 
   function clearSnapLine() {
     for (const tick of root.querySelectorAll('.tick--snap')) {
-      tick.classList.remove('tick--snap');
+      tick.classList.remove('tick--snap', 'tick--snap-bad');
       const label = tick.querySelector('b');
       if (tick.dataset.labelAdded === 'true') label?.remove();
       else if (label) label.textContent = tick.dataset.previousLabel ?? '';
@@ -544,7 +702,7 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
     if (active.kind === 'move') {
       if (active.autoscroll) cancelAnimationFrame(active.autoscroll);
       active.bubble.remove();
-      active.card.classList.remove('is-lifted');
+      active.card.classList.remove('is-lifted', 'is-clash');
       active.handle.removeEventListener('pointermove', onMoveMove);
       document.body.classList.remove('is-moving');
     }
@@ -570,8 +728,21 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
   root.addEventListener('pointermove', onCardPointerMove);
   root.addEventListener('pointerup', onCardPointerUp);
   root.addEventListener('pointercancel', clearCandidate);
-  // A scroll anywhere means this was never a press.
-  window.addEventListener('scroll', clearCandidate, { passive: true });
+  /**
+   * A pointer event's preventDefault cannot stop a scroll; only the touchmove
+   * underneath it can. Cards are `touch-action: pan-y`, so once one has been
+   * lifted the pan has to be refused here — otherwise the browser takes the
+   * same finger as a scroll, the day slides out from under the drag, and the
+   * pointer is cancelled mid-gesture.
+   *
+   * It is safe to refuse it only because a lift requires stillness: the first
+   * touchmove of a gesture that has already lifted arrives before any pan has
+   * begun, which is the one moment the browser still honours this.
+   */
+  root.addEventListener('touchmove', event => {
+    if (active) event.preventDefault();
+  }, { passive: false });
+  window.addEventListener('scroll', onScrollDuringPress, { passive: true });
 
   return {
     /** Re-attached after every timeline repaint; handles are recreated each time. */
@@ -581,10 +752,6 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
       }
       for (const handle of root.querySelectorAll('[data-role="resize-top"]')) {
         handle.addEventListener('pointerdown', event => startResize(event, handle.dataset.id, 'top'));
-      }
-      // A mouse on the grip drags at once; a finger on the grip holds first.
-      for (const grip of root.querySelectorAll('.card-grip[data-role="move"]')) {
-        grip.addEventListener('pointerdown', event => startMove(event, grip.dataset.id, { hold: event.pointerType !== 'mouse' }));
       }
     },
     get active() { return Boolean(active); },

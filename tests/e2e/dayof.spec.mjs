@@ -182,9 +182,9 @@ test.describe('view only', () => {
     await openAt(page, server, at(11, 45));
     const before = await server.read();
 
-    // No controls, no handles, no grips.
+    // No controls, no handles, and nothing on the card can be dragged.
     await expect(page.locator('.card-controls')).toHaveCount(0);
-    await expect(page.locator('.card-grip')).toHaveCount(0);
+    await expect(page.locator('.card.is-draggable')).toHaveCount(0);
     await expect(page.locator('.handle')).toHaveCount(0);
 
     // Selecting still works — reading a card is not changing it — but the

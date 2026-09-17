@@ -412,9 +412,8 @@ const gestures = createGestures({
   store,
   commit: (action, payload) => commit(action, payload),
   repaint,
-  // A long press is the phone's way into the editor; double-click is the
-  // pointer equivalent.
-  onLongPress: id => openEditor(id),
+  // Double-click and double-tap open the editor. A long press is not an
+  // alternative to them any more — it is what lifts a card to move it.
   onDoubleClick: id => openEditor(id)
 });
 

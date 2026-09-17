@@ -211,12 +211,12 @@ test('a card opens its editor and gets focus back when the sheet closes', async 
 
   await page.locator('#activity-dialog .sheet-close').click();
   await expect(page.locator('#activity-dialog')).toHaveCount(0);
-  // Focus returns to the control that was actually pressed — not to the card
-  // as a whole. On a phone that is the toolbar's Edit button, the card's own
-  // pencil having no room there; everywhere else it is the pencil itself.
+  // Focus returns to whatever opened the sheet. On a phone that is the
+  // toolbar's Edit button; with a pointer the card was double-clicked, so the
+  // card itself is what focus goes back to.
   const opener = await isPhoneLayout(page)
     ? page.locator('.toolbar [data-action="edit"]')
-    : page.locator('.card').nth(1).locator('.card-edit');
+    : row;
   await expect(opener).toBeFocused();
 });
 

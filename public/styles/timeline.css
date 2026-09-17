@@ -82,6 +82,9 @@
   font-weight: 650;
   right: calc(100% - var(--ruler-width) + 4px);
 }
+/* Landing on this line would overlap something. Red is only ever conflict. */
+.tick--snap-bad::after { background: var(--bad); }
+.tick--snap-bad b { background: var(--bad); }
 
 .timeline-plan { position: absolute; top: 0; bottom: 0; left: var(--plan-left); right: var(--plan-right); }
 

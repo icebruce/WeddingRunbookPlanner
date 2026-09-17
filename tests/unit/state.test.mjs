@@ -81,11 +81,12 @@ test('moving a card to the start it already has is not a change', () => {
   assert.equal(s.canUndo, false);
 });
 
-test('moving sets the start directly and reports which activity moved', () => {
+test('moving sets the start directly and reports where the activity landed', () => {
   const s = store();
   const result = s.dispatch('activity.moveTo', { id: 'c', start: T(9) });
   assert.equal(s.plan.activities.find(a => a.id === 'c').start, T(9));
-  assert.equal(result.label, 'Moved c');
+  // The time is in the label because the undo toast is how a mis-drop is caught.
+  assert.equal(result.label, 'Moved c to 9:00 AM');
 });
 
 test('moving a group shifts everyone in it, except a locked member', () => {

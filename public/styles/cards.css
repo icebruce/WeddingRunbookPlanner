@@ -19,8 +19,8 @@
      is clipped by .card-body instead. */
   -webkit-touch-callout: none;
   user-select: none;
-  /* A swipe that starts on a card scrolls the day. Only the handles and the
-     grip take touch (F5). */
+  /* A swipe that starts on a card scrolls the day. A card is moved by holding
+     it still first (F5), so the browser keeps the pan until that hold wins. */
   touch-action: pan-y;
   /* The ring and the hover lift are both box-shadow, so they are one
      transition. Nothing else about a card moves under its own steam: while an
@@ -28,11 +28,10 @@
   transition: box-shadow 180ms ease-out;
 }
 
-/* The stage bar: phase colour, inset so it scales with the card, sitting just
-   after the grip so the two never overlap. */
+/* The stage bar: phase colour, inset so it scales with the card. */
 .card-rule {
   position: absolute;
-  left: 26px;
+  left: 10px;
   top: 8px;
   bottom: 8px;
   width: 3px;
@@ -47,18 +46,16 @@
 .card-body {
   position: absolute;
   inset: 0;
-  padding: 9px 12px 9px 42px;
+  padding: 9px 12px 9px 26px;
   display: flex;
   flex-direction: column;
   gap: 4px;
   overflow: hidden;
   border-radius: var(--radius);
 }
-/* Tight enough at 15–29 minutes that the wider gutter the always-visible grip
-   needs (42px, up from 26px) has to be paid for somewhere: less top and
-   bottom padding, so the title and time still both fit before anything is
-   dropped. */
-.card--small .card-body { padding: 5px 12px 5px 42px; gap: 2px; }
+/* Tight at 15–29 minutes, so the title and time still both fit before anything
+   is dropped. */
+.card--small .card-body { padding: 5px 12px 5px 26px; gap: 2px; }
 
 /* On a phone location and people are two rows like any other. */
 .card-meta { display: contents; }
@@ -149,8 +146,7 @@
 .stage-tag--button .icon:last-child { width: 12px; height: 12px; color: var(--soft); }
 
 .card-controls { position: absolute; top: 4px; right: 4px; display: flex; align-items: center; gap: 2px; }
-.card-controls .lock-button,
-.card-controls .card-edit {
+.card-controls .lock-button {
   width: 34px;
   height: 34px;
   display: grid;
@@ -161,41 +157,16 @@
   color: var(--faint);
 }
 .card-controls .icon { width: 18px; height: 18px; }
-.card-controls .lock-button:hover,
-.card-controls .card-edit:hover { background: var(--fill); color: var(--ink-2); }
+.card-controls .lock-button:hover { background: var(--fill); color: var(--ink-2); }
 /* Locked is a strong, filled cue — the thing this app used to say in red,
    said instead in ink so red still means only one thing (conflict). */
 .lock-button.is-locked { background: var(--fixed); color: var(--bg); }
 .lock-button.is-locked:hover { background: var(--fixed); opacity: .85; }
 
-/* The grip: always visible, never only on hover — a phone has no hover to
-   wait for. It scales with the card, because a drag target on a two-hour
-   card and a drag target on a fifteen-minute one are not the same size, and
-   pretending otherwise is why it used to disappear on short cards. */
-.card-grip {
-  position: absolute;
-  z-index: 3;
-  left: 4px;
-  top: 4px;
-  bottom: 4px;
-  width: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  /* --dots is the "+N" tag's job (DESIGN_GUIDE §2.1); the grip is a control,
-     not a count, and needs the 3:1 icon-contrast floor that token doesn't
-     meet. */
-  color: var(--soft);
-  cursor: grab;
-  touch-action: none;
-}
-.card-grip:hover { background: var(--fill); color: var(--soft); }
-.card-grip .icon { width: 14px; height: 14px; }
-/* A ten-minute card has no room for the dots; the bar alone still marks
-   where to grab it. */
-.card--line .card-grip .icon { display: none; }
-.card--line .card-grip { width: 18px; }
+/* The card body is the drag surface. On a mouse the cursor is the whole
+   affordance — there is no glyph to find, and none is needed, because dragging
+   an event by its body is what every calendar already teaches. */
+.card.is-draggable { cursor: grab; }
 
 /* Handles: a hollow capsule centered astride the card's own edge
    (docs/mockups/mobile.html), straddling the border line rather than sitting
@@ -295,9 +266,9 @@
 .stage-menu-option .icon { width: 17px; height: 17px; color: var(--phase); }
 .stage-menu-option.is-current { background: var(--fill); font-weight: 600; }
 
-/* Where there is a mouse, the lock and edit buttons appear on hover instead
-   of sitting on the card at all times; the grip does not — it is the drag
-   affordance, and it has to be visible before you have found it. */
+/* Where there is a mouse, the lock button appears on hover instead of sitting
+   on the card at all times. Nothing advertises the drag: the grab cursor is
+   the affordance, and it costs no pixels. */
 @media (hover: hover) and (pointer: fine) {
   .card-controls { opacity: 0; transition: opacity 140ms ease-out; }
   .card:hover .card-controls,
@@ -312,16 +283,8 @@
   .card:focus-within .handle { opacity: 1; pointer-events: auto; }
 }
 
-/* On a phone the edit pencil is redundant — selecting a card raises the
-   toolbar's own Edit button (render/toolbar.js) — and with no hover to hide
-   it, it sat on the card permanently, next to the lock button, both drawn
-   over whatever the title row put in that corner. Dropping the pencil and
-   reserving room for the one button that is left fixes both at once. */
+/* Room for the lock button, which is the only thing in that corner now. */
 @media (max-width: 720px) {
-  /* `.card-controls .card-edit` matches the specificity of the rule in
-     card-controls above that sets `display: grid` — a bare `.card-edit`
-     here would lose to it and never actually hide anything. */
-  .card-controls .card-edit { display: none; }
   .card-body,
   .card--small .card-body { padding-right: 46px; }
   .card--line .card-body { padding-right: 42px; }
@@ -351,9 +314,9 @@
     row-gap: 6px;
     align-items: start;
     align-content: start;
-    /* The lock and the edit button are positioned over the card, not laid
-       out in it; this is the column they sit in. */
-    padding: 10px 78px 10px 42px;
+    /* The lock is positioned over the card, not laid out in it; this is the
+       column it sits in. */
+    padding: 10px 46px 10px 26px;
   }
   .card:not(.card--narrow):not(.card--line) .card-time {
     grid-column: 1;
@@ -381,7 +344,7 @@
   .card:not(.card--narrow):not(.card--line) .card-progress { grid-column: 3; }
 
   /* A selected card's controls do not move, so the column does not change. */
-  .card.is-selected .card-body { padding-right: 78px; }
+  .card.is-selected .card-body { padding-right: 46px; }
 
   /* Under half an hour the card is 120 px: it loses the people and closes up. */
   .card--small .card-people { display: none; }
@@ -389,7 +352,7 @@
 
   /* A one-line card leads with its time too, so the columns still line up. */
   .card--line .card-line-time { order: -1; width: 132px; margin-left: 0; font-size: 13px; }
-  .card--line .card-body { padding-left: 42px; gap: 14px; }
+  .card--line .card-body { padding-left: 26px; gap: 14px; }
 }
 
 /* Menus live above the cards, because a card is clipped to its own height. */

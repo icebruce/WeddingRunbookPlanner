@@ -35,27 +35,19 @@ export async function openPlanner(page, password = TEST_PASSWORD) {
 /**
  * Open an activity's editor.
  *
- * Double-click is a desktop gesture and does not fire on a touch device, so a
- * spec that needs the editor on every project goes through the card's own
- * pencil button. The phone's own gesture for this is a long press, which
- * arrives with the direct manipulation stage.
+ * There is no pencil on the card any more: the phone selects and uses the
+ * toolbar's Edit, and a pointer double-clicks. Both land on the same handler.
  *
- * The pencil only exists where there is room for it: on a phone width the
- * card drops it and selecting the card raises the toolbar's own Edit button
- * instead (same `data-action="edit"` handler either way), so this falls
- * back to that when the pencil is not there to click.
+ * A plain click can land on some other control the card draws over most of its
+ * own area (the stage pill, a person tag) and fire that instead of selecting
+ * the card, so this aims at a blank corner the way the rest of the suite does.
  */
 export async function openActivityEditor(page, card) {
-  const pencil = card.locator('.card-edit');
-  if (await pencil.count() && await pencil.isVisible()) {
-    await pencil.click();
-  } else {
-    // A plain click can land on some other control the card draws over
-    // most of its own area (the stage pill, a person tag) and fire that
-    // instead of selecting the card, so this clicks a blank corner the way
-    // the rest of the suite does.
+  if (await isPhoneLayout(page)) {
     await card.click({ position: { x: 40, y: 10 } });
     await page.locator('.toolbar [data-action="edit"]').click();
+  } else {
+    await card.dblclick({ position: { x: 40, y: 10 } });
   }
   await expect(page.locator('#activity-dialog')).toBeVisible();
 }

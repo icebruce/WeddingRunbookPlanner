@@ -99,12 +99,11 @@ button, [role="button"], summary, .filter-chip, .stage-choice {
 /*
  * F25 — contrast.
  *
- * The unlocked lock was 1.76:1 against white, the drag dots 2.62:1 and the
- * quarter-hour labels 2.87:1. An icon or a control outline needs 3:1 and text
- * needs 4.5:1, so these move to tokens that meet it.
+ * The unlocked lock was 1.76:1 against white and the quarter-hour labels
+ * 2.87:1. An icon or a control outline needs 3:1 and text needs 4.5:1, so
+ * these move to tokens that meet it.
  */
 .card-controls button { color: var(--faint); }
-.card-grip { color: var(--soft); }
 .tick--quarter b { color: var(--soft); }
 
 /* Reduced motion, everywhere and without exception. */
