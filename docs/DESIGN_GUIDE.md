@@ -199,7 +199,7 @@ Pulse: `box-shadow` ring expanding 0 → 7 px and fading, 1.8 s, infinite; disab
 - **Action sheet (phone):** two grouped cards (14 px radius); header 14/600 + 13 `--soft`; options 62 px min, centered, 18 px `--sel` title + 13 `--soft` description; separate Cancel 58 px 18/650.
 - **Menu:** 250 px, 14 px radius, rows 46 px, icon 19 px + 17 px text; value or switch right-aligned; 6 px separators between groups. Desktop menus 15 px text, 40 px rows.
 - **Alert:** 36 px side margins, 18 px radius, icon well 44 px, title 17/650, body 14, stacked 46 px buttons (primary filled `--sel`), footnote 13.
-- **Toast:** dark `rgba(28,28,30,.96)` in both themes, 16 px radius, 50 px min height, 14 px text, `Undo` 15/650 `#7FB3FF`; phone 16 px side margins above the home indicator; desktop centered 28 px from bottom. Auto-hide 6 s; one at a time.
+- **Toast:** dark `rgba(28,28,30,.96)` in both themes, 16 px radius, 50 px min height, 14 px text, `Undo` 15/650 `#7FB3FF`; phone 16 px side margins, floated 20 px above whatever occupies the bottom of the screen — the floating + or the taller selection toolbar, measured rather than assumed; desktop centered 28 px from bottom. Auto-hide 6 s; one at a time. The countdown is *unattended* time: it stops while a pointer is over the toast or focus is inside it, and resumes on the way out, because Undo is the only way back from a delete. A toast can also be swiped down to dismiss — it follows the finger, resists upward, and leaves past 28 px or 0.4 px/ms.
 - **Pinned bars** (offline, filter): 44 px min, glass, 14–15 px text, sticky under the top bar.
 
 ### 4.8 Buttons

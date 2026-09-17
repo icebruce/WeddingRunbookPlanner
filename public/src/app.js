@@ -208,6 +208,7 @@ function paintRegions(names) {
     paint(app.querySelector(`[data-region="${name}"]`), REGIONS[name](context));
   }
   if (names.includes('heading')) refreshCollapsedTitle();
+  if (names.includes('toolbar')) measureBottomFurniture();
   if (names.includes('timeline')) {
     gestures.bind();
     scrollToNow();
@@ -218,6 +219,23 @@ function paintRegions(names) {
       if (store.ui.selectedId) paintRegions(['toolbar']);
     });
   }
+}
+
+/**
+ * How tall the bottom of the screen already is, so a toast can sit above it.
+ *
+ * That is the 58 px floating + most of the time, but selecting a card replaces
+ * the + with the selection toolbar, which is twice as tall — taller again when
+ * the selected card has a second line of hidden details to repeat. The toast
+ * used to be pinned at a fixed 96 px, tuned for the +, which put it on top of
+ * the toolbar's context line and the top of its buttons on every lock,
+ * duplicate, stage change and handle resize. Measuring is the only honest
+ * answer: the height depends on what the selected card had to hide.
+ */
+function measureBottomFurniture() {
+  const node = app.querySelector('.toolbar, .mobile-add');
+  const height = node ? Math.round(node.getBoundingClientRect().height) : 0;
+  document.documentElement.style.setProperty('--bottom-furniture', `${height}px`);
 }
 
 /**
@@ -1105,6 +1123,9 @@ function watchCollapsedTitle() {
 const refreshCollapsedTitle = watchCollapsedTitle();
 
 watchFit(app);
+// The toolbar drops its button labels under 340 px and the layout changes
+// outright on rotation, so its height is re-read rather than remembered.
+window.addEventListener('resize', measureBottomFurniture);
 window.addEventListener('online', () => void saver.handleOnline());
 window.addEventListener('offline', () => repaint(['header', 'offline']));
 

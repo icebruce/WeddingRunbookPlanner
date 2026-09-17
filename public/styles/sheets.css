@@ -202,7 +202,16 @@
 
 [aria-invalid="true"] { outline: 1.5px solid var(--bad); outline-offset: 1px; }
 
-.toast-region { position: fixed; z-index: 2000; left: 50%; bottom: calc(96px + var(--safe-bottom)); transform: translateX(-50%); display: grid; gap: 8px; width: min(360px, calc(100% - 32px)); pointer-events: none; }
+/*
+ * The toast sits above whatever occupies the bottom of the screen. That is the
+ * 58 px floating + most of the time, but a selected card replaces it with the
+ * selection toolbar, which is twice as tall and taller again when it has a
+ * second line of hidden details. A fixed offset tuned for the + therefore lands
+ * the toast squarely on top of the toolbar exactly when there is most to read,
+ * so the height is measured on every toolbar paint (`--bottom-furniture`,
+ * app.js) and the toast is floated 20 px clear of it.
+ */
+.toast-region { position: fixed; z-index: 2000; left: 50%; bottom: calc(var(--bottom-furniture, 58px) + 38px + var(--safe-bottom)); transform: translateX(-50%); display: grid; gap: 8px; width: min(360px, calc(100% - 32px)); pointer-events: none; }
 
 
 
@@ -372,11 +381,21 @@
   /* The region ignores pointers so it never blocks the timeline; the toast
      itself accepts them, because Undo has to be pressable. */
   pointer-events: auto;
+  /* A toast is swiped away downwards, the way it came in, so the drag owns the
+     vertical axis outright — there is nothing inside it to scroll. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
   opacity: 0;
   transform: translateY(8px);
   transition: opacity 200ms ease-out, transform 200ms ease-out;
 }
-.toast.is-visible { opacity: 1; transform: translateY(0); }
+.toast.is-visible { opacity: 1; transform: translateY(var(--toast-drag, 0px)); }
+/* While the finger is down the toast follows it exactly — no easing on a
+   direct manipulation, the same rule a card or an edge follows. */
+.toast.is-dragging { transition: none; }
+/* Let go past the threshold and it carries on the way it was going. */
+.toast.is-swiped-out { transform: translateY(120%); }
 .toast-action { border: 0; background: none; color: #7FB3FF; font: inherit; font-size: 15px; font-weight: 650; margin-left: auto; }
 .toast--error { background: rgba(120, 28, 24, .97); }
 
@@ -428,7 +447,8 @@
   transform: translateX(-50%) translateY(8px);
   width: min(360px, calc(100vw - 32px));
 }
-.toast--layered.is-visible { transform: translateX(-50%) translateY(0); }
+.toast--layered.is-visible { transform: translateX(-50%) translateY(var(--toast-drag, 0px)); }
+.toast--layered.is-swiped-out { transform: translateX(-50%) translateY(120%); }
 
 /* Menu rows, in the order of the specification. A group separator is a thin
    line with room either side of it, not a band of background — a band the
