@@ -366,7 +366,8 @@
 
 .card.is-live { box-shadow: 0 0 0 1.5px var(--live), 0 6px 20px rgba(30, 158, 82, .16); }
 .card-progress { height: 3px; border-radius: 2px; background: color-mix(in srgb, var(--live) 18%, transparent); overflow: hidden; }
-.card-progress i { display: block; height: 100%; background: var(--live); }
+/* Same as the time line: the clock moves it, so it creeps rather than steps. */
+.card-progress i { display: block; height: 100%; background: var(--live); transition: width 500ms ease-out; }
 
 .now-tag {
   display: inline-flex;
@@ -398,6 +399,40 @@
  * The pulse is called out by name in the design guide, so it is turned off by
  * name here.
  */
+/*
+ * The charging press, without movement.
+ *
+ * Holding a card still is what lifts it, and the press deepening across the
+ * hold is the only thing that says so — there is no handle to advertise the
+ * gesture. The blanket reduced-motion rule shortens that deepening to nothing,
+ * which leaves a reader who asked for less motion with no warning at all that
+ * a lift is coming. The scale is dropped and a selection ring is faded in over
+ * the same 300 ms instead: an opacity change, which reduced motion allows, and
+ * it can still be felt building and abandoned before it fires.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .card.is-charging { transform: none; }
+  .card.is-charging::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius);
+    box-shadow: inset 0 0 0 2px var(--sel);
+    pointer-events: none;
+    opacity: 0;
+    /* Longhands, not the shorthand. A shorthand carrying a `var()` is held
+       as a pending substitution, and the blanket reduced-motion rule above
+       reaches the longhands it expands to; naming each one keeps this
+       animation's own values, which is the whole point of the exception. */
+    animation-name: charge-ring !important;
+    animation-duration: var(--hold-ms, 300ms) !important;
+    animation-timing-function: linear !important;
+    animation-fill-mode: forwards !important;
+    animation-iteration-count: 1 !important;
+  }
+  @keyframes charge-ring { to { opacity: 1; } }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .now-tag i { animation: none; }
 }

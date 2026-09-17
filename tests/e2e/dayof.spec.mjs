@@ -152,9 +152,13 @@ test('the time line keeps moving through a long activity', async ({ page, server
   await page.clock.fastForward('30:00');
   await expect.poll(async () => (await read()).pill, { timeout: 30_000 }).toBe('3:30');
 
+  // Thirty minutes at four pixels a minute. Polled, because the line eases to
+  // its new time over half a second rather than jumping there — it is the one
+  // thing on the page that moves on its own all day, and it should not twitch.
+  await expect.poll(async () => (await read()).top - before.top, { timeout: 10_000 })
+    .toBeCloseTo(120, -1);
+
   const after = await read();
-  // Thirty minutes at four pixels a minute.
-  expect(after.top - before.top).toBeCloseTo(120, -1);
   expect(after.progress, 'and the bar across the activity moved with it').not.toBe(before.progress);
 });
 

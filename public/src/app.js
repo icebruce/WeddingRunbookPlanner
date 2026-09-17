@@ -535,7 +535,11 @@ function topOverlayOpen() {
     alertRoot.querySelector('dialog[open]') ||
     sheetRoot.querySelector('dialog[open]') ||
     store.ui.openMenu ||
-    store.ui.selectedId
+    store.ui.selectedId ||
+    // An open-time block that is selected is showing its handles and has taken
+    // over the timeline's one selection, exactly as a card does. Leaving it out
+    // meant back left the app instead of clearing it.
+    store.ui.selectedOpenTime
   );
 }
 
@@ -580,6 +584,10 @@ window.addEventListener('popstate', () => {
   }
   if (store.ui.selectedId) {
     store.setUi({ selectedId: null }, { regions: ['timeline', 'toolbar'] });
+    return;
+  }
+  if (store.ui.selectedOpenTime) {
+    store.setUi({ selectedOpenTime: null }, { regions: ['timeline'] });
   }
 });
 
@@ -1272,14 +1280,23 @@ async function useTemplate() {
 }
 
 /**
- * Once the large title has scrolled past, the top bar takes it over. Watched
- * rather than measured on every scroll event, so it costs nothing while
- * scrolling a long day.
+ * Once the large title has scrolled past, the top bar takes it over.
+ *
+ * Watched rather than measured on every scroll event, so it costs nothing
+ * while scrolling a long day — and watched *twice*, at two lines ten pixels
+ * apart. One boundary means that resting the scroll on the handover, where
+ * momentum and sub-pixel rounding leave it wandering back and forth across a
+ * single line, flips the title with it. Collapsing at the lower line and
+ * coming back only at the higher one gives the decision somewhere to sit.
  */
+const HANDOVER_BAND = 10;
+
 function watchCollapsedTitle() {
-  let observer = null;
+  const observers = [];
   return () => {
-    observer?.disconnect();
+    for (const observer of observers) observer.disconnect();
+    observers.length = 0;
+
     const heading = app.querySelector('.planner-heading h1');
     const topbar = app.querySelector('.topbar');
     if (!heading || !topbar) return;
@@ -1287,10 +1304,18 @@ function watchCollapsedTitle() {
     // The margin is the bar's own height, so the title hands over exactly as it
     // goes under it — 52 px on a phone, 62 px on a desktop.
     const barHeight = Math.round(topbar.getBoundingClientRect().height);
-    observer = new IntersectionObserver(([entry]) => {
-      topbar.classList.toggle('is-collapsed', !entry.isIntersecting);
-    }, { rootMargin: `-${barHeight}px 0px 0px 0px`, threshold: 0 });
-    observer.observe(heading);
+    const watch = (inset, collapsedWhenHidden) => {
+      const observer = new IntersectionObserver(([entry]) => {
+        if (entry.isIntersecting === collapsedWhenHidden) return;
+        topbar.classList.toggle('is-collapsed', !entry.isIntersecting);
+      }, { rootMargin: `-${inset}px 0px 0px 0px`, threshold: 0 });
+      observer.observe(heading);
+      observers.push(observer);
+    };
+    // Going under the bar collapses it; coming back out ten pixels below
+    // restores it. Each observer only ever acts in its own direction.
+    watch(barHeight, false);
+    watch(Math.max(0, barHeight - HANDOVER_BAND), true);
   };
 }
 

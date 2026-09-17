@@ -116,7 +116,7 @@ Minimum: 12 px anywhere; 16 px for any text input on phones (prevents iOS zoom).
 
 - **Snap label** (resizing/dragging): white text on `--sel` pill replacing the label at that line; the line itself turns `--sel` 1.5 px.
 - **Cards** sit 1 px inside their lines (top +1, height −2).
-- **Markers** in the ruler column use 22 px pills: time now (green), sunset (amber with sun icon). Their lines run *behind* cards.
+- **Markers** in the ruler column use 22 px pills: time now (green), sunset (amber with sun icon). Their lines run *behind* cards. The time-now line, its pill and the live progress bar ease over 500 ms when the clock moves them: the clock ticks every 30 s, which is a 2 px step, and the one thing on the page that moves by itself all day should not twitch.
 - **End marker:** `10:45 PM ——— End of day`, subhead, `--soft`.
 
 ---
@@ -125,7 +125,7 @@ Minimum: 12 px anywhere; 16 px for any text input on phones (prevents iOS zoom).
 
 ### 4.1 Top bar
 Height 52 phone / 62 desktop, sticky, glass, hairline bottom border when content is under it.
-Left: brand (heart 20 px + serif 19 px) or, once scrolled, collapsed title (`Wedding Day` 17/650 over `Sat, Nov 21` 12). Right: save state (footnote, 7 px dot), then 44 px menu button. Desktop adds status control (34 px pill) before the menu.
+Left: brand (heart 20 px + serif 19 px) or, once scrolled, collapsed title (`Wedding Day` 17/650 over `Sat, Nov 21` 12). The two share one grid cell and cross-fade over 160 ms with a 2 px rise; neither is ever `display: none`, so the handover costs no reflow. The line that triggers it has a 10 px band — collapse as the title goes under the bar, restore only once it is 10 px clear — so resting the scroll on the handover cannot flip it back and forth. Right: save state (footnote, 7 px dot), then 44 px menu button. Desktop adds status control (34 px pill) before the menu.
 Day-of right side: `🔒 View only` pill (30 px) + **Edit** text button (17/600 `--sel`). Editing on the day: amber `● Editing` pill + **Done**.
 
 ### 4.2 Summary line and filter chips
@@ -251,7 +251,9 @@ A region is repainted by replacing its HTML, so the settle after a committed cha
 | Live pulse | 1.8 s loop | ease-out |
 | Toast | 200 ms | ease-out |
 
-Motion happens after release, never during. `prefers-reduced-motion: reduce` removes all movement and the pulse (opacity changes allowed).
+Motion happens after release, never during. `prefers-reduced-motion: reduce` removes all movement and the pulse (opacity changes allowed). One exception is made by name: the charging press is the *only* thing that says a lift is coming, so under reduced motion the scale is dropped and a `--sel` ring fades in over the same 300 ms instead. Removing it outright would leave a reader who asked for less motion with no warning at all.
+
+Where the platform supports it, a card ticks the phone (8 ms) as it lifts and again as it lands. A thumb covers what it is holding, so the lift is the one moment the eye may not be on the card. iOS Safari has no vibration API and does nothing; that is not a reason to withhold it elsewhere.
 
 ---
 

@@ -76,6 +76,27 @@ const AUTOSCROLL_RAMP_MS = 120;
 /** How close together two taps on the same card have to land to count as a double-click. */
 const DOUBLE_TAP_MS = 400;
 
+/**
+ * A tap on the back of the phone when a card lifts and again when it lands.
+ *
+ * The lift is the moment the gesture stops being a scroll and starts being a
+ * move, and it is the one moment the eye may not be on the card — a thumb
+ * covers what it is holding. Where the platform can say so without looking, it
+ * should. iOS Safari has no vibration API and simply will not; Chrome on
+ * Android and an installed PWA both will, and there is no reason to withhold it
+ * from them because another platform cannot.
+ *
+ * Short and quiet: 8 ms is a tick, not a buzz.
+ */
+function tick(ms = 8) {
+  try {
+    navigator.vibrate?.(ms);
+  } catch {
+    // Some browsers expose it and refuse it (a page that has never been
+    // touched, a policy). A gesture is not worth failing over feedback.
+  }
+}
+
 export function createGestures({ root, store, commit, repaint, onDoubleClick, onOpenTimeActivate }) {
   /** The one gesture in progress, if any. */
   let active = null;
@@ -472,6 +493,7 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
       pointerId,
       originDocY: clientY + window.scrollY,
       pointerY: clientY,
+      touch: pressed.touch,
       delta: 0,
       plan: store.plan,
       item,
@@ -486,6 +508,9 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
 
     document.body.classList.add('is-moving');
     card.classList.add('is-lifted');
+    // Only where the lift was not already announced by movement: a mouse has
+    // no hand on the screen to tell.
+    if (pressed.touch) tick();
     drawMove();
 
     card.addEventListener('pointermove', onMoveMove, { passive: false });
@@ -672,10 +697,12 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
 
   function onMoveEnd() {
     if (active?.kind !== 'move') return;
-    const { id, ids, delta, item } = active;
+    const { id, ids, delta, item, touch } = active;
     finishGesture();
 
     if (!delta) return repaint(['timeline']);
+    // It landed somewhere, and somewhere is a change.
+    if (touch) tick();
     if (ids.length > 1) commit('activity.moveGroup', { ids, deltaMinutes: delta });
     else commit('activity.moveTo', { id, start: item.start + delta });
   }

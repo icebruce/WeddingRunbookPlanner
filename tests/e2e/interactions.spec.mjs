@@ -614,3 +614,111 @@ test('the desktop dialog is not draggable', async ({ page, server }) => {
   // whether the drag wrote anything of its own — not what the total comes to.
   expect(await page.locator('.sheet').evaluate(node => node.style.transform)).toBe('');
 });
+
+test('the app menu is drawn at the sizes the design guide gives', async ({ page }) => {
+  await signInAndWaitForPlan(page);
+  await page.locator('[data-action="menu"][data-menu="app"]').click();
+  const menu = page.locator('.menu-popover');
+  await expect(menu).toBeVisible();
+
+  const phone = isPhoneLayout(page);
+  expect(await menu.evaluate(node => node.getBoundingClientRect().width)).toBe(250);
+  const row = menu.locator('button').first();
+  expect(await row.evaluate(node => getComputedStyle(node).fontSize)).toBe(phone ? '17px' : '15px');
+  expect(await row.evaluate(node => Math.round(node.getBoundingClientRect().height)))
+    .toBeGreaterThanOrEqual(phone ? 46 : 40);
+});
+
+test('the brand and the collapsed title cross-fade in one place', async ({ page, server }) => {
+  const many = Array.from({ length: 10 }, (_, i) => activity(`a${i}`, T(8) + i * 60, 45, { title: `Activity ${i}` }));
+  await server.seed({ plan: seedPlan({ activities: many }) });
+  await signInAndWaitForPlan(page);
+
+  const read = () => page.evaluate(() => {
+    const brand = document.querySelector('.topbar .brand');
+    const title = document.querySelector('.collapsed-title');
+    return {
+      brand: Number(getComputedStyle(brand).opacity),
+      title: Number(getComputedStyle(title).opacity),
+      // Neither is ever display:none, so neither ever costs a reflow.
+      brandShown: getComputedStyle(brand).display !== 'none',
+      titleShown: getComputedStyle(title).display !== 'none',
+      sameCell: brand.getBoundingClientRect().left === title.getBoundingClientRect().left
+    };
+  });
+
+  const atTop = await read();
+  expect(atTop.brand).toBe(1);
+  expect(atTop.title).toBe(0);
+  expect(atTop.sameCell).toBe(true);
+
+  await page.evaluate(() => window.scrollTo(0, 600));
+  await expect.poll(async () => (await read()).title).toBe(1);
+  const scrolled = await read();
+  expect(scrolled.brand).toBe(0);
+  expect(scrolled.brandShown).toBe(true);
+  expect(scrolled.titleShown).toBe(true);
+});
+
+test('back clears an open-time selection instead of leaving the app', async ({ page, server }) => {
+  await server.seed({ plan: seedPlan({ activities: [
+    activity('a', T(10), 60, { title: 'Portraits' }),
+    activity('b', T(13), 60, { title: 'Ceremony' })
+  ] }) });
+  await signInAndWaitForPlan(page);
+
+  const block = page.locator('.open-time').first();
+  await block.click();
+  await expect(block).toHaveClass(/is-selected/);
+
+  await page.goBack();
+  await expect(page.locator('.open-time.is-selected')).toHaveCount(0);
+  // Still in the app, not back on whatever preceded it.
+  await expect(page.locator('#main-plan')).toBeVisible();
+});
+
+test('the now line eases between ticks rather than stepping', async ({ page, server }) => {
+  const now = new Date();
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  await server.seed({ plan: seedPlan({
+    date: now.toISOString().slice(0, 10),
+    status: 'Final',
+    activities: [activity('a', Math.max(0, minutes - 20), 90, { title: 'Happening now' })]
+  }) });
+  await signInAndWaitForPlan(page);
+  await expect(page.locator('.now-line')).toBeVisible();
+  expect(await page.locator('.now-line').evaluate(node => getComputedStyle(node).transitionProperty))
+    .toContain('top');
+  expect(await page.locator('.now-pill').evaluate(node => getComputedStyle(node).transitionDuration))
+    .toBe('0.5s');
+});
+
+test('a reader with reduced motion still gets a charge before the lift', async ({ browser, server }) => {
+  const context = await browser.newContext({ baseURL: server.baseURL, reducedMotion: 'reduce' });
+  const page = await context.newPage();
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+  await signInAndWaitForPlan(page);
+
+  const charge = await page.evaluate(() => {
+    const card = document.querySelector('.card');
+    card.classList.add('is-charging');
+    const style = getComputedStyle(card, '::before');
+    // Read into strings before dropping the class: the declaration is live,
+    // and reading it afterwards describes a card that is no longer charging.
+    const result = {
+      name: style.animationName,
+      duration: style.animationDuration,
+      ring: style.boxShadow,
+      scale: getComputedStyle(card).transform
+    };
+    card.classList.remove('is-charging');
+    return result;
+  });
+  // The scale is gone, because that is movement; the ring fades in over the
+  // same 300 ms, because opacity is allowed and silence is not.
+  expect(charge.scale).toBe('none');
+  expect(charge.name).toBe('charge-ring');
+  expect(charge.duration).toBe('0.3s');
+  expect(charge.ring).toContain('inset');
+  await context.close();
+});

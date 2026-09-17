@@ -239,6 +239,15 @@
 
 /* ---- the day itself ------------------------------------------------------ */
 
+/*
+ * The clock ticks every thirty seconds, which at four pixels a minute is a two
+ * pixel jump. It is the one thing on the page that moves on its own all day,
+ * and a thing that moves on its own should not twitch — so the step is eased
+ * over half a second. Both are drawn with an inline `top` from the renderer,
+ * so nothing animates on the first paint; only the clock's later moves do.
+ */
+.now-line, .now-pill { transition: top 500ms ease-out; }
+
 .now-line {
   position: absolute;
   left: var(--ruler-width);

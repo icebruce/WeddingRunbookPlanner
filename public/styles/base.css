@@ -461,8 +461,19 @@ body.is-moving { cursor: grabbing; }
 
 /* ---- the collapsed title ------------------------------------------------- */
 
-.collapsed-title { display: none; flex-direction: column; line-height: 1.15; }
+/*
+ * The brand and the collapsed title occupy the same cell and cross-fade, with
+ * a 2 px rise, rather than being shown and hidden. A `display` swap is a hard
+ * cut at the one scroll position where the handover happens, and the pair of
+ * them jittering across that line is the thing a sticky title most needs not
+ * to do. The hysteresis that stops the line itself being jittered is in
+ * app.js.
+ */
+.topbar-title { display: grid; align-items: center; min-width: 0; }
+.topbar-title > * { grid-area: 1 / 1; transition: opacity 160ms ease-out, transform 160ms ease-out; }
+
+.collapsed-title { display: flex; flex-direction: column; line-height: 1.15; opacity: 0; transform: translateY(2px); pointer-events: none; }
 .collapsed-title b { font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
 .collapsed-title small { color: var(--soft); font-size: 12px; }
-.topbar.is-collapsed .brand { display: none; }
-.topbar.is-collapsed .collapsed-title { display: flex; }
+.topbar.is-collapsed .brand { opacity: 0; transform: translateY(-2px); pointer-events: none; }
+.topbar.is-collapsed .collapsed-title { opacity: 1; transform: translateY(0); pointer-events: auto; }

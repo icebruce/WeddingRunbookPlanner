@@ -6,9 +6,15 @@
 
 .app-menu summary::-webkit-details-marker { display: none; }
 
-.menu-popover { position: absolute; right: 0; top: calc(100% + 8px); width: 210px; padding: 7px; border: 1px solid var(--hair); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-float); }
+/* 250 px, 46 px rows, 19 px icon over 17 px text — the sizes in DESIGN_GUIDE
+   4.7. It was built at 210 px with 13 px text, which is smaller than anything
+   else the phone shows and below the floor the rest of the app holds itself
+   to. Desktop takes the same menu at 15 px over 40 px rows. */
+.menu-popover { position: absolute; right: 0; top: calc(100% + 8px); width: 250px; padding: 7px; border: 1px solid var(--hair); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-float); }
 
-.menu-popover button { width: 100%; border: 0; background: transparent; display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 9px; text-align: left; font-size: 13px; }
+.menu-popover button { width: 100%; min-height: 46px; border: 0; background: transparent; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: 9px; text-align: left; font-size: 17px; }
+
+.menu-popover button .icon { width: 19px; height: 19px; flex: none; }
 
 .menu-popover button:hover { background: var(--surface-2); }
 
@@ -472,6 +478,12 @@
    as an overlap rather than a divider. */
 .menu-popover button.is-grouped { margin-top: 7px; padding-top: 16px; border-top: 1px solid var(--hair); }
 .menu-popover button small { margin-left: auto; color: var(--soft); font-size: 15px; }
+
+@media (min-width: 721px) {
+  .menu-popover button { min-height: 40px; font-size: 15px; }
+  .menu-popover button .icon { width: 17px; height: 17px; }
+  .menu-popover button small { font-size: 13px; }
+}
 .menu-popover button .menu-switch { margin-left: auto; }
 
 /* The status control lives in the phone menu and in the wide top bar, not
