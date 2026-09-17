@@ -73,7 +73,7 @@ function accessibleName(item, stage) {
   return parts.join(', ');
 }
 
-export function renderCard(card, { ui, filter = null, nowMinutes = null, hideTopHandle = false, hideBottomHandle = false }) {
+export function renderCard(card, { ui, filter = null, nowMinutes = null }) {
   const { item } = card;
   const stage = stageOf(item.stage);
   const groupSelected = ui.groupSelection?.includes(item.id);
@@ -154,11 +154,12 @@ export function renderCard(card, { ui, filter = null, nowMinutes = null, hideTop
          the tab order once the card is selected, so an unselected card's
          hidden handles do not clutter keyboard navigation. They are real
          buttons so the arrow keys can move an edge without a pointer.
-         Either is also skipped when a thin open-time block sits right on
-         that edge (render/timeline.js) — its own always-visible handle
-         already covers it, and drawing both stacks two identical controls
-         on the same pixels the moment this card is selected or hovered. -->
-    ${draggable && !hideTopHandle ? `<button type="button" class="handle handle--top" data-role="resize-top" data-id="${id}" data-focus-key="resize-top:${id}" tabindex="${selected ? '0' : '-1'}" aria-label="Move the start of ${title}"></button>` : ''}
-    ${draggable && !hideBottomHandle ? `<button type="button" class="handle handle--bottom" data-role="resize" data-id="${id}" data-focus-key="resize:${id}" tabindex="${selected ? '0' : '-1'}" aria-label="Move the end of ${title}"></button>` : ''}
+         An open-time gap right on this edge (render/timeline.js) draws its
+         own handle for the same edge too, but it follows the same
+         hover/select reveal rule as this one, gated on the gap rather than
+         the card — so it is never guaranteed to be the one showing, and
+         this card's own handle is never left out on its account. -->
+    ${draggable ? `<button type="button" class="handle handle--top" data-role="resize-top" data-id="${id}" data-focus-key="resize-top:${id}" tabindex="${selected ? '0' : '-1'}" aria-label="Move the start of ${title}"></button>` : ''}
+    ${draggable ? `<button type="button" class="handle handle--bottom" data-role="resize" data-id="${id}" data-focus-key="resize:${id}" tabindex="${selected ? '0' : '-1'}" aria-label="Move the end of ${title}"></button>` : ''}
   </article>`;
 }

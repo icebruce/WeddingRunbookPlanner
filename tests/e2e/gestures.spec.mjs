@@ -200,6 +200,48 @@ test.describe('long press', () => {
     await expect(page.locator('.card.is-lifted')).toHaveCount(0);
     expect((await server.read()).revision, 'nothing was moved').toBe(1);
   });
+
+  test('on a tall open-time block, opens its actions sheet — a tap alone selects it instead', async ({ page, server, isMobile }) => {
+    test.skip(!isMobile, 'long press is a touch gesture');
+    await server.seed({ plan: dense() });
+    await signInAndWaitForPlan(page);
+
+    const gap = page.locator('.open-time[data-before="ceremony"]');
+    await expect(gap).not.toHaveClass(/open-time--thin/);
+
+    // A plain tap: CDP's raw touch events don't reliably synthesize the
+    // click a real touchscreen would, so selecting (like `select()` above,
+    // for a card) is verified with .click() — only the long press itself
+    // needs a real touch gesture, since it fires from the touch's own
+    // pointerdown rather than any click that might follow it.
+    await gap.click();
+    await expect(gap).toHaveClass(/is-selected/);
+    await expect(page.locator('#open-time-dialog')).toHaveCount(0);
+
+    const point = centreOf(await gap.boundingBox());
+    await touchTap(page, point, { holdMs: 700 });
+    await expect(page.locator('#open-time-dialog')).toBeVisible();
+  });
+
+  test('on a thin open-time block, a long press does not open the sheet — there is no way in but the handles', async ({ page, server, isMobile }) => {
+    test.skip(!isMobile, 'long press is a touch gesture');
+    await server.seed({ plan: seedPlan({
+      activities: [
+        activity('arrive', T(14), 30, { title: 'Arrival' }),
+        activity('ceremony', T(14, 40), 60, { title: 'Ceremony', locked: true })
+      ]
+    }) });
+    await signInAndWaitForPlan(page);
+
+    const gap = page.locator('.open-time');
+    await expect(gap).toHaveClass(/open-time--thin/);
+
+    const point = centreOf(await gap.boundingBox());
+    await touchTap(page, point, { holdMs: 700 });
+    await expect(page.locator('#open-time-dialog')).toHaveCount(0);
+    // The tap it still is, underneath, selects it same as any other.
+    await expect(gap).toHaveClass(/is-selected/);
+  });
 });
 
 test.describe('resize', () => {
@@ -383,7 +425,7 @@ test.describe('resize', () => {
       await page.mouse.up();
     });
 
-    test('selecting a block to drag its handle clears the selection once the drag commits', async ({ page, server, isMobile }) => {
+    test('a block stays selected after its handle is dragged, same as a card', async ({ page, server, isMobile }) => {
       test.skip(Boolean(isMobile), 'measured with a mouse');
       await server.seed({ plan: gapPlan() });
       await signInAndWaitForPlan(page);
@@ -397,19 +439,13 @@ test.describe('resize', () => {
       await page.mouse.down();
       await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2 + 10 * PX_PER_MIN, { steps: 8 });
       await page.mouse.up();
-      // Off the block entirely, so the desktop hover-reveal isn't what's
-      // keeping the handle visible in the assertion below.
-      await page.mouse.move(10, 10);
 
       await expect(page.locator('.save-indicator')).toHaveText('Saved');
       // The gap that was selected has shrunk, not vanished, so the same
-      // element is still there to check — it just should not still look
-      // selected, with its handle still showing, on a boundary that moved.
-      await expect(page.locator('.open-time')).not.toHaveClass(/is-selected/);
-      // Opacity 0 still counts as "visible" to Playwright (no display:none,
-      // no visibility:hidden), so the reveal state is read off the style
-      // directly rather than via toBeVisible().
-      await expect(page.locator('.open-time .handle').first()).toHaveCSS('opacity', '0');
+      // element is still there to check — it should still look selected,
+      // handle and all, exactly as a card does after its own handle drags.
+      await expect(page.locator('.open-time')).toHaveClass(/is-selected/);
+      await expect(page.locator('.open-time .handle').first()).toHaveCSS('opacity', '1');
     });
 
     test('dragging the bottom handle grows the next activity, shrinking the gap', async ({ page, server, isMobile }) => {
@@ -449,7 +485,7 @@ test.describe('resize', () => {
       await expect(gap.locator('.handle--bottom')).toHaveCount(1);
     });
 
-    test('a thin gap next to a selected card draws one handle on that edge, not two stacked', async ({ page, server, isMobile }) => {
+    test('a thin gap next to a selected card still reveals that card\'s own handle', async ({ page, server, isMobile }) => {
       test.skip(Boolean(isMobile), 'measured with a mouse');
       await server.seed({ plan: seedPlan({
         activities: [
@@ -461,14 +497,15 @@ test.describe('resize', () => {
 
       await expect(page.locator('.open-time')).toHaveClass(/open-time--thin/);
 
-      // Selecting Dinner would normally reveal its own top handle — but the
-      // thin gap right above it already always shows one covering the exact
-      // same edge, so the card leaves its out (render/timeline.js).
+      // Selecting Dinner reveals its own top handle regardless of the thin
+      // gap right above it — the gap's matching handle is a separate control
+      // that only shows when the gap itself is selected or hovered, so this
+      // card can never be left with no visible handle on that edge.
       await page.locator('.card[data-activity-id="dinner"]').click({ position: { x: 40, y: 10 } });
       await expect(page.locator('.card[data-activity-id="dinner"]')).toHaveClass(/is-selected/);
-      await expect(page.locator('.card[data-activity-id="dinner"] .handle--top')).toHaveCount(0);
-      await expect(page.locator('.card[data-activity-id="dinner"] .handle--bottom')).toBeVisible();
-      await expect(page.locator('.open-time .handle--bottom')).toBeVisible();
+      await expect(page.locator('.card[data-activity-id="dinner"] .handle--top')).toHaveCSS('opacity', '1');
+      await expect(page.locator('.card[data-activity-id="dinner"] .handle--bottom')).toHaveCSS('opacity', '1');
+      await expect(page.locator('.open-time .handle--bottom')).toHaveCSS('opacity', '0');
     });
   });
 });
