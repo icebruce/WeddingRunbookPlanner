@@ -335,7 +335,6 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
     if (unchanged) return repaint(['timeline']);
     commit(edge === 'bottom' ? 'activity.resizeBottom' : 'activity.resizeTop',
       edge === 'bottom' ? { id, newEnd: value } : { id, newStart: value });
-    if (fromOpenTime) store.setUi({ selectedOpenTime: null }, { regions: ['timeline'] });
   }
 
   // ------------------------------------------------------------------ move
