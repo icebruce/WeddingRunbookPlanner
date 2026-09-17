@@ -177,6 +177,27 @@ test.describe('long press', () => {
 
     await expect(page.locator('#activity-dialog')).toHaveCount(0);
   });
+
+  test('on an open-time block, opens its actions sheet — a tap alone selects it instead', async ({ page, server, isMobile }) => {
+    test.skip(!isMobile, 'long press is a touch gesture');
+    await server.seed({ plan: dense() });
+    await signInAndWaitForPlan(page);
+
+    const gap = page.locator('.open-time[data-before="ceremony"]');
+
+    // A plain tap: CDP's raw touch events don't reliably synthesize the
+    // click a real touchscreen would, so selecting (like `select()` above,
+    // for a card) is verified with .click() — only the long press itself
+    // needs a real touch gesture, since it fires from the touch's own
+    // pointerdown rather than any click that might follow it.
+    await gap.click();
+    await expect(gap).toHaveClass(/is-selected/);
+    await expect(page.locator('#open-time-dialog')).toHaveCount(0);
+
+    const point = centreOf(await gap.boundingBox());
+    await touchTap(page, point, { holdMs: 700 });
+    await expect(page.locator('#open-time-dialog')).toBeVisible();
+  });
 });
 
 test.describe('resize', () => {
@@ -360,7 +381,7 @@ test.describe('resize', () => {
       await page.mouse.up();
     });
 
-    test('selecting a block to drag its handle clears the selection once the drag commits', async ({ page, server, isMobile }) => {
+    test('a block stays selected after its handle is dragged, same as a card', async ({ page, server, isMobile }) => {
       test.skip(Boolean(isMobile), 'measured with a mouse');
       await server.seed({ plan: gapPlan() });
       await signInAndWaitForPlan(page);
@@ -374,19 +395,13 @@ test.describe('resize', () => {
       await page.mouse.down();
       await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2 + 10 * PX_PER_MIN, { steps: 8 });
       await page.mouse.up();
-      // Off the block entirely, so the desktop hover-reveal isn't what's
-      // keeping the handle visible in the assertion below.
-      await page.mouse.move(10, 10);
 
       await expect(page.locator('.save-indicator')).toHaveText('Saved');
       // The gap that was selected has shrunk, not vanished, so the same
-      // element is still there to check — it just should not still look
-      // selected, with its handle still showing, on a boundary that moved.
-      await expect(page.locator('.open-time')).not.toHaveClass(/is-selected/);
-      // Opacity 0 still counts as "visible" to Playwright (no display:none,
-      // no visibility:hidden), so the reveal state is read off the style
-      // directly rather than via toBeVisible().
-      await expect(page.locator('.open-time .handle').first()).toHaveCSS('opacity', '0');
+      // element is still there to check — it should still look selected,
+      // handle and all, exactly as a card does after its own handle drags.
+      await expect(page.locator('.open-time')).toHaveClass(/is-selected/);
+      await expect(page.locator('.open-time .handle').first()).toHaveCSS('opacity', '1');
     });
 
     test('dragging the bottom handle grows the next activity, shrinking the gap', async ({ page, server, isMobile }) => {

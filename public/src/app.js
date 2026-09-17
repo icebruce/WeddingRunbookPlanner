@@ -413,9 +413,12 @@ const gestures = createGestures({
   commit: (action, payload) => commit(action, payload),
   repaint,
   // A long press is the phone's way into the editor; double-click is the
-  // pointer equivalent.
+  // pointer equivalent. An open-time block's own tap selects it now
+  // (gestures.js), so the same pair of gestures is its way into the actions
+  // sheet, mirroring the card's pencil/long-press/double-click trio.
   onLongPress: id => openEditor(id),
-  onDoubleClick: id => openEditor(id)
+  onDoubleClick: id => openEditor(id),
+  onOpenTimeActivate: (beforeId, start, end) => openOpenTimeSheet(beforeId, start, end)
 });
 
 // ------------------------------------------------------------------ changes
@@ -533,6 +536,17 @@ function openEditor(id) {
   rememberOpener();
   if (!dialogOpener) dialogOpener = `card:${id}`;
   store.setUi({ dialog: { type: 'activity', mode: 'edit', activity: structuredClone(activity) }, openMenu: null });
+}
+
+/** The + button, or a long press/double-click on the block itself (gestures.js). */
+function openOpenTimeSheet(beforeId, start, end) {
+  rememberOpener();
+  if (!dialogOpener) dialogOpener = `open-time:${beforeId}`;
+  store.setUi({
+    openMenu: null,
+    selectedOpenTime: null,
+    dialog: { type: 'open-time', openTime: { beforeId, start, end } }
+  });
 }
 
 /** Where a new activity starts: right after whatever is selected, or after the last activity, or 8 AM on an empty plan. */
@@ -660,32 +674,19 @@ const ACTION_HANDLERS = {
   conflict(_, element) {
     void resolveConflict(element.dataset.choice);
   },
-  'select-open-time'(event, element) {
-    // A tap-release on a handle (or the + button) fires its own gesture, but
-    // the click that follows still bubbles up to the block's own toggle —
-    // unselecting it right after the drag that was supposed to use it.
-    if (event.target.closest('.handle, .open-time-add')) return;
-    const before = element.dataset.before;
-    const next = store.ui.selectedOpenTime === before ? null : before;
+  'select-open-time'(_, element) {
+    // Never toggles off on a repeat tap — same as a card's own 'select' —
+    // so the click a handle drag leaves behind (its own pointerdown calls
+    // preventDefault/stopPropagation, but not on the click that follows) is
+    // a harmless no-op here exactly as it is on a card, not something to
+    // guard against.
     // 'toolbar' too: selecting a block may silently clear a selected card
     // (setUi, state.js — only one of the two is ever "the" selection), and
     // that card's toolbar needs to go with it.
-    store.setUi({ selectedOpenTime: next }, { regions: ['timeline', 'toolbar'] });
+    store.setUi({ selectedOpenTime: element.dataset.before, openMenu: null }, { regions: ['timeline', 'toolbar'] });
   },
   'open-time'(_, element) {
-    rememberOpener(`open-time:${element.dataset.before}`);
-    store.setUi({
-      openMenu: null,
-      selectedOpenTime: null,
-      dialog: {
-        type: 'open-time',
-        openTime: {
-          beforeId: element.dataset.before,
-          start: Number(element.dataset.start),
-          end: Number(element.dataset.end)
-        }
-      }
-    });
+    openOpenTimeSheet(element.dataset.before, Number(element.dataset.start), Number(element.dataset.end));
   },
   'open-time-choice'(_, element) {
     const { openTime } = store.ui.dialog;
@@ -861,6 +862,18 @@ document.addEventListener('keydown', event => {
     // Enter on a card that is already selected opens it, as the spec says.
     if (event.key === 'Enter' && store.ui.selectedId === card.dataset.id) openEditor(card.dataset.id);
     else store.setUi({ selectedId: card.dataset.id, openMenu: null }, { regions: ['timeline', 'toolbar'] });
+  }
+
+  // Same, for an open-time block and its actions sheet.
+  const openTime = event.target.closest?.('.open-time');
+  if (openTime && (event.key === 'Enter' || event.key === ' ') && event.target === openTime) {
+    event.preventDefault();
+    const before = openTime.dataset.before;
+    if (event.key === 'Enter' && store.ui.selectedOpenTime === before) {
+      openOpenTimeSheet(before, Number(openTime.dataset.start), Number(openTime.dataset.end));
+    } else {
+      store.setUi({ selectedOpenTime: before, openMenu: null }, { regions: ['timeline', 'toolbar'] });
+    }
   }
 
   // Every gesture has a keyboard alternative: Alt and the arrows move a card
