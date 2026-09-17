@@ -22,11 +22,12 @@
  * write to the DOM happens in one `requestAnimationFrame`, so an edge follows
  * the finger without the layout being rebuilt per event (F7).
  */
-import { PX_PER_MIN, applyLaneStyle, buildLayout, overlapBox } from './layout.js';
+import { PX_PER_MIN, applyLaneStyle, buildLayout, density, overlapBox } from './layout.js';
 import { buildSchedule, formatDuration, formatTime } from './schedule.js';
 import { moveGroup, moveTo, resizeBottom, resizeTop } from './operations.js';
 import { cssEscape } from './dom.js';
 import { refit } from './render/fit.js';
+import { bump, tick } from './haptics.js';
 
 /** Movement thresholds, in CSS pixels. */
 const TAP_SLOP = 6;
@@ -75,27 +76,6 @@ const AUTOSCROLL_MAX = 720;  // px/s — 3 hours/s, a whole day in about five
 const AUTOSCROLL_RAMP_MS = 120;
 /** How close together two taps on the same card have to land to count as a double-click. */
 const DOUBLE_TAP_MS = 400;
-
-/**
- * A tap on the back of the phone when a card lifts and again when it lands.
- *
- * The lift is the moment the gesture stops being a scroll and starts being a
- * move, and it is the one moment the eye may not be on the card — a thumb
- * covers what it is holding. Where the platform can say so without looking, it
- * should. iOS Safari has no vibration API and simply will not; Chrome on
- * Android and an installed PWA both will, and there is no reason to withhold it
- * from them because another platform cannot.
- *
- * Short and quiet: 8 ms is a tick, not a buzz.
- */
-function tick(ms = 8) {
-  try {
-    navigator.vibrate?.(ms);
-  } catch {
-    // Some browsers expose it and refuse it (a page that has never been
-    // touched, a policy). A gesture is not worth failing over feedback.
-  }
-}
 
 export function createGestures({ root, store, commit, repaint, onDoubleClick, onOpenTimeActivate }) {
   /** The one gesture in progress, if any. */
@@ -313,6 +293,9 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
         if (openTimeCandidate !== pressed) return;
         clearOpenTimeCandidate();
         suppressClickUntil = Date.now() + 700;
+        // Same moment as a card's lift, and the same answer: the press has
+        // won, and the thumb is covering the thing that says so.
+        tick();
         onOpenTimeActivate?.(pressed.before, pressed.start, pressed.end);
       }, LONG_PRESS_MS);
     }
@@ -435,6 +418,7 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
       : `Starts ${formatTime(active.value)} · ${formatDuration(minutes)}`;
     positionBubble(active.bubble, active.card, active.edge);
     markSnapLine(active.value, layout.from);
+    markDropLine(active.value, layout.from);
   }
 
   function onResizeEnd() {
@@ -498,6 +482,8 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
       plan: store.plan,
       item,
       autoscroll: null,
+      /** Whether the drop currently collides, so the change can be announced. */
+      clashing: false,
       armedFor: 0,
       lastFrame: 0,
       // The line the card is dragged against: read once, because a move
@@ -505,6 +491,23 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
       from: Number(root.querySelector('.timeline-grid')?.dataset.from),
       bubble: createBubble()
     };
+
+    /**
+     * The card being dragged is the selected card.
+     *
+     * A mouse lifts on movement alone, so it never goes through the tap that
+     * would have selected it, and a hold on touch replaces that tap outright
+     * — either way the thing under the pointer wore the plain card's ring
+     * while it was the one being manipulated. Selecting it is silent
+     * (`regions: []`): repainting now would replace the very node the pointer
+     * has captured. The paint that follows the drop renders it properly, with
+     * its toolbar and its handles.
+     *
+     * A group drag is left alone: the group *is* the selection.
+     */
+    if (ids.length === 1 && store.ui.selectedId !== id) {
+      store.setUi({ selectedId: id, groupSelection: [], openMenu: null }, { regions: [] });
+    }
 
     document.body.classList.add('is-moving');
     card.classList.add('is-lifted');
@@ -640,17 +643,28 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
     const newStart = active.item.start + active.delta;
     const clashMinutes = drawClash();
 
-    active.bubble.classList.toggle('is-bad', clashMinutes > 0);
-    active.card.classList.toggle('is-clash', clashMinutes > 0);
+    const clashing = clashMinutes > 0;
+    // Crossing into a collision is a change of state, not a degree of one, so
+    // it is announced once on the way in and never again while it lasts. The
+    // eye may be anywhere on a drag this long; the hand is on the card.
+    if (active.touch && clashing !== active.clashing) {
+      active.clashing = clashing;
+      if (clashing) bump();
+    }
+    active.bubble.classList.toggle('is-bad', clashing);
+    active.card.classList.toggle('is-clash', clashing);
     // A snap line answers "where", which is only half the question. When the
     // drop would collide, the readout answers "should you" instead.
-    active.bubble.textContent = clashMinutes > 0
+    active.bubble.textContent = clashing
       ? `Overlaps ${formatDuration(clashMinutes)}`
       : active.ids.length > 1
         ? `Starts ${formatTime(newStart)} · ${active.ids.length} activities`
         : `Starts ${formatTime(newStart)}`;
     positionBubble(active.bubble, active.card, 'top');
-    if (Number.isFinite(active.from)) markSnapLine(newStart, active.from, clashMinutes > 0);
+    if (Number.isFinite(active.from)) {
+      markSnapLine(newStart, active.from, clashing);
+      markDropLine(newStart, active.from, clashing);
+    }
   }
 
   /**
@@ -728,6 +742,7 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
       card.style.top = `${entry.top}px`;
       card.style.height = `${entry.height}px`;
       applyLaneStyle(card, entry.lane, entry.totalLanes);
+      if (heightChanged) applyDensity(card, entry.item.duration);
 
       const time = card.querySelector('.card-time span');
       const duration = card.querySelector('.card-time strong');
@@ -760,6 +775,54 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
       if (strong) strong.textContent = `${formatDuration(gap.minutes)} open`;
     }
     return layout;
+  }
+
+  /**
+   * A card's padding follows its duration, and during a resize its duration is
+   * changing — so the class that carries it has to change with it, or the
+   * re-fit below measures the card against the room it used to have.
+   *
+   * A card rendered as a one-liner is left alone: at ten minutes or less its
+   * body is built as a single row rather than measured down to one, and that
+   * is markup, not a class.
+   */
+  function applyDensity(card, duration) {
+    if (card.classList.contains('card--line')) return;
+    const next = density(duration);
+    if (next === 'line') return;
+    card.classList.toggle('card--small', next === 'small');
+    card.classList.toggle('card--standard', next === 'standard');
+  }
+
+  /**
+   * The line the card will land on, drawn over the plan.
+   *
+   * The ruler's own snap tick (below) is drawn *behind* the cards — the ruler
+   * layer precedes the plan layer — so during a move it was hidden underneath
+   * the very card it was placing. This one lives in the plan layer, above
+   * every card but under the lifted one, and it is positioned from the clock
+   * rather than found by searching the ruler for a tick at the right pixel:
+   * a minute before the first tick or past the last one had no tick to find,
+   * which is why it came and went.
+   *
+   * It marks the *minute*, so the card's top border settles the usual two
+   * pixels below it — cards sit inside their lines, they do not stand on them.
+   */
+  function markDropLine(minute, from, bad = false) {
+    const plan = root.querySelector('.timeline-plan');
+    if (!plan || !Number.isFinite(from)) return;
+    let line = plan.querySelector('.drop-line');
+    if (!line) {
+      line = document.createElement('div');
+      line.className = 'drop-line';
+      plan.append(line);
+    }
+    line.style.top = `${(minute - from) * PX_PER_MIN}px`;
+    line.classList.toggle('is-bad', bad);
+  }
+
+  function clearDropLine() {
+    root.querySelector('.drop-line')?.remove();
   }
 
   /** The five-minute line being snapped to turns blue — or red, if landing there collides. */
@@ -808,6 +871,7 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
   function finishGesture() {
     cancelPaint();
     clearSnapLine();
+    clearDropLine();
     if (!active) return;
 
     if (active.kind === 'resize') {

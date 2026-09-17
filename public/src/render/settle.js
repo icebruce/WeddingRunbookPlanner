@@ -27,6 +27,7 @@
  * kind, so it never overshoots.
  */
 
+/** `--dur-base` and the plain ease-out, in the one place a script can't read them. */
 const DURATION_MS = 180;
 const EASING = 'ease-out';
 /**

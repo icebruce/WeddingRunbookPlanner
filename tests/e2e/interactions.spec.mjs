@@ -54,12 +54,27 @@ test('a toast can be swiped away', async ({ page, server }) => {
   await page.locator('.toolbar [data-action="lock"]').click();
   const toast = page.locator('.toast');
   await expect(toast).toBeVisible();
-  const box = await toast.boundingBox();
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 20, { steps: 4 });
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 60, { steps: 6 });
-  await page.mouse.up();
+  const drag = async (dx, dy) => {
+    // Re-read it each time: the first drag ends off the toast, which counts as
+    // a click outside the selection and takes the toolbar away — and the toast
+    // floats above whatever occupies the bottom of the screen, so it moves.
+    const box = await toast.boundingBox();
+    const x = box.x + 30;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + dx / 3, y + dy / 3, { steps: 4 });
+    await page.mouse.move(x + dx, y + dy, { steps: 6 });
+    await page.mouse.up();
+  };
+
+  // Down is the one direction that is nearly free — the toast is already at
+  // the bottom of the screen — so it is not a dismissal.
+  await drag(0, 60);
+  await expect(toast).toBeVisible();
+
+  // Sideways is.
+  await drag(60, 0);
   await expect(toast).toBeHidden({ timeout: 2000 });
 });
 
@@ -557,15 +572,34 @@ test('pressing Undo does not also clear the selection', async ({ page, server })
  * an inline one — so anything measured during those 240 ms is measuring the
  * entrance, not the thing under test.
  */
+/**
+ * Wait until the sheet has actually arrived.
+ *
+ * "Nothing is running" is not enough now that the entrance is a transition
+ * rather than a keyframe animation: a transition that has not started yet is
+ * not in `getAnimations()` either, so the old check answered yes before the
+ * sheet had moved at all and handed the next line a sheet still on its way up.
+ * Where it is, is the honest question.
+ */
 async function sheetAtRest(page) {
   await page.waitForFunction(() => {
     const sheet = document.querySelector('.sheet');
-    return Boolean(sheet) && sheet.getAnimations().every(a => a.playState !== 'running');
+    if (!sheet) return false;
+    if (sheet.getAnimations().some(a => a.playState === 'running')) return false;
+    return Math.abs(new window.DOMMatrixReadOnly(getComputedStyle(sheet).transform).m42) < 0.5;
   });
 }
 
-/** Pull the open sheet down by `distance`, optionally letting go at the end. */
-async function pullSheet(page, distance, { release = true, from = '.sheet-header' } = {}) {
+/**
+ * Pull the open sheet down by `distance`, optionally letting go at the end.
+ *
+ * `settleMs` is the pause before release, and it is not padding: a sheet leaves
+ * if it is pulled *far* or thrown *fast*, and a synthetic drag runs at whatever
+ * rate the harness manages — a 60 px pull dispatched in 40 ms is a flick by any
+ * honest reading. A test about the distance rule has to hold still long enough
+ * to be asking about distance.
+ */
+async function pullSheet(page, distance, { release = true, from = '.sheet-header', settleMs = 0 } = {}) {
   const grip = await page.locator(from).boundingBox();
   const x = grip.x + grip.width / 2;
   const y = grip.y + grip.height / 2;
@@ -573,6 +607,7 @@ async function pullSheet(page, distance, { release = true, from = '.sheet-header
   await page.mouse.down();
   await page.mouse.move(x, y + 12, { steps: 2 });
   await page.mouse.move(x, y + distance, { steps: 8 });
+  if (settleMs) await page.waitForTimeout(settleMs);
   if (release) await page.mouse.up();
 }
 
@@ -590,14 +625,40 @@ test('a sheet follows the finger and springs back from a short pull', async ({ p
   await expect(page.locator('#activity-dialog')).toBeVisible();
   await sheetAtRest(page);
 
-  await pullSheet(page, 60, { release: false });
+  await pullSheet(page, 60, { release: false, settleMs: 250 });
   // It follows the finger exactly: no easing on a direct manipulation.
   expect(await sheetOffset(page)).toBeGreaterThan(40);
   await page.mouse.up();
 
-  // Well short of the threshold, so it comes back and stays open.
+  // Well short of the threshold, and let go of rather than thrown, so it comes
+  // back and stays open.
   await expect(page.locator('#activity-dialog')).toBeVisible();
   await expect.poll(() => sheetOffset(page)).toBe(0);
+});
+
+test('a short pull thrown fast dismisses anyway', async ({ page, server }) => {
+  test.skip(!isPhoneLayout(page), 'the bottom sheet is the narrow layout');
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+  await signInAndWaitForPlan(page);
+  await page.locator('.card').first().click();
+  await page.locator('.toolbar [data-action="edit"]').click();
+  await expect(page.locator('#activity-dialog')).toBeVisible();
+  await sheetAtRest(page);
+
+  // Nowhere near 40 % of the sheet's height, but flicked — which is how a
+  // sheet is really thrown away, and the rule the distance test above must not
+  // be accidentally measuring.
+  await page.evaluate(() => {
+    const sheet = document.querySelector('.sheet');
+    const send = (type, y) => sheet.dispatchEvent(new PointerEvent(type, {
+      bubbles: true, pointerId: 1, clientX: 40, clientY: y
+    }));
+    send('pointerdown', 100);
+    send('pointermove', 120);
+    send('pointermove', 180);
+    send('pointerup', 180);
+  });
+  await expect(page.locator('#activity-dialog')).toBeHidden();
 });
 
 test('a long pull dismisses the sheet', async ({ page, server }) => {
@@ -734,6 +795,201 @@ test('back clears an open-time selection instead of leaving the app', async ({ p
   await expect(page.locator('#main-plan')).toBeVisible();
 });
 
+test('back deselects where you are, without taking the scroll back with it', async ({ page, server }) => {
+  await server.seed({ plan: seedPlan({ activities: [
+    activity('a', T(9), 60, { title: 'Portraits' }),
+    activity('b', T(18), 60, { title: 'Party' })
+  ] }) });
+  await signInAndWaitForPlan(page);
+
+  await page.locator('.card[data-activity-id="a"]').click({ position: { x: 40, y: 10 } });
+  await expect(page.locator('.card.is-selected')).toHaveCount(1);
+
+  // Read on, a long way past the card that is selected.
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(200);
+  const before = await page.evaluate(() => window.scrollY);
+
+  await page.goBack();
+  await expect(page.locator('.card.is-selected')).toHaveCount(0);
+
+  // The browser records a scroll position against the entry the selection
+  // pushed, and restoring it threw the reader back to the card they had left
+  // behind. Back closes the top thing; it is not a way of travelling.
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeCloseTo(before, -1);
+});
+
+test('the drop line is drawn over the cards, not behind them', async ({ page, server, isMobile }) => {
+  test.skip(Boolean(isMobile), 'driven with a mouse');
+  await server.seed({ plan: seedPlan({ activities: [
+    activity('a', T(10), 60, { title: 'Portraits' }),
+    activity('b', T(14), 60, { title: 'Ceremony' })
+  ] }) });
+  await signInAndWaitForPlan(page);
+
+  const card = page.locator('.card[data-activity-id="a"]');
+  const box = await card.boundingBox();
+  await page.mouse.move(box.x + 40, box.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 40, box.y + 90, { steps: 8 });
+
+  const line = page.locator('.drop-line');
+  await expect(line).toHaveCount(1);
+
+  // Drawn in the plan layer rather than the ruler, which is painted first and
+  // therefore always behind the very card the line is placing.
+  expect(await line.evaluate(node => node.parentElement.className)).toContain('timeline-plan');
+
+  // And it marks the minute the card will start on: the card's own top border
+  // settles the usual two-pixel inset below it, at any card height.
+  const gap = await page.evaluate(() => {
+    const drop = document.querySelector('.drop-line').getBoundingClientRect();
+    const moving = document.querySelector('.card.is-lifted').getBoundingClientRect();
+    return moving.top - (drop.top + drop.height / 2);
+  });
+  expect(Math.abs(gap - 2)).toBeLessThan(1.5);
+
+  await page.mouse.up();
+  await expect(page.locator('.drop-line')).toHaveCount(0);
+});
+
+test('the card being dragged is the selected card', async ({ page, server, isMobile }) => {
+  test.skip(Boolean(isMobile), 'driven with a mouse');
+  await server.seed({ plan: seedPlan({ activities: [
+    activity('a', T(10), 60, { title: 'Portraits' }),
+    activity('b', T(14), 60, { title: 'Ceremony' })
+  ] }) });
+  await signInAndWaitForPlan(page);
+
+  const box = await page.locator('.card[data-activity-id="a"]').boundingBox();
+  await page.mouse.move(box.x + 40, box.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 40, box.y + 90, { steps: 8 });
+  await page.mouse.up();
+
+  // A mouse lifts on movement alone, so it never goes through the tap that
+  // would have selected the card — it used to be dropped wearing a plain
+  // card's ring, with no toolbar and no handles.
+  await expect(page.locator('.card[data-activity-id="a"]')).toHaveClass(/is-selected/);
+});
+
+test('the top bar draws its hairline only once the plan is under it', async ({ page, server }) => {
+  await server.seed({ plan: seedPlan({ activities: [
+    activity('a', T(9), 60, { title: 'Portraits' }),
+    activity('b', T(18), 60, { title: 'Party' })
+  ] }) });
+  await signInAndWaitForPlan(page);
+
+  const border = () => page.locator('.topbar').evaluate(node => getComputedStyle(node).borderBottomColor);
+  expect(await border(), 'nothing is passing underneath yet').toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await expect(page.locator('.topbar')).toHaveClass(/is-collapsed/);
+  // It fades in over the handover rather than appearing with it.
+  await expect.poll(border).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+});
+
+test('the bars under the top bar stick to its measured height, not to a guess', async ({ page, server }) => {
+  await server.seed({ plan: seedPlan({ status: 'Final', activities: [
+    activity('a', T(9), 60, { title: 'Portraits' })
+  ] }) });
+  await signInAndWaitForPlan(page);
+
+  const measured = await page.evaluate(() => ({
+    token: getComputedStyle(document.documentElement).getPropertyValue('--topbar-height').trim(),
+    real: Math.round(document.querySelector('.topbar').getBoundingClientRect().height)
+  }));
+  expect(measured.token).toBe(`${measured.real}px`);
+});
+
+test('a sheet leaves on the same curve it arrived on', async ({ page, server }) => {
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+  await signInAndWaitForPlan(page);
+
+  const card = page.locator('.card').first();
+  if (await isPhoneLayout(page)) {
+    await card.click({ position: { x: 40, y: 10 } });
+    await page.locator('.toolbar [data-action="edit"]').click();
+  } else {
+    await card.dblclick({ position: { x: 40, y: 10 } });
+  }
+  const dialog = page.locator('#activity-dialog');
+  await expect(dialog).toBeVisible();
+
+  // It arrives on a transition rather than a keyframe, so a pull can take it
+  // over mid-entrance (sheet-drag.js finishes whatever is running).
+  expect(await dialog.locator('.sheet').evaluate(node => getComputedStyle(node).transitionProperty))
+    .toMatch(/transform|scale/);
+
+  await dialog.locator('.sheet-close').click();
+
+  // Still on the page for the length of its exit — that is the whole point,
+  // because a dialog torn down on the same tick as `close()` cannot animate —
+  // but closed, inert and untouchable while it goes.
+  const leaving = page.locator('#activity-dialog.is-leaving');
+  await expect(leaving).toHaveCount(1);
+  expect(await leaving.evaluate(node => node.open)).toBe(false);
+  expect(await leaving.evaluate(node => node.inert)).toBe(true);
+  expect(await leaving.evaluate(node => getComputedStyle(node).pointerEvents)).toBe('none');
+
+  // The exit is held open by `overlay`, so it is asked for only where that is
+  // understood: `display` on its own would draw the sheet into the middle of
+  // the page on its way out, having already left the top layer.
+  const held = await page.evaluate(() => CSS.supports('overlay', 'auto'));
+  expect(await leaving.evaluate(node => getComputedStyle(node).display))
+    .toBe(held ? 'block' : 'none');
+
+  // And then gone: one leaving sheet does not become two.
+  await expect(page.locator('#activity-dialog')).toHaveCount(0);
+});
+
+test('a row that comes back during a resize is faded in, not popped', async ({ page, server }) => {
+  test.skip(isPhoneLayout(page), 'a pointer drag of the bottom edge');
+  await server.seed({ plan: seedPlan({ activities: [
+    activity('a', T(10), 120, { title: 'Getting-ready Portraits', location: 'Bridal suite', people: ['Bride', 'Photographer'] })
+  ] }) });
+  await signInAndWaitForPlan(page);
+
+  const card = page.locator('.card[data-activity-id="a"]');
+  await card.click();
+  const hidden = () => card.evaluate(node =>
+    [...node.querySelectorAll('[data-drop]')].filter(row => row.hidden).length);
+
+  const box = await card.locator('[data-role="resize"]').boundingBox();
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  // Down to a quarter of an hour: rows go as the card shrinks under the finger.
+  await page.mouse.move(x, y - 420, { steps: 12 });
+  await page.waitForTimeout(120);
+  expect(await hidden(), 'the card re-fits while it is being resized').toBeGreaterThan(0);
+
+  // Each row comes back at its own point in the drag and its fade is over in
+  // 140 ms, so asking what is running at the end catches nothing. Count them
+  // as they start instead.
+  await page.evaluate(() => {
+    const original = Element.prototype.animate;
+    window.__rowFades = 0;
+    Element.prototype.animate = function animate(...args) {
+      if (this.hasAttribute?.('data-drop')) window.__rowFades += 1;
+      return original.apply(this, args);
+    };
+  });
+
+  // And back. A row that returns appeared out of nothing, so it fades in —
+  // the half of the change the card's own moving edge does not cover.
+  await page.mouse.move(x, y, { steps: 12 });
+  await page.mouse.up();
+
+  // The drop commits and repaints, and the fit pass that follows runs in a
+  // frame of its own — so this is polled rather than read once.
+  await expect.poll(hidden, { message: 'and they are back' }).toBe(0);
+  expect(await page.evaluate(() => window.__rowFades), 'the rows that came back were faded in')
+    .toBeGreaterThan(0);
+});
+
 test('the now line eases between ticks rather than stepping', async ({ page, server }) => {
   const now = new Date();
   const minutes = now.getHours() * 60 + now.getMinutes();
@@ -766,7 +1022,10 @@ test('a reader with reduced motion still gets a charge before the lift', async (
       name: style.animationName,
       duration: style.animationDuration,
       ring: style.boxShadow,
-      scale: getComputedStyle(card).transform
+      // The press is on the individual `scale` property, so that going from
+      // held to lifted is one property easing rather than two transforms
+      // swapping.
+      scale: getComputedStyle(card).scale
     };
     card.classList.remove('is-charging');
     return result;

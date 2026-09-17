@@ -15,9 +15,11 @@
  * way out. A timer that expires while someone is reaching for the one control
  * that undoes a destructive change is the timer being wrong, not the person.
  */
+import { tick } from '../haptics.js';
+
 const VISIBLE_MS = 6_000;
 const EXIT_MS = 200;
-/** How far a toast has to be dragged down before letting go dismisses it. */
+/** How far a toast has to be dragged sideways before letting go dismisses it. */
 const SWIPE_DISMISS_PX = 28;
 /** Or how fast, so a short flick dismisses as readily as a long drag. */
 const SWIPE_DISMISS_VELOCITY = 0.4; // px/ms
@@ -40,6 +42,18 @@ export function createToaster(region, host = () => region) {
   let startedAt = 0;
   /** Reasons the countdown is currently held: a pointer on it, focus in it. */
   const holds = new Set();
+  /**
+   * The swipe in progress, if any, and which toast it belongs to.
+   *
+   * It is tracked here rather than per toast, and released from the window
+   * rather than from the toast, because the capture that would retarget the
+   * gesture is deliberately not taken until the movement has proved itself
+   * (see `bindSwipe`). Until then the pointer can perfectly well come up
+   * somewhere else — a drag straight down off the bottom of the toast does
+   * exactly that — and a release the toast never hears leaves the gesture open
+   * for good, so the next swipe is refused as a second finger.
+   */
+  let swipe = null;
 
   function stopTimer() {
     if (timer === null) return;
@@ -72,68 +86,72 @@ export function createToaster(region, host = () => region) {
     if (!current) return;
     const node = current;
     current = null;
+    if (swipe?.node === node) swipe = null;
     node.classList.remove('is-visible');
     setTimeout(() => node.remove(), EXIT_MS);
   }
 
   /**
-   * Swipe a toast away. It sits at the bottom of the screen, so it leaves
-   * downwards — the direction it came from — and follows the finger exactly
-   * while it is being dragged, the same rule every other gesture in this app
-   * follows. A movement under the slop is a tap and is left alone, so Undo
-   * still works.
+   * Swipe a toast away, to the right.
+   *
+   * It used to go down, on the argument that a bottom-anchored notice should
+   * leave the way it came. The hand does not read it that way: the thing
+   * sideways of a toast is nothing at all, and the reach that clears it is the
+   * one every notification list has taught. Down is also the one direction
+   * that is nearly free — the toast is already at the bottom of the screen, so
+   * a few pixels of thumb travel dismissed it by accident.
+   *
+   * Either way it follows the finger exactly while it is being dragged, the
+   * same rule every other gesture in this app follows, and a movement under
+   * the slop is a tap and is left alone, so Undo still works.
    */
   function bindSwipe(node) {
-    let drag = null;
-
     node.addEventListener('pointerdown', event => {
-      if (event.button > 0 || drag) return;
+      if (event.button > 0 || swipe) return;
       // Deliberately no `setPointerCapture` here. Capturing on the way down
       // retargets the whole gesture at the toast, so the `click` the browser
       // works out from the pointerdown/pointerup pair lands on the toast
       // rather than on Undo — and Undo that does not fire is the one failure
-      // this toast cannot afford. The capture is taken in `pointermove`, once
+      // this toast cannot afford. The capture is taken in `onSwipeMove`, once
       // the movement has proved this is a swipe and not a tap.
-      drag = { id: event.pointerId, y: event.clientY, at: Date.now(), dy: 0, moved: false };
+      swipe = { node, id: event.pointerId, x: event.clientX, at: Date.now(), dx: 0, moved: false };
     });
+  }
 
-    node.addEventListener('pointermove', event => {
-      if (!drag || drag.id !== event.pointerId) return;
-      const dy = event.clientY - drag.y;
-      if (!drag.moved && Math.abs(dy) < SWIPE_SLOP) return;
-      if (!drag.moved) {
-        drag.moved = true;
-        hold('swipe', true);
-        node.classList.add('is-dragging');
-        // Now that it is a swipe, follow the finger even if it leaves the
-        // toast — which it will, because the toast is leaving with it.
-        node.setPointerCapture(event.pointerId);
-      }
-      // Downward follows the finger; upward is resisted, because there is
-      // nothing above the toast for it to go to.
-      drag.dy = dy > 0 ? dy : dy / 4;
-      node.style.setProperty('--toast-drag', `${drag.dy}px`);
-    });
+  function onSwipeMove(event) {
+    if (!swipe || swipe.id !== event.pointerId) return;
+    const dx = event.clientX - swipe.x;
+    if (!swipe.moved && Math.abs(dx) < SWIPE_SLOP) return;
+    if (!swipe.moved) {
+      swipe.moved = true;
+      hold('swipe', true);
+      swipe.node.classList.add('is-dragging');
+      // Now that it is a swipe, follow the finger even if it leaves the
+      // toast — which it will, because the toast is leaving with it.
+      swipe.node.setPointerCapture(event.pointerId);
+    }
+    // Rightward follows the finger; leftward is resisted, because there is
+    // nothing to the left of the toast for it to go to.
+    swipe.dx = dx > 0 ? dx : dx / 4;
+    swipe.node.style.setProperty('--toast-drag', `${swipe.dx}px`);
+  }
 
-    const release = event => {
-      if (!drag || drag.id !== event.pointerId) return;
-      const { dy, moved, at } = drag;
-      drag = null;
-      node.classList.remove('is-dragging');
-      node.style.removeProperty('--toast-drag');
-      if (!moved) return;
+  function onSwipeRelease(event) {
+    if (!swipe || swipe.id !== event.pointerId) return;
+    const { node, dx, moved, at } = swipe;
+    swipe = null;
+    node.classList.remove('is-dragging');
+    node.style.removeProperty('--toast-drag');
+    if (!moved) return;
 
-      const velocity = dy / Math.max(1, Date.now() - at);
-      if (dy > SWIPE_DISMISS_PX || velocity > SWIPE_DISMISS_VELOCITY) {
-        node.classList.add('is-swiped-out');
-        dismiss();
-        return;
-      }
-      hold('swipe', false);
-    };
-
-    node.addEventListener('pointerup', release);
-    node.addEventListener('pointercancel', release);
+    const velocity = dx / Math.max(1, Date.now() - at);
+    if (dx > SWIPE_DISMISS_PX || velocity > SWIPE_DISMISS_VELOCITY) {
+      node.classList.add('is-swiped-out');
+      tick();
+      dismiss();
+      return;
+    }
+    hold('swipe', false);
   }
 
   /**
@@ -181,6 +199,12 @@ export function createToaster(region, host = () => region) {
     startTimer();
     return node;
   }
+
+  // One set for the toaster, not one per toast: a toast lives for six seconds
+  // and there may be hundreds in a session.
+  window.addEventListener('pointermove', onSwipeMove);
+  window.addEventListener('pointerup', onSwipeRelease);
+  window.addEventListener('pointercancel', onSwipeRelease);
 
   toast.dismiss = dismiss;
   return toast;

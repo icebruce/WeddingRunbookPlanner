@@ -59,6 +59,46 @@ function fitPeople(row) {
   if (hidden === tags.length) count.remove();
 }
 
+/**
+ * A row coming back.
+ *
+ * A card's height is its duration, so a card being resized is a card whose
+ * content is changing while a finger is on it. Dropping a row is invisible —
+ * the card's own edge is moving over it at the same moment — but a row
+ * *returning* appeared out of nothing, which is the one half of this worth
+ * animating and the half that read as cheap.
+ *
+ * Only genuinely returning rows are animated. The pass resets every row and
+ * re-hides most of them within the same frame, so "was it hidden" is read
+ * before the reset and compared after the last correction round; on a fresh
+ * paint the cards are new nodes with nothing hidden, so nothing plays.
+ */
+const ROW_IN_MS = 140;
+
+function rowsHiddenNow(cards) {
+  const was = new Set();
+  for (const card of cards) {
+    for (const row of card.querySelectorAll('[data-drop]')) {
+      if (row.hidden) was.add(row);
+    }
+  }
+  return was;
+}
+
+function playReturningRows(cards, was) {
+  if (!was.size) return;
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+  for (const card of cards) {
+    for (const row of card.querySelectorAll('[data-drop]')) {
+      if (row.hidden || !was.has(row)) continue;
+      row.animate(
+        [{ opacity: 0, transform: 'translateY(-3px)' }, { opacity: 1, transform: 'none' }],
+        { duration: ROW_IN_MS, easing: 'ease-out' }
+      );
+    }
+  }
+}
+
 /** Phase one, a write: put the card back to showing everything. */
 function resetCard(card) {
   const body = card.querySelector('.card-body');
@@ -143,6 +183,10 @@ function dropOneMore(measurement) {
 
 /** The whole pass over a set of cards, in phases. */
 function fitAll(cards) {
+  // 0 — read, before anything is written: what is hidden as things stand, so
+  // that a row which comes back can be told from one that was never away.
+  const was = rowsHiddenNow(cards);
+
   // 1 — write: everything back on.
   const entries = [];
   for (const card of cards) {
@@ -174,6 +218,9 @@ function fitAll(cards) {
   for (let round = 0; round < MAX_CORRECTION_ROUNDS && short.length; round += 1) {
     short = short.filter(dropOneMore).filter(stillOverflowing);
   }
+
+  // 5 — the rows that really did come back.
+  playReturningRows(cards, was);
 }
 
 /** Re-fit a single card, for a resize that is changing its height right now. */

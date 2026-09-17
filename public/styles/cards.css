@@ -25,7 +25,7 @@
   /* The ring and the hover lift are both box-shadow, so they are one
      transition. Nothing else about a card moves under its own steam: while an
      edge or a card is being dragged it follows the pointer exactly. */
-  transition: box-shadow 180ms ease-out;
+  transition: box-shadow var(--dur-base) var(--ease-out);
 }
 
 /* The stage bar: phase colour, inset so it scales with the card. */
@@ -197,7 +197,7 @@
   appearance: none;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 140ms ease-out;
+  transition: opacity var(--dur-quick) var(--ease-out);
 }
 .handle::after { content: ''; width: 34px; height: 9px; border-radius: 4.5px; background: var(--surface); border: 2px solid var(--sel); }
 .handle--top { top: -8px; }
@@ -270,7 +270,7 @@
    on the card at all times. Nothing advertises the drag: the grab cursor is
    the affordance, and it costs no pixels. */
 @media (hover: hover) and (pointer: fine) {
-  .card-controls { opacity: 0; transition: opacity 140ms ease-out; }
+  .card-controls { opacity: 0; transition: opacity var(--dur-quick) var(--ease-out); }
   .card:hover .card-controls,
   .card:focus-within .card-controls,
   .card.is-selected .card-controls,
@@ -367,7 +367,7 @@
 .card.is-live { box-shadow: 0 0 0 1.5px var(--live), 0 6px 20px rgba(30, 158, 82, .16); }
 .card-progress { height: 3px; border-radius: 2px; background: color-mix(in srgb, var(--live) 18%, transparent); overflow: hidden; }
 /* Same as the time line: the clock moves it, so it creeps rather than steps. */
-.card-progress i { display: block; height: 100%; background: var(--live); transition: width 500ms ease-out; }
+.card-progress i { display: block; height: 100%; background: var(--live); transition: width 500ms var(--ease-out); }
 
 .now-tag {
   display: inline-flex;
@@ -411,7 +411,7 @@
  * it can still be felt building and abandoned before it fires.
  */
 @media (prefers-reduced-motion: reduce) {
-  .card.is-charging { transform: none; }
+  .card.is-charging { scale: none; }
   .card.is-charging::before {
     content: '';
     position: absolute;

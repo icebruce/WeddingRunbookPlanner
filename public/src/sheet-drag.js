@@ -18,6 +18,7 @@
  * This lives apart from `gestures.js`, which is about the timeline — its whole
  * vocabulary is cards, minutes and the clock, and none of that applies here.
  */
+import { tick } from './haptics.js';
 
 /** Below this, the finger has not said anything yet. */
 const SLOP = 8;
@@ -25,8 +26,26 @@ const SLOP = 8;
 const DISMISS_FRACTION = 0.4;
 /** Or how fast, so a short flick dismisses as readily as a long pull. */
 const DISMISS_VELOCITY = 0.5; // px/ms
-/** The sheet curve, from DESIGN_GUIDE §6. */
-const SPRING = '240ms cubic-bezier(.2, .8, .2, 1)';
+/**
+ * The sheet curve, read from the tokens so §6 is written down once.
+ *
+ * Longhands, not the `transition` shorthand. A shorthand carrying a `var()` is
+ * held as a pending substitution — the same trap `.sheet`'s own `inset` and
+ * the reduced-motion charge ring's `animation` both hit, and both on WebKit,
+ * where it reads correctly everywhere this was built and does nothing on the
+ * one engine that matters most here.
+ */
+const SPRING = {
+  transitionProperty: 'transform',
+  transitionDuration: 'var(--dur-sheet)',
+  transitionTimingFunction: 'var(--ease-sheet)'
+};
+
+function setTransition(sheet, on) {
+  for (const [property, value] of Object.entries(SPRING)) {
+    sheet.style[property] = on ? value : '';
+  }
+}
 /** Pulling up has nowhere to go, so it is resisted rather than refused. */
 const RESISTANCE = 4;
 
@@ -64,9 +83,10 @@ export function bindSheetDrag(dialog, { close, isNarrow = () => window.matchMedi
   };
 
   const rest = () => {
-    sheet.style.transition = `transform ${SPRING}`;
+    sheet.classList.remove('is-dragging');
+    setTransition(sheet, true);
     setOffset(0);
-    sheet.addEventListener('transitionend', () => { sheet.style.transition = ''; }, { once: true });
+    sheet.addEventListener('transitionend', () => setTransition(sheet, false), { once: true });
   };
 
   dialog.addEventListener('pointerdown', event => {
@@ -94,7 +114,12 @@ export function bindSheetDrag(dialog, { close, isNarrow = () => window.matchMedi
       // it leaves the sheet — which it will, because the sheet is going with
       // it.
       sheet.setPointerCapture(event.pointerId);
-      sheet.style.transition = '';
+      // The sheet now carries a transition of its own — it arrives and leaves
+      // on one (styles/sheets.css) — and a transition is exactly what a
+      // direct manipulation must not have. Clearing the inline one is no
+      // longer enough to be rid of it.
+      sheet.classList.add('is-dragging');
+      setTransition(sheet, false);
     }
 
     drag.offset = dy > 0 ? dy : dy / RESISTANCE;
@@ -127,7 +152,11 @@ export function bindSheetDrag(dialog, { close, isNarrow = () => window.matchMedi
     // none of this matters; if it stops to ask whether to discard the typing,
     // the sheet is already sitting where it belongs underneath the question.
     rest();
-    if (far || velocity > DISMISS_VELOCITY) close();
+    if (!(far || velocity > DISMISS_VELOCITY)) return;
+    // The pull was enough. The sheet is on its way out under the finger that
+    // sent it, which is the moment to say so rather than after it has gone.
+    tick();
+    close();
   };
 
   dialog.addEventListener('pointerup', release);

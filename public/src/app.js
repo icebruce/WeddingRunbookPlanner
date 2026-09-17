@@ -16,6 +16,7 @@ import { readDeviceCopy, writeDeviceCopy } from './device.js';
 import { cssEscape, escapeHtml, focusByKey, paint, uid } from './dom.js';
 import { AUTO_VIEW_ONLY_MS, createClock, minutesNow, readOverride, shouldBeOn, stripState, writeOverride } from './dayof.js';
 import { createGestures } from './gestures.js';
+import { bump } from './haptics.js';
 import { bindSheetDrag } from './sheet-drag.js';
 import { PX_PER_MIN } from './layout.js';
 import { icon } from './icons.js';
@@ -337,6 +338,17 @@ function measureStickyInset() {
     total += node.getBoundingClientRect().height;
   }
   document.documentElement.style.setProperty('--sticky-inset', `${Math.round(total)}px`);
+
+  // The bar's real height, for the bars that stick to its underside. The token
+  // is a design floor (52 px, 62 px on a desktop) and the bar is often taller
+  // than it — a notch's safe-area inset is part of its padding — which left the
+  // live strip and the pinned bars sticking somewhere inside it. They can only
+  // be right if the number they use is measured.
+  const topbar = app.querySelector('.topbar');
+  if (topbar) {
+    document.documentElement.style.setProperty(
+      '--topbar-height', `${Math.round(topbar.getBoundingClientRect().height)}px`);
+  }
 }
 
 /**
@@ -459,15 +471,57 @@ function dialogKey(dialog) {
   return dialog.type;
 }
 
+/**
+ * Close a dialog and let it leave.
+ *
+ * `overlay` is a transitionable property, so a closed dialog stays in the top
+ * layer for exactly as long as its exit takes (styles/sheets.css) — but only
+ * while it is still on the page. Tearing the node down on the same tick as
+ * `close()`, which is what used to happen, is what made an exit animation
+ * impossible. It is marked on the way out so that nothing else mistakes it for
+ * the live one, and removed once it has gone.
+ *
+ * A little longer than the exit itself: a timer that fires on the exact
+ * millisecond can land a frame early and cut the last of it.
+ */
+const SHEET_EXIT_MS = 260;
+
+function releaseDialog(dialog) {
+  if (!dialog || dialog.classList.contains('is-leaving')) return;
+  dialog.close();
+  dialog.classList.add('is-leaving');
+  // It is a picture from here on: nothing in it can be reached, focused or
+  // read out, so the fifth of a second it spends leaving cannot be mistaken
+  // for a fifth of a second of it still being there.
+  dialog.inert = true;
+  setTimeout(() => dialog.remove(), SHEET_EXIT_MS);
+}
+
+/**
+ * Make room for a dialog about to open. Anything still leaving goes at once:
+ * a new question supersedes the fading picture of the old one, and two of the
+ * same dialog must never be in the document together.
+ */
+function clearLeaving(root) {
+  for (const stale of root.querySelectorAll('dialog.is-leaving')) stale.remove();
+}
+
+/** The sheet that is actually open, as opposed to one still on its way out. */
+function liveSheet() {
+  return sheetRoot.querySelector('dialog:not(.is-leaving)');
+}
+
 function syncSheet() {
   const key = dialogKey(store.ui.dialog);
   if (key === currentDialogKey) return;
   const closing = currentDialogKey && !key;
   currentDialogKey = key;
 
-  const open = sheetRoot.querySelector('dialog');
-  if (open) open.close();
-  sheetRoot.innerHTML = key ? renderSheet(store.ui, store.plan) : '';
+  // Appended rather than assigned: the sheet on its way out is still on the
+  // page, and overwriting the root would take it with it. One sheet handing
+  // straight to another — the open-time sheet into the activity editor — puts
+  // both here for a fifth of a second, the new one on top of the old.
+  releaseDialog(liveSheet());
 
   if (!key) {
     if (closing && dialogOpener) focusByKey(app, dialogOpener);
@@ -475,7 +529,9 @@ function syncSheet() {
     return;
   }
 
-  const dialog = sheetRoot.querySelector('dialog');
+  clearLeaving(sheetRoot);
+  sheetRoot.insertAdjacentHTML('beforeend', renderSheet(store.ui, store.plan));
+  const dialog = sheetRoot.lastElementChild;
   bindSheet(dialog);
   dialog.showModal();
 }
@@ -496,7 +552,7 @@ function closeSheet() {
  * "Keep editing" would come back to an empty form.
  */
 function requestCloseEditor() {
-  const form = sheetRoot.querySelector('#activity-form');
+  const form = liveSheet()?.querySelector('#activity-form');
   if (!form || !activityForm.hasUnsavedChanges(form)) {
     closeSheet();
     return;
@@ -505,12 +561,12 @@ function requestCloseEditor() {
 }
 
 function showDiscardAlert() {
-  alertRoot.innerHTML = discardSheet();
-  const alert = alertRoot.querySelector('dialog');
+  clearLeaving(alertRoot);
+  alertRoot.insertAdjacentHTML('beforeend', discardSheet());
+  const alert = alertRoot.lastElementChild;
 
   const dismiss = () => {
-    alert.close();
-    alertRoot.innerHTML = '';
+    releaseDialog(alert);
     syncOverlayHistory();
   };
   alert.addEventListener('cancel', event => {
@@ -528,6 +584,14 @@ function showDiscardAlert() {
 
 // -------------------------------------------------------------- back button
 //
+// The browser restores the scroll position it recorded for a history entry, and
+// the entry this module pushes is recorded at the moment something was opened.
+// Selecting a card near the top of the day, scrolling a long way down and
+// pressing back therefore did two things: it cleared the selection, and it
+// threw the reader back to where the card had been. Back closes the top thing;
+// it is not a way of travelling, and the page stays exactly where it is.
+history.scrollRestoration = 'manual';
+
 // On a phone, "back" is the hardware button or edge gesture, and it goes to
 // the browser's history, not to the app. Left alone it leaves the whole plan
 // behind whatever was open — a sheet, a menu, a selected card — instead of
@@ -674,6 +738,10 @@ function undo() {
   if (isViewOnly()) return;
   const result = store.undo({ regions: ['all'] });
   if (!result) return;
+  // Undo puts the plan back somewhere it has already been, which is the one
+  // change on screen that nothing was watching happen — the thumb was on the
+  // toast, not on the card that moved.
+  bump();
   saver.markDirty();
   writeDeviceCopy(store.plan, { revision: store.revision, dirty: true });
   // Selecting an activity that the undo removed would leave the toolbar
@@ -1071,10 +1139,10 @@ document.addEventListener('keydown', event => {
       focusByKey(app, opener === 'app' ? 'menu-app' : opener);
       return;
     }
-    if (store.ui.selectedId && !sheetRoot.querySelector('dialog')) {
+    if (store.ui.selectedId && !sheetRoot.querySelector('dialog[open]')) {
       store.setUi({ selectedId: null }, { regions: ['timeline', 'toolbar'] });
     }
-    if (store.ui.selectedOpenTime && !sheetRoot.querySelector('dialog')) {
+    if (store.ui.selectedOpenTime && !sheetRoot.querySelector('dialog[open]')) {
       store.setUi({ selectedOpenTime: null }, { regions: ['timeline'] });
     }
     return;

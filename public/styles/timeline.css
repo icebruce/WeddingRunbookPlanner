@@ -71,8 +71,10 @@
 .tick--half b { font-size: 13px; font-weight: 600; color: var(--ink-2); }
 .tick--quarter b { font-size: 12px; font-weight: 500; color: var(--soft); }
 
-/* The live snap label while an edge is being dragged. */
-.tick--snap::after { background: var(--sel); height: 1.5px; }
+/* The live snap label while an edge is being dragged. The line itself is
+   centred on its minute rather than hung below it, so it lines up exactly
+   with the drop line that carries on across the plan (below). */
+.tick--snap::after { background: var(--sel); height: 2px; margin-top: -1px; }
 .tick--snap b {
   color: var(--bg);
   background: var(--sel);
@@ -87,6 +89,42 @@
 .tick--snap-bad b { background: var(--bad); }
 
 .timeline-plan { position: absolute; top: 0; bottom: 0; left: var(--plan-left); right: var(--plan-right); }
+
+/*
+ * Where a drag will land.
+ *
+ * The ruler is painted before the plan, so a tick is always behind the cards —
+ * which meant the line placing a card was hidden under that card at exactly
+ * the moment it had to be read. This one lives in the plan layer and is
+ * written from the clock by gestures.js, so it is drawn whether or not a tick
+ * happens to exist at that minute.
+ *
+ * It sits above every card and below the lifted one: the card being carried
+ * is the thing in the hand, and nothing is drawn across it.
+ */
+.drop-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 25;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 1px;
+  background: var(--sel);
+  pointer-events: none;
+}
+.drop-line::before {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: -2.5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--sel);
+}
+/* Landing here would overlap something. Red is only ever conflict. */
+.drop-line.is-bad, .drop-line.is-bad::before { background: var(--bad); }
 
 /* Sunset: a pill in the label column, and a dotted line behind the cards. */
 .sunset-line {
@@ -246,7 +284,7 @@
  * over half a second. Both are drawn with an inline `top` from the renderer,
  * so nothing animates on the first paint; only the clock's later moves do.
  */
-.now-line, .now-pill { transition: top 500ms ease-out; }
+.now-line, .now-pill { transition: top 500ms var(--ease-out); }
 
 .now-line {
   position: absolute;

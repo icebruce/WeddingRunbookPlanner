@@ -268,7 +268,7 @@ Nothing changes until one is chosen. Each choice can be undone.
 - Single step. Covers add, duplicate, delete, reorder, resize, stage, fix/unfix, edit-sheet save, open-time actions.
 - Shown as a toast `<what happened> · Undo` for 6 seconds; also ⌘/Ctrl+Z on desktop.
 - Toasts appear only for: undoable changes and errors. No “Saved” or “Stage updated” toast, and no “N activities shifted” toast — locking, unlocking, resizing and moving one activity never shift another.
-- The six seconds are unattended time. The countdown stops while a pointer is over the toast or focus is inside it, and starts again on the way out; a toast can also be swiped down to dismiss. Undo is the only way back from a delete, so it does not expire while it is being read. A toast is chrome, not “outside”: pressing its Undo never also clears the selection.
+- The six seconds are unattended time. The countdown stops while a pointer is over the toast or focus is inside it, and starts again on the way out; a toast can also be swiped right to dismiss (down is nearly free at the bottom of a screen, and dismissed it by accident). Undo is the only way back from a delete, so it does not expire while it is being read. A toast is chrome, not “outside”: pressing its Undo never also clears the selection.
 
 ### 5.11 Person filter
 - Chips: Everyone + each distinct entry in the plan's people lists. Exact match only (“Bride” does not match “All Guests”).
@@ -465,4 +465,4 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 | D26 | Timeline model rewrite (commit `2939550`): every activity stores its own absolute `start`; nothing propagates or auto-pushes; `locked` only exempts an activity from a deliberate group move | Flexible/Fixed propagation chain with stored `gapBefore` and automatic conflict resolution |
 | D27 | Group move: Ctrl/Cmd-click selects multiple cards, dragging any selected card moves every unlocked one by the same delta | No multi-activity move; reorder moved one activity by list position |
 | D28 | Single date+time picker (flatpickr, vendored) replaces the Flexible/Fixed radio and separate time field in the activity editor | Starts: Flexible \| Fixed radio |
-| D29 | Phone back-button/gesture closes the open sheet, menu, or card selection instead of leaving the app (a dummy history entry pushed while an overlay is open) | Back navigated away from the app with an overlay still open |
+| D29 | Phone back-button/gesture closes the open sheet, menu, or card selection instead of leaving the app (a dummy history entry pushed while an overlay is open). Scroll restoration is manual: back closes the top thing and the page stays exactly where it is | Back navigated away from the app with an overlay still open; later, back also threw the reader from where they had scrolled to back to the selected card |
