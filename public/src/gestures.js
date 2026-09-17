@@ -253,6 +253,15 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
     // highlighted, with a handle still showing, on a gap that has since
     // moved or closed under it.
     const fromOpenTime = Boolean(handle.closest('.open-time'));
+    // Whatever is still focused inside the block — its own tabindex="0"
+    // body, most likely, not the handle: startResize's preventDefault on
+    // pointerdown suppresses the focus a mousedown would otherwise give the
+    // handle, so focus never actually left wherever selecting the block put
+    // it. paint() (dom.js) restores focus by key across every repaint, so
+    // left alone this keeps re-focusing the block on its own `open-time:id`
+    // key forever, and `:focus-within` (timeline.css) keeps its handle
+    // looking revealed for as long as that holds.
+    if (fromOpenTime) document.activeElement?.closest('.open-time')?.blur();
     finishGesture();
 
     if (unchanged) {
