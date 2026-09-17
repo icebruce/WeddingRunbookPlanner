@@ -233,19 +233,38 @@
    thing, leaving nothing for the tap the block itself still needs to take. */
 .open-time .handle::before { width: max(100%, 32px); height: max(100%, 32px); }
 
-.summary {
+.summary { margin: 8px 0 0; }
+
+/*
+ * The day's "when" — the date and the hours it runs — as a caption under the
+ * title rather than body text beside it. Set this small it reads as a label on
+ * the title instead of competing with it, and the day fits on one line where
+ * it used to take two.
+ */
+.summary-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 8px;
-  margin: 10px 0 0;
+  gap: 2px 7px;
+  margin: 0;
   color: var(--soft);
-  font-size: 15px;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
   font-variant-numeric: tabular-nums;
 }
 .summary-sep { color: var(--soft); }
-.summary-break { flex-basis: 100%; height: 0; }
+.summary-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 14px;
+  margin: 10px 0 0;
+}
 .summary-link {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -254,15 +273,30 @@
   background: none;
   color: var(--sel-text);
   font: inherit;
+  font-size: 15px;
+  line-height: 20px;
   font-weight: 600;
   cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+/* These two are the only things in the header worth tapping, and as a line of
+   text they were a 20 px target against the 44 px floor (§7). The hit area is
+   grown with a pseudo-element — the same trick the open-time handle uses — so
+   the target changes without the line moving. */
+.summary-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 44px;
+  transform: translateY(-50%);
 }
 .summary-link--bad { color: var(--bad-text); }
 .summary-link .icon { width: 13px; height: 13px; }
 
-.planner-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; padding: 0 4px 18px; }
+.planner-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; padding: 0 4px; }
 .planner-heading h1 { margin: 0; font-size: 34px; line-height: 37px; letter-spacing: -.025em; font-weight: 700; }
-.planner-date { margin: 6px 0 0; color: var(--soft); font-size: 15px; }
 
 /* Narrow phones: the ruler gives up eight pixels rather than the plan. */
 @media (max-width: 360px) {

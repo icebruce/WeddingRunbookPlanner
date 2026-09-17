@@ -76,11 +76,11 @@ Saturday, November 21, 2026 · Ceremony at St. Peter and Paul Orthodox Sobor, 2:
 
 Top to bottom:
 
-1. **Top bar** (sticky): brand heart + “Our Wedding”, save state, menu. Desktop also shows the status control. When the large title scrolls away, the brand is replaced by “Wedding Day · Sat, Nov 21”.
+1. **Top bar** (sticky): nothing on the left at rest, save state, menu. Desktop also shows the status control. When the large title scrolls away, “Wedding Day · 11:30 AM – 10:45 PM” fades into the empty space — the span rather than the date, because the date is a given by then and does not change, while the span moves whenever the first or last activity does. An empty plan has no span and shows the date instead. The planner name is not shown here — it would repeat the title directly below it.
 2. **Live strip** (day-of only, sticky under the top bar).
 3. **Pinned filter row** (only while a person filter is on, sticky).
-4. **Large title**: day title and full date.
-5. **Summary line**: `11:30 AM – 10:45 PM · 12 activities`, then on its own line the actionable items: `35 min open ›` (blue) and `20 min conflict ›` (red) when present. Tapping an actionable item scrolls to the first open time or conflict and highlights it. The rest is plain text.
+4. **Large title**: day title.
+5. **Summary line**: `SAT, NOV 21 · 11:30 AM – 10:45 PM` as a caption under the title (the date shows even when the plan is empty), then on its own line the actionable items: `35 min open ›` (blue) and `20 min conflict ›` (red) when present. Tapping an actionable item scrolls to the first open time or conflict and highlights it. The rest is plain text.
 6. **Person filter chips**: Everyone plus each distinct person or group used in the plan, in first-use order.
 7. **Timeline**: time ruler on the left, activities and open time on the right, end-of-day marker.
 8. **Add**: floating + button on phones (hidden while a card is selected), “Add activity” button in the desktop header with the note “Adds after the selected activity”.
@@ -447,7 +447,7 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 | D8 | Time-true layout, 20 px per 5 min; rows drop by priority with dots indicator | 68 px minimum card height that pushed cards off their times; 2.6 px/min |
 | D9 | Card row order: title, time, location, stage, people; drop order people → stage → location → time | Stage and people shared a row (rejected) |
 | D10 | Labels at 15/30/60 only; lines every 5 minutes | Ticks every 15 minutes |
-| D11 | Summary line as plain text with blue/red actionable parts | None |
+| D11 | Summary line as plain text with blue/red actionable parts; date and time range only | An activity count in the header |
 | D12 | Person filter fades non-matching activities, pinned row while on, exact match | None |
 | D13 | Live styling in green on a light tint; slim strip | Dark full-height card (rejected) |
 | D14 | iOS text sizes on phone: 17 title, 15 detail, 13 label | 12.5 / 9.5 / 8 px |

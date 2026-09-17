@@ -289,7 +289,8 @@ test('F25: every control shows where the focus is', async ({ page, server, isMob
   // focus was reached, and a ring that only appears for the mouse is the bug.
   if (!isMobile) {
     const status = page.locator('.status-control select');
-    await page.locator('.brand').focus();
+    // The bar's left is empty now, so tab in from the top of the document.
+    await page.evaluate(() => document.activeElement?.blur?.());
     await tabTo(page, status, 12);
     // The ring is on the pill, not on the select inside it.
     const seen = await ring(page.locator('.status-control'));

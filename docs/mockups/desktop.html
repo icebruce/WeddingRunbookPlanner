@@ -74,7 +74,7 @@ section.block > p{color:var(--pg-soft);font-size:15px;line-height:1.5;margin:0 0
 /* large title */
 .hero{padding:10px 18px 4px}
 .hero h1{margin:0;font-size:34px;line-height:1.1;letter-spacing:-.025em;font-weight:700}
-.hero .date{margin:4px 0 0;color:var(--soft);font-size:15px}
+.hero .meta{margin:8px 0 0;color:var(--soft);font-size:12px;line-height:16px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
 .summary{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 0}
 .pill{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 10px;border-radius:14px;background:#EDEDE9;color:var(--ink2);font-size:13px;font-weight:500;white-space:nowrap}
 .pill .ic{width:14px;height:14px}
@@ -282,7 +282,6 @@ section.block > p{color:var(--pg-soft);font-size:15px;line-height:1.5;margin:0 0
 .cursor{position:absolute;z-index:31;width:22px;height:22px}
 
 
-.summary .brk{flex-basis:100%;height:0}
 .plan{z-index:2}
 .nowline{z-index:1}
 .nowpill,.sunpill{z-index:6}
@@ -329,7 +328,7 @@ section.block > p{color:var(--pg-soft);font-size:15px;line-height:1.5;margin:0 0
 .rl.hh b{font-size:13px;font-weight:600;color:#43464D}
 .rl.q b{font-size:12px;font-weight:500;color:#686B72}
 /* summary: plain text, only actionable parts look tappable */
-.summary{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:10px 0 0;font-size:15px;color:var(--soft)}
+.summary{display:flex;flex-wrap:wrap;align-items:center;gap:0 14px;margin:10px 0 0;font-size:15px;line-height:20px;color:var(--soft)}
 .summary .sep{color:#C4C5C9}
 .slink{display:inline-flex;align-items:center;gap:2px;font-weight:600;color:var(--sel)}
 .slink.bad{color:var(--bad)}
@@ -784,7 +783,7 @@ function statusbar(time = '9:41') {
   return `<div class="statusbar"><span>${time}</span><span class="isl"></span><span class="sig"><i style="width:3px;height:5px"></i><i style="width:3px;height:7px"></i><i style="width:3px;height:9px"></i><i style="width:3px;height:11px"></i><i style="width:24px;height:11px;border-radius:3px;margin-left:5px"></i></span></div>`;
 }
 function topbar({ viewOnly = false, edge = false, save = 'Saved', collapsed = false, editing = false } = {}) {
-  const left = collapsed ? `<span class="ctitle"><b>Wedding Day</b><small>Sat, Nov 21</small></span>` : `<span class="brand">${ic('heart')}Our Wedding</span>`;
+  const left = collapsed ? `<span class="ctitle"><b>Wedding Day</b><small>11:30 AM – 10:45 PM</small></span>` : `<span class="brand"></span>`;
   if (editing) return `<div class="m-top edge">${left}<span class="top-right"><span class="editing"><i></i>Editing</span><button class="textbtn">Done</button></span></div>`;
   const right = viewOnly
     ? `<span class="viewonly">${ic('lock')}View only</span><button class="textbtn">Edit</button>`
@@ -794,9 +793,9 @@ function topbar({ viewOnly = false, edge = false, save = 'Saved', collapsed = fa
 function hero(sched, extra = '') {
   const gapMin = sched.gaps.reduce((s, g) => s + g.end - g.start, 0);
   const conf = sched.items.reduce((s, i) => s + i.conflict, 0);
-  return `<div class="hero"><h1>Wedding Day</h1><p class="date">Saturday, November 21, 2026</p>
-    <div class="summary"><span>${t12(DAY)} – ${t12(sched.end)}</span><span class="sep">·</span><span>${sched.items.length} activities</span><span class="brk"></span>
-    ${gapMin ? `<span class="slink">${gapMin} min open${ic('chevr')}</span>` : ''}${conf ? `<span class="slink bad">${ic('warn')}${conf} min conflict${ic('chevr')}</span>` : ''}${extra}</div></div>`;
+  return `<div class="hero"><h1>Wedding Day</h1>
+    <p class="meta">Sat, Nov 21 <span class="sep">·</span> ${t12(DAY)} – ${t12(sched.end)}</p>
+    <div class="summary">${gapMin ? `<span class="slink">${gapMin} min open${ic('chevr')}</span>` : ''}${conf ? `<span class="slink bad">${ic('warn')}${conf} min conflict${ic('chevr')}</span>` : ''}${extra}</div></div>`;
 }
 const filters = (on = 'Everyone') => `<div class="filters">${['Everyone', 'Bride', 'Groom', 'Photographer', 'Wedding Party', 'All Guests'].map(f => `<span class="fchip ${f === on ? 'on' : ''}">${f}</span>`).join('')}</div>`;
 
@@ -947,9 +946,9 @@ function desk(target, { sched, from, to, drag = false, hover = null, now = null,
       <span class="nx">Next <b>${t12(n.start)}</b> ${n.title} · ${n.loc}</span></div><div class="nnbar"><i style="width:${Math.round((now - c.start) / c.d * 100)}%"></i></div></div>`;
   }
   document.getElementById(target).innerHTML = `<div class="browser" style="position:relative"><div class="chrome"><i></i><i></i><i></i><span class="url">wedding-runbook-planner.vercel.app</span></div>
-  <div class="dview app ${now ? 'viewmode' : ''}"><div class="d-top"><span class="brand">${ic('heart')}Our Wedding</span><span class="top-right" style="gap:10px">${right}</span></div>${strip}
-  <div class="d-wrap"><div class="d-head"><div><h1>Wedding Day</h1><p class="date">Saturday, November 21, 2026</p></div><div><button class="addbtn">${ic('plus')}Add activity</button><div class="addnote">Adds after the selected activity</div></div></div>
-  <div class="d-sub">${hero(sched).replace(/<h1>.*?<\/p>/s, '').replace('class="hero"', 'class="hero" style="padding:0"')}${filters()}</div>${tl}</div></div>${overlay ? `<div class="app ovl">${overlay}</div>` : ''}</div>`;
+  <div class="dview app ${now ? 'viewmode' : ''}"><div class="d-top"><span class="brand"></span><span class="top-right" style="gap:10px">${right}</span></div>${strip}
+  <div class="d-wrap"><div class="d-head"><div><h1>Wedding Day</h1></div><div><button class="addbtn">${ic('plus')}Add activity</button><div class="addnote">Adds after the selected activity</div></div></div>
+  <div class="d-sub">${hero(sched).replace(/<h1>.*?<\/h1>/s, '').replace('class="hero"', 'class="hero" style="padding:0"')}${filters()}</div>${tl}</div></div>${overlay ? `<div class="app ovl">${overlay}</div>` : ''}</div>`;
   requestAnimationFrame(() => { const v = document.querySelector('#' + target + ' .dview'), t = v.querySelector('.tl'); if (scroll != null) v.scrollTop = t.offsetTop + (scroll - from) * PX - (now ? 150 : 70); });
 }
 desk('H', { sched: SH, from: DAY, to: T(16, 30), drag: true, hover: 'ceremony', scroll: T(12, 40) });
