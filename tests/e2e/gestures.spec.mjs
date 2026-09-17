@@ -462,7 +462,7 @@ test.describe('resize', () => {
       await expect(gap.locator('.handle--bottom')).toHaveCount(1);
     });
 
-    test('a thin gap next to a selected card draws one handle on that edge, not two stacked', async ({ page, server, isMobile }) => {
+    test('a thin gap next to a selected card still reveals that card\'s own handle', async ({ page, server, isMobile }) => {
       test.skip(Boolean(isMobile), 'measured with a mouse');
       await server.seed({ plan: seedPlan({
         activities: [
@@ -474,14 +474,15 @@ test.describe('resize', () => {
 
       await expect(page.locator('.open-time')).toHaveClass(/open-time--thin/);
 
-      // Selecting Dinner would normally reveal its own top handle — but the
-      // thin gap right above it already always shows one covering the exact
-      // same edge, so the card leaves its out (render/timeline.js).
+      // Selecting Dinner reveals its own top handle regardless of the thin
+      // gap right above it — the gap's matching handle is a separate control
+      // that only shows when the gap itself is selected or hovered, so this
+      // card can never be left with no visible handle on that edge.
       await page.locator('.card[data-activity-id="dinner"]').click({ position: { x: 40, y: 10 } });
       await expect(page.locator('.card[data-activity-id="dinner"]')).toHaveClass(/is-selected/);
-      await expect(page.locator('.card[data-activity-id="dinner"] .handle--top')).toHaveCount(0);
-      await expect(page.locator('.card[data-activity-id="dinner"] .handle--bottom')).toBeVisible();
-      await expect(page.locator('.open-time .handle--bottom')).toBeVisible();
+      await expect(page.locator('.card[data-activity-id="dinner"] .handle--top')).toHaveCSS('opacity', '1');
+      await expect(page.locator('.card[data-activity-id="dinner"] .handle--bottom')).toHaveCSS('opacity', '1');
+      await expect(page.locator('.open-time .handle--bottom')).toHaveCSS('opacity', '0');
     });
   });
 });
