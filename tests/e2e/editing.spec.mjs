@@ -348,6 +348,27 @@ test.describe('open time', () => {
     await expect(gap).not.toHaveClass(/is-selected/);
   });
 
+  test('selecting a block deselects a selected card, and selecting a card deselects a block', async ({ page, server }) => {
+    await server.seed({ plan: withGap() });
+    await signInAndWaitForPlan(page);
+
+    const gap = page.locator('.open-time');
+    await select(page, 'arrive');
+    await expect(card(page, 'arrive')).toHaveClass(/is-selected/);
+
+    await gap.locator('strong').click();
+    await expect(gap).toHaveClass(/is-selected/);
+    await expect(card(page, 'arrive')).not.toHaveClass(/is-selected/);
+
+    // Past the double-click window (DOUBLE_TAP_MS, gestures.js) — otherwise
+    // this second tap on the same card reads as a double-click and opens
+    // the editor instead of reselecting it.
+    await page.waitForTimeout(450);
+    await select(page, 'arrive');
+    await expect(card(page, 'arrive')).toHaveClass(/is-selected/);
+    await expect(gap).not.toHaveClass(/is-selected/);
+  });
+
   test('a thin block has no + button, so tapping it still opens the sheet directly', async ({ page, server }) => {
     await server.seed({
       plan: seedPlan({

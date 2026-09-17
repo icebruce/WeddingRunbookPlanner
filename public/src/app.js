@@ -667,7 +667,10 @@ const ACTION_HANDLERS = {
     if (event.target.closest('.handle, .open-time-add')) return;
     const before = element.dataset.before;
     const next = store.ui.selectedOpenTime === before ? null : before;
-    store.setUi({ selectedOpenTime: next }, { regions: ['timeline'] });
+    // 'toolbar' too: selecting a block may silently clear a selected card
+    // (setUi, state.js — only one of the two is ever "the" selection), and
+    // that card's toolbar needs to go with it.
+    store.setUi({ selectedOpenTime: next }, { regions: ['timeline', 'toolbar'] });
   },
   'open-time'(_, element) {
     rememberOpener(`open-time:${element.dataset.before}`);
