@@ -32,11 +32,13 @@ const AUTOSCROLL_STEP = 12;
 /** How close together two taps on the same card have to land to count as a double-click. */
 const DOUBLE_TAP_MS = 400;
 
-export function createGestures({ root, store, commit, repaint, onLongPress, onDoubleClick }) {
+export function createGestures({ root, store, commit, repaint, onLongPress, onDoubleClick, onOpenTimeActivate }) {
   /** The one gesture in progress, if any. */
   let active = null;
   /** A press that has not yet become a tap, a long press or a scroll. */
   let candidate = null;
+  /** Same, for a press on an open-time block rather than a card. */
+  let openTimeCandidate = null;
   let frame = null;
   let suppressClickUntil = 0;
   /**
@@ -50,6 +52,8 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
    * timing racing our re-render.
    */
   let lastTap = null;
+  /** Same, for a double-click on the same open-time block. */
+  let lastOpenTimeTap = null;
 
   const cardFor = id => root.querySelector(`.card[data-activity-id="${cssEscape(id)}"]`);
   const scheduleOf = plan => buildSchedule(plan);
@@ -75,7 +79,7 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
     // candidate while its long-press timer was still armed, and the timer read
     // whatever `candidate` had become — so two fingers opened the editor for
     // the wrong card and left the first one looking pressed for good.
-    if (active || candidate || event.button > 0) return;
+    if (active || candidate || openTimeCandidate || event.button > 0) return;
     const card = event.target.closest('.card');
     if (!card) return;
     // Controls and handles run their own gestures.
@@ -154,6 +158,82 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
     clearTimeout(candidate.longPress);
     candidate.card.classList.remove('is-pressed');
     candidate = null;
+  }
+
+  // ------------------------------------------------------ open-time select
+  //
+  // A block's own tap selects it — the resize handles are the whole reason,
+  // same as a card. A tall block's + button is a second, always-visible way
+  // to the actions sheet (buffer/extend/add); a long press (touch) or
+  // double-click (mouse) on the block is a third, mirroring how a card
+  // offers its pencil icon *and* long-press/double-click into the same
+  // editor. A thin block has no + — and no third way in either: it has only
+  // the handles, on purpose, so there's nothing pulling a short gap's own
+  // small tap target between "select it" and "open a menu on it".
+
+  function onOpenTimePointerDown(event) {
+    if (active || candidate || openTimeCandidate || event.button > 0) return;
+    const block = event.target.closest('.open-time');
+    if (!block) return;
+    // Its own handles and + button run their own gestures.
+    if (event.target.closest('button, .handle')) return;
+
+    openTimeCandidate = {
+      before: block.dataset.before,
+      start: Number(block.dataset.start),
+      end: Number(block.dataset.end),
+      // A thin block has no + button, and no long-press/double-click
+      // either — just the handles, its own tap only ever selects.
+      thin: block.classList.contains('open-time--thin'),
+      block,
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      touch: event.pointerType !== 'mouse',
+      longPress: null
+    };
+
+    if (openTimeCandidate.touch && !openTimeCandidate.thin) {
+      const pressed = openTimeCandidate;
+      pressed.longPress = setTimeout(() => {
+        if (openTimeCandidate !== pressed) return;
+        clearOpenTimeCandidate();
+        suppressClickUntil = Date.now() + 700;
+        onOpenTimeActivate?.(pressed.before, pressed.start, pressed.end);
+      }, LONG_PRESS_MS);
+    }
+  }
+
+  function onOpenTimePointerMove(event) {
+    if (!openTimeCandidate || openTimeCandidate.pointerId !== event.pointerId) return;
+    const moved = Math.hypot(event.clientX - openTimeCandidate.x, event.clientY - openTimeCandidate.y);
+    if (moved > LONG_PRESS_CANCEL || (!openTimeCandidate.touch && moved > TAP_SLOP)) clearOpenTimeCandidate();
+  }
+
+  function onOpenTimePointerUp(event) {
+    if (!openTimeCandidate || openTimeCandidate.pointerId !== event.pointerId) return;
+    const moved = Math.hypot(event.clientX - openTimeCandidate.x, event.clientY - openTimeCandidate.y);
+    const { before, start, end, touch, thin } = openTimeCandidate;
+    clearOpenTimeCandidate();
+    if (moved > TAP_SLOP) return;
+
+    // A mouse only: touch's equivalent gesture is the long press above.
+    if (!thin && !touch && onOpenTimeActivate && lastOpenTimeTap && lastOpenTimeTap.before === before && Date.now() - lastOpenTimeTap.time <= DOUBLE_TAP_MS) {
+      lastOpenTimeTap = null;
+      onOpenTimeActivate(before, start, end);
+      return;
+    }
+    lastOpenTimeTap = (touch || thin) ? null : { before, time: Date.now() };
+
+    // The select toggle itself is the delegated click that follows this
+    // pointerup (data-action="select-open-time", app.js) — nothing more to
+    // do here.
+  }
+
+  function clearOpenTimeCandidate() {
+    if (!openTimeCandidate) return;
+    clearTimeout(openTimeCandidate.longPress);
+    openTimeCandidate = null;
   }
 
   // ---------------------------------------------------------------- resize
@@ -245,30 +325,14 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
 
   function onResizeEnd() {
     if (active?.kind !== 'resize') return;
-    const { edge, id, value, item, handle } = active;
+    const { edge, id, value, item } = active;
     const unchanged = edge === 'bottom' ? value === item.end : value === item.start;
-    // Dragged from an open-time block's own handle rather than the
-    // resized activity's: its selection (which is only what revealed the
-    // handle in the first place) has done its job and would otherwise sit
-    // highlighted, with a handle still showing, on a gap that has since
-    // moved or closed under it.
-    const fromOpenTime = Boolean(handle.closest('.open-time'));
-    // Whatever is still focused inside the block — its own tabindex="0"
-    // body, most likely, not the handle: startResize's preventDefault on
-    // pointerdown suppresses the focus a mousedown would otherwise give the
-    // handle, so focus never actually left wherever selecting the block put
-    // it. paint() (dom.js) restores focus by key across every repaint, so
-    // left alone this keeps re-focusing the block on its own `open-time:id`
-    // key forever, and `:focus-within` (timeline.css) keeps its handle
-    // looking revealed for as long as that holds.
-    if (fromOpenTime) document.activeElement?.closest('.open-time')?.blur();
     finishGesture();
 
-    if (unchanged) {
-      if (fromOpenTime) store.setUi({ selectedOpenTime: null }, { regions: ['timeline'] });
-      else repaint(['timeline']);
-      return;
-    }
+    // An open-time block's own handle leaves its selection exactly as a
+    // card's own handle leaves selectedId: untouched. Dragged from either,
+    // the thing it was dragged from stays selected once the drag ends.
+    if (unchanged) return repaint(['timeline']);
     commit(edge === 'bottom' ? 'activity.resizeBottom' : 'activity.resizeTop',
       edge === 'bottom' ? { id, newEnd: value } : { id, newStart: value });
     if (fromOpenTime) store.setUi({ selectedOpenTime: null }, { regions: ['timeline'] });
@@ -570,8 +634,13 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
   root.addEventListener('pointermove', onCardPointerMove);
   root.addEventListener('pointerup', onCardPointerUp);
   root.addEventListener('pointercancel', clearCandidate);
+  root.addEventListener('pointerdown', onOpenTimePointerDown);
+  root.addEventListener('pointermove', onOpenTimePointerMove);
+  root.addEventListener('pointerup', onOpenTimePointerUp);
+  root.addEventListener('pointercancel', clearOpenTimeCandidate);
   // A scroll anywhere means this was never a press.
   window.addEventListener('scroll', clearCandidate, { passive: true });
+  window.addEventListener('scroll', clearOpenTimeCandidate, { passive: true });
 
   return {
     /** Re-attached after every timeline repaint; handles are recreated each time. */

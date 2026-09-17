@@ -343,8 +343,9 @@ test.describe('open time', () => {
     await expect(gap.locator('.handle--top')).toBeVisible();
     await expect(gap.locator('.handle--bottom')).toHaveCount(0);
 
-    // Tapping it again clears the selection.
-    await gap.locator('strong').click();
+    // Tapping outside deselects it — same as a card, a repeat tap on itself
+    // does not (it is a double-click's first half — see gestures.spec.mjs).
+    await page.locator('.planner-heading h1').click();
     await expect(gap).not.toHaveClass(/is-selected/);
   });
 
@@ -369,14 +370,11 @@ test.describe('open time', () => {
     await expect(gap).not.toHaveClass(/is-selected/);
   });
 
-  test('a thin block has no + button, so tapping it still opens the sheet directly', async ({ page, server }) => {
+  test('a thin block has no + button, but a tap still selects it like any other', async ({ page, server }) => {
     await server.seed({
       plan: seedPlan({
         activities: [
           activity('arrive', T(14), 30, { title: 'Arrival' }),
-          // Locked so its own top handle never renders — otherwise that
-          // handle's 44 px touch target (a11y.css) reaches back up into
-          // this thin gap right above it and steals the click.
           activity('ceremony', T(14, 40), 60, { title: 'Ceremony', locked: true })
         ]
       })
@@ -388,7 +386,30 @@ test.describe('open time', () => {
     await expect(gap.locator('.open-time-add')).toHaveCount(0);
 
     await gap.click();
-    await expect(page.locator('#open-time-dialog')).toBeVisible();
+    await expect(page.locator('#open-time-dialog')).toHaveCount(0);
+    await expect(gap).toHaveClass(/is-selected/);
+    await expect(gap.locator('.handle--top')).toBeVisible();
+  });
+
+  test('a thin block has no way into the actions sheet at all — no + button, and a double-click does not open it either', async ({ page, server }) => {
+    await server.seed({
+      plan: seedPlan({
+        activities: [
+          activity('arrive', T(14), 30, { title: 'Arrival' }),
+          activity('ceremony', T(14, 40), 60, { title: 'Ceremony', locked: true })
+        ]
+      })
+    });
+    await signInAndWaitForPlan(page);
+
+    const gap = page.locator('.open-time');
+    await expect(gap).toHaveClass(/open-time--thin/);
+    await expect(gap.locator('.open-time-add')).toHaveCount(0);
+
+    await gap.dblclick();
+    await expect(page.locator('#open-time-dialog')).toHaveCount(0);
+    // The click that follows selects it, same as any other tap would.
+    await expect(gap).toHaveClass(/is-selected/);
   });
 });
 

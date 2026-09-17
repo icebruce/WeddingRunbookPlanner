@@ -28,15 +28,18 @@ function ruler(layout) {
  * Open time is drawn, not implied. Under about 70 px there is no room for the
  * second line or the + button, so it becomes a single line.
  *
- * A tall block behaves like a card: tapping its body selects it (revealing
- * the resize handles) rather than opening the actions sheet directly; only
- * its own + button opens that. A thin block has no room for the + at all, so
- * tapping it still opens the sheet the way the whole block used to; it has
- * no "selected" state to reveal handles with, so its handles are simply
- * always visible instead (timeline.css's `.open-time--thin .handle` rule) —
- * with a smaller touch target than the usual 44 px (timeline.css overrides
- * `.open-time .handle::before`), so it doesn't reach across the whole block
- * and swallow the tap meant for the sheet.
+ * It behaves like a card in every size: tapping its body selects it
+ * (revealing the resize handles), the same select-to-reveal model a card
+ * uses, hidden otherwise — never always-visible, thin or not. A tall block's
+ * own + button opens the actions sheet directly, and a long press (touch) or
+ * double-click (mouse) on the block is a second way there too — see
+ * gestures.js's onOpenTimePointerDown/onOpenTimeActivate and app.js's
+ * `onOpenTimeActivate` wiring — mirroring how a card offers its pencil icon
+ * *and* long-press/double-click into the same editor. A thin block has no +
+ * and no long-press/double-click either: with no room for the sheet's own
+ * button, the handles are what it offers, nothing more — see gestures.js,
+ * which reads this same 70 px line off `.open-time--thin` to skip arming
+ * either gesture there.
  *
  * The handles are the same `.handle` control a card uses, just aimed at a
  * neighbour: the top one is the previous activity's own bottom handle in
@@ -51,12 +54,11 @@ function ruler(layout) {
  */
 function openTimeBlock(gap, ui, viewOnly) {
   const thin = gap.height < 70;
-  const selected = !thin && ui.selectedOpenTime === gap.beforeId;
+  const selected = ui.selectedOpenTime === gap.beforeId;
   const label = escapeHtml(`${formatDuration(gap.minutes)} open before ${gap.beforeTitle}, ${formatTime(gap.start)} to ${formatTime(gap.end)}`);
 
-  const bodyAttrs = viewOnly ? '' : thin
-    ? `data-action="open-time" data-before="${escapeHtml(gap.beforeId)}" data-start="${gap.start}" data-end="${gap.end}" role="button" tabindex="0"`
-    : `data-action="select-open-time" data-before="${escapeHtml(gap.beforeId)}" role="button" tabindex="0" aria-pressed="${selected}"`;
+  const bodyAttrs = viewOnly ? '' : `data-action="select-open-time" data-before="${escapeHtml(gap.beforeId)}"
+    data-start="${gap.start}" data-end="${gap.end}" role="button" tabindex="0" aria-pressed="${selected}"`;
 
   const addButton = thin ? '' : `<button type="button" class="open-time-add" data-action="open-time"
       data-before="${escapeHtml(gap.beforeId)}" data-start="${gap.start}" data-end="${gap.end}"
@@ -68,12 +70,11 @@ function openTimeBlock(gap, ui, viewOnly) {
   // different elements can drive the same edge, and app.js's keyboard
   // handler returns focus to whichever one was actually used, by reading it
   // straight off that element rather than reconstructing it from role+id.
-  const tabbable = selected || thin;
   const handles = viewOnly ? '' : `${gap.afterLocked ? '' : `<button type="button" class="handle handle--top" data-role="resize" data-id="${escapeHtml(gap.afterId)}"
-      tabindex="${tabbable ? '0' : '-1'}" data-focus-key="resize:gap:${escapeHtml(gap.beforeId)}"
+      tabindex="${selected ? '0' : '-1'}" data-focus-key="resize:gap:${escapeHtml(gap.beforeId)}"
       aria-label="${escapeHtml(`Resize the end of ${gap.afterTitle}`)}"></button>`}
     ${gap.beforeLocked ? '' : `<button type="button" class="handle handle--bottom" data-role="resize-top" data-id="${escapeHtml(gap.beforeId)}"
-      tabindex="${tabbable ? '0' : '-1'}" data-focus-key="resize-top:gap:${escapeHtml(gap.beforeId)}"
+      tabindex="${selected ? '0' : '-1'}" data-focus-key="resize-top:gap:${escapeHtml(gap.beforeId)}"
       aria-label="${escapeHtml(`Resize the start of ${gap.beforeTitle}`)}"></button>`}`;
 
   return `<div class="open-time ${thin ? 'open-time--thin' : ''} ${selected ? 'is-selected' : ''}" style="top:${gap.top}px;height:${gap.height}px"

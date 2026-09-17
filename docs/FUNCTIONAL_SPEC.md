@@ -132,7 +132,9 @@ At the approved scale this gives:
 
 Dashed, quiet block filling the open interval: `35 min open` / `before Ceremony` / small + button. Under ~15 minutes it becomes a single left-aligned line `10 min open`, with no + button.
 
-Tapping the + button opens the open-time actions (§5.9). Tapping the rest of a non-thin block selects it instead — the same select-to-reveal-handles model as a card (§4.3) — showing top/bottom resize handles astride its edges; a thin block has no room for the + at all, so tapping it opens the open-time actions directly, as the whole block used to, and its handles are simply always shown rather than gated behind a selected state it has no room for. Dragging a handle resizes the open time by resizing whichever activity is on that side of it — the top handle is that activity's own bottom edge, the bottom handle is the next activity's own top edge (§5.5) — so shrinking the open time grows that activity, and growing the open time shrinks it. A handle is absent when the activity it would resize is locked. Whichever activity sits against a thin block's edge leaves its own matching handle out of its own card, so selecting or hovering that card never draws a second one stacked on the block's.
+Tapping a block selects it — the same select-to-reveal-handles model as a card (§4.3) — showing top/bottom resize handles astride its edges, thin or not (a thin block, under 70 px, has no "before X" line and no + button, but selects exactly the same way). Dragging a handle resizes the open time by resizing whichever activity is on that side of it — the top handle is that activity's own bottom edge, the bottom handle is the next activity's own top edge (§5.5) — so shrinking the open time grows that activity, and growing the open time shrinks it. A handle is absent when the activity it would resize is locked. Whichever activity sits against a block's edge leaves its own matching handle out of its own card, so selecting or hovering that card never draws a second one stacked on the block's. Selecting a block, like selecting a card, is not undone by resizing it: it stays selected once the drag commits.
+
+A tall block's own + button opens the open-time actions (§5.9) directly, without selecting first; so, on a tall block only, does a long press (touch) or double-click (mouse) on the block itself, mirroring how a card offers both its pencil icon and a long press/double-click into the same editor. A thin block has neither: no + button (no room for one) and no long-press/double-click either, only the handles and selecting — there is no way to reach the open-time actions from a thin block at all.
 
 ### 3.5 Conflict layout
 
@@ -252,7 +254,7 @@ Copies all fields except fixed time (copy is flexible), inserted directly after 
 No confirmation dialog. The activity is removed, the schedule updates, and a toast offers **Undo** for 6 seconds. Selection clears.
 
 ### 5.9 Open-time actions
-Opened by its + button (or, on a thin block with no room for one, by tapping the block itself — §3.4). Header: `35 min open before Ceremony · 2:10 – 2:45 PM`. Open time is computed fresh each time from the current gaps between activities — it is never something stored on an activity that these actions "clear".
+Opened by a tall block's + button, or by a long press (touch) / double-click (mouse) on the block itself — a thin block has neither, and offers no way into this sheet at all (§3.4). Header: `35 min open before Ceremony · 2:10 – 2:45 PM`. Open time is computed fresh each time from the current gaps between activities — it is never something stored on an activity that these actions "clear".
 1. **Keep as buffer** — inserts a real Buffer activity for exactly that time.
 2. **Extend <previous activity>** — the previous activity's end moves to the end of the open time (allowed regardless of that activity's lock state).
 3. **Add activity here** — new activity filling the open time.
