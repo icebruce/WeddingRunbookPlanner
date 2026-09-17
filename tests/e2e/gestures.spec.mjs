@@ -450,6 +450,15 @@ test.describe('resize', () => {
       await expect(gap.locator('.handle--top')).toHaveClass(/handle--locked/);
       await expect(gap.locator('.handle--top')).toHaveAttribute('aria-disabled', 'true');
       await expect(gap.locator('.handle--bottom')).not.toHaveClass(/handle--locked/);
+
+      // Faded, not just a different border colour — 0.45 is the same
+      // de-emphasis a past activity gets (DESIGN_GUIDE §4.3), reused here.
+      const [lockedOpacity, workingOpacity] = await Promise.all([
+        gap.locator('.handle--top').evaluate(el => getComputedStyle(el, '::after').opacity),
+        gap.locator('.handle--bottom').evaluate(el => getComputedStyle(el, '::after').opacity)
+      ]);
+      expect(lockedOpacity).toBe('0.45');
+      expect(workingOpacity).toBe('1');
     });
 
     test('a thin gap next to a selected card draws one handle on that edge, not two stacked', async ({ page, server, isMobile }) => {

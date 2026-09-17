@@ -280,6 +280,28 @@ test('short open time collapses to one line', async ({ page, server }) => {
   await expect(handles.first()).toHaveCSS('opacity', '1');
 });
 
+test('a very short open time is not stretched past its own duration', async ({ page, server }) => {
+  // Under 11 minutes, the gap's own box (16px, layout.js's CARD_INSET math)
+  // is shorter than the 44px a11y.css would otherwise force role="button"
+  // elements to (a11y.css) — which used to push its bottom edge, and the
+  // handle riding on it, down into the card right after it.
+  await server.seed({
+    plan: seedPlan({
+      activities: [
+        activity('reception', T(17, 15), 20, { title: 'Reception' }),
+        activity('dinner', T(17, 40), 60, { title: 'Dinner' })
+      ]
+    })
+  });
+  await signInAndWaitForPlan(page);
+
+  const gap = page.locator('.open-time');
+  const dinner = page.locator('.card[data-activity-id="dinner"]');
+  const [gapBox, dinnerBox] = await Promise.all([gap.boundingBox(), dinner.boundingBox()]);
+  expect(gapBox.height).toBeLessThan(20);
+  expect(gapBox.y + gapBox.height).toBeLessThanOrEqual(dinnerBox.y);
+});
+
 test('an overlap puts the two activities in lanes, both on their real times', async ({ page, server }) => {
   await server.seed({
     plan: seedPlan({
