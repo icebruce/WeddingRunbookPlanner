@@ -115,21 +115,6 @@ export function renderTimeline({ plan, ui }) {
   const layout = buildLayout(plan, schedule);
   const nowMinutes = ui.dayOf ? (ui.nowMinutes ?? null) : null;
 
-  // A thin open-time block's handles are always visible (render/timeline.js,
-  // openTimeBlock) — never gated behind selecting or hovering the block,
-  // because it has no "selected" state to gate them with. Whichever
-  // activity sits on each side of one already has its matching edge
-  // covered, so that activity's own handle is left out of its own card
-  // below, or hovering/selecting the card would draw a second, identical
-  // handle right on top of the block's.
-  const thinGapCoversBottom = new Set();
-  const thinGapCoversTop = new Set();
-  for (const gap of layout.openTimes) {
-    if (gap.height >= 70) continue;
-    thinGapCoversBottom.add(gap.afterId);
-    thinGapCoversTop.add(gap.beforeId);
-  }
-
   // `data-from` is the minute the grid starts at. The clock moves the now-line
   // and the live progress bar in place from it, twice a minute, rather than
   // repainting every card to shift one line two pixels.
@@ -137,11 +122,7 @@ export function renderTimeline({ plan, ui }) {
     <div class="timeline-ruler" aria-hidden="true">${ruler(layout)}${nowLine(layout, nowMinutes)}</div>
     <div class="timeline-plan">
       ${layout.openTimes.map(gap => openTimeBlock(gap, ui, Boolean(ui.dayOf && !ui.editingOnDay))).join('')}
-      ${layout.cards.map(card => renderCard(card, {
-        ui, filter: ui.filter, nowMinutes,
-        hideTopHandle: thinGapCoversTop.has(card.item.id),
-        hideBottomHandle: thinGapCoversBottom.has(card.item.id)
-      })).join('')}
+      ${layout.cards.map(card => renderCard(card, { ui, filter: ui.filter, nowMinutes })).join('')}
       ${menuLayer(layout, ui)}
     </div>
     <div class="timeline-end" style="top:${layout.endTop + 10}px">
