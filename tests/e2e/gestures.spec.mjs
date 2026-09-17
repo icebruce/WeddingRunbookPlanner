@@ -178,12 +178,13 @@ test.describe('long press', () => {
     await expect(page.locator('#activity-dialog')).toHaveCount(0);
   });
 
-  test('on an open-time block, opens its actions sheet — a tap alone selects it instead', async ({ page, server, isMobile }) => {
+  test('on a tall open-time block, opens its actions sheet — a tap alone selects it instead', async ({ page, server, isMobile }) => {
     test.skip(!isMobile, 'long press is a touch gesture');
     await server.seed({ plan: dense() });
     await signInAndWaitForPlan(page);
 
     const gap = page.locator('.open-time[data-before="ceremony"]');
+    await expect(gap).not.toHaveClass(/open-time--thin/);
 
     // A plain tap: CDP's raw touch events don't reliably synthesize the
     // click a real touchscreen would, so selecting (like `select()` above,
@@ -197,6 +198,26 @@ test.describe('long press', () => {
     const point = centreOf(await gap.boundingBox());
     await touchTap(page, point, { holdMs: 700 });
     await expect(page.locator('#open-time-dialog')).toBeVisible();
+  });
+
+  test('on a thin open-time block, a long press does not open the sheet — there is no way in but the handles', async ({ page, server, isMobile }) => {
+    test.skip(!isMobile, 'long press is a touch gesture');
+    await server.seed({ plan: seedPlan({
+      activities: [
+        activity('arrive', T(14), 30, { title: 'Arrival' }),
+        activity('ceremony', T(14, 40), 60, { title: 'Ceremony', locked: true })
+      ]
+    }) });
+    await signInAndWaitForPlan(page);
+
+    const gap = page.locator('.open-time');
+    await expect(gap).toHaveClass(/open-time--thin/);
+
+    const point = centreOf(await gap.boundingBox());
+    await touchTap(page, point, { holdMs: 700 });
+    await expect(page.locator('#open-time-dialog')).toHaveCount(0);
+    // The tap it still is, underneath, selects it same as any other.
+    await expect(gap).toHaveClass(/is-selected/);
   });
 });
 

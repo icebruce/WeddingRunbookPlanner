@@ -869,7 +869,10 @@ document.addEventListener('keydown', event => {
   if (openTime && (event.key === 'Enter' || event.key === ' ') && event.target === openTime) {
     event.preventDefault();
     const before = openTime.dataset.before;
-    if (event.key === 'Enter' && store.ui.selectedOpenTime === before) {
+    // A thin block has no + button and no long-press/double-click either
+    // (gestures.js) — Enter follows suit and never opens the sheet on one.
+    const thin = openTime.classList.contains('open-time--thin');
+    if (!thin && event.key === 'Enter' && store.ui.selectedOpenTime === before) {
       openOpenTimeSheet(before, Number(openTime.dataset.start), Number(openTime.dataset.end));
     } else {
       store.setUi({ selectedOpenTime: before, openMenu: null }, { regions: ['timeline', 'toolbar'] });

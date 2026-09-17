@@ -391,7 +391,7 @@ test.describe('open time', () => {
     await expect(gap.locator('.handle--top')).toBeVisible();
   });
 
-  test('a double-click opens a thin block\'s actions sheet, its stand-in for the + button it has no room for', async ({ page, server }) => {
+  test('a thin block has no way into the actions sheet at all — no + button, and a double-click does not open it either', async ({ page, server }) => {
     await server.seed({
       plan: seedPlan({
         activities: [
@@ -404,9 +404,12 @@ test.describe('open time', () => {
 
     const gap = page.locator('.open-time');
     await expect(gap).toHaveClass(/open-time--thin/);
+    await expect(gap.locator('.open-time-add')).toHaveCount(0);
 
     await gap.dblclick();
-    await expect(page.locator('#open-time-dialog')).toBeVisible();
+    await expect(page.locator('#open-time-dialog')).toHaveCount(0);
+    // The click that follows selects it, same as any other tap would.
+    await expect(gap).toHaveClass(/is-selected/);
   });
 });
 

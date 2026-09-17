@@ -31,13 +31,15 @@ function ruler(layout) {
  * It behaves like a card in every size: tapping its body selects it
  * (revealing the resize handles), the same select-to-reveal model a card
  * uses, hidden otherwise — never always-visible, thin or not. A tall block's
- * own + button opens the actions sheet directly, an always-visible
- * alternative to selecting first. A thin block has no room for one, so it
- * relies entirely on the same secondary gesture a card uses for its own
- * editor: a long press (touch) or double-click (mouse) — see gestures.js's
- * onOpenTimePointerDown/onOpenTimeActivate and app.js's `onOpenTimeActivate`
- * wiring. Both sizes get it, not just thin ones, exactly as a card offers
- * its pencil icon and long-press/double-click as two ways to the same place.
+ * own + button opens the actions sheet directly, and a long press (touch) or
+ * double-click (mouse) on the block is a second way there too — see
+ * gestures.js's onOpenTimePointerDown/onOpenTimeActivate and app.js's
+ * `onOpenTimeActivate` wiring — mirroring how a card offers its pencil icon
+ * *and* long-press/double-click into the same editor. A thin block has no +
+ * and no long-press/double-click either: with no room for the sheet's own
+ * button, the handles are what it offers, nothing more — see gestures.js,
+ * which reads this same 70 px line off `.open-time--thin` to skip arming
+ * either gesture there.
  *
  * The handles are the same `.handle` control a card uses, just aimed at a
  * neighbour: the top one is the previous activity's own bottom handle in

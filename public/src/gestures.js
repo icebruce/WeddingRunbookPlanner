@@ -163,13 +163,13 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
   // ------------------------------------------------------ open-time select
   //
   // A block's own tap selects it — the resize handles are the whole reason,
-  // same as a card. That leaves the actions sheet (buffer/extend/add) with
-  // no tap of its own on a thin block, which has no room for the + button a
-  // tall one shows: a long press (touch) or double-click (mouse) opens it
-  // instead, mirroring exactly how a card offers its pencil icon *and*
-  // long-press/double-click as two ways into its own editor. Both sizes get
-  // this, not just thin ones, for the same reason a card's pencil doesn't
-  // make its own long press redundant.
+  // same as a card. A tall block's + button is a second, always-visible way
+  // to the actions sheet (buffer/extend/add); a long press (touch) or
+  // double-click (mouse) on the block is a third, mirroring how a card
+  // offers its pencil icon *and* long-press/double-click into the same
+  // editor. A thin block has no + — and no third way in either: it has only
+  // the handles, on purpose, so there's nothing pulling a short gap's own
+  // small tap target between "select it" and "open a menu on it".
 
   function onOpenTimePointerDown(event) {
     if (active || candidate || openTimeCandidate || event.button > 0) return;
@@ -182,6 +182,9 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
       before: block.dataset.before,
       start: Number(block.dataset.start),
       end: Number(block.dataset.end),
+      // A thin block has no + button, and no long-press/double-click
+      // either — just the handles, its own tap only ever selects.
+      thin: block.classList.contains('open-time--thin'),
       block,
       pointerId: event.pointerId,
       x: event.clientX,
@@ -190,7 +193,7 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
       longPress: null
     };
 
-    if (openTimeCandidate.touch) {
+    if (openTimeCandidate.touch && !openTimeCandidate.thin) {
       const pressed = openTimeCandidate;
       pressed.longPress = setTimeout(() => {
         if (openTimeCandidate !== pressed) return;
@@ -210,17 +213,17 @@ export function createGestures({ root, store, commit, repaint, onLongPress, onDo
   function onOpenTimePointerUp(event) {
     if (!openTimeCandidate || openTimeCandidate.pointerId !== event.pointerId) return;
     const moved = Math.hypot(event.clientX - openTimeCandidate.x, event.clientY - openTimeCandidate.y);
-    const { before, start, end, touch } = openTimeCandidate;
+    const { before, start, end, touch, thin } = openTimeCandidate;
     clearOpenTimeCandidate();
     if (moved > TAP_SLOP) return;
 
     // A mouse only: touch's equivalent gesture is the long press above.
-    if (!touch && onOpenTimeActivate && lastOpenTimeTap && lastOpenTimeTap.before === before && Date.now() - lastOpenTimeTap.time <= DOUBLE_TAP_MS) {
+    if (!thin && !touch && onOpenTimeActivate && lastOpenTimeTap && lastOpenTimeTap.before === before && Date.now() - lastOpenTimeTap.time <= DOUBLE_TAP_MS) {
       lastOpenTimeTap = null;
       onOpenTimeActivate(before, start, end);
       return;
     }
-    lastOpenTimeTap = touch ? null : { before, time: Date.now() };
+    lastOpenTimeTap = (touch || thin) ? null : { before, time: Date.now() };
 
     // The select toggle itself is the delegated click that follows this
     // pointerup (data-action="select-open-time", app.js) — nothing more to
