@@ -209,6 +209,8 @@ function paintRegions(names) {
   }
   if (names.includes('heading')) refreshCollapsedTitle();
   if (names.includes('toolbar')) measureBottomFurniture();
+  if (names.some(name => STICKY_REGIONS.has(name))) measureStickyInset();
+  if (names.includes('filters')) watchChipOverflow();
   if (names.includes('timeline')) {
     gestures.bind();
     scrollToNow();
@@ -236,6 +238,82 @@ function measureBottomFurniture() {
   const node = app.querySelector('.toolbar, .mobile-add');
   const height = node ? Math.round(node.getBoundingClientRect().height) : 0;
   document.documentElement.style.setProperty('--bottom-furniture', `${height}px`);
+}
+
+/**
+ * How much of the top of the screen is already spoken for.
+ *
+ * The top bar is always there; the live strip joins it on the day; the offline
+ * and filter bars join either, and each other. Anything scrolled into view —
+ * a card tabbed onto, the card focus is returned to after Alt+arrow moves it —
+ * has to clear whatever is actually showing, which is why this is summed
+ * rather than written down as a number.
+ */
+const STICKY_REGIONS = new Set(['header', 'strip', 'offline', 'filterbar']);
+
+function measureStickyInset() {
+  let total = 0;
+  for (const node of app.querySelectorAll('.topbar, .live-strip, .pinned-bar')) {
+    total += node.getBoundingClientRect().height;
+  }
+  document.documentElement.style.setProperty('--sticky-inset', `${Math.round(total)}px`);
+}
+
+/**
+ * The chip row hides its scrollbar, so the row itself has to say when there is
+ * more of it. A chip cut flush at the screen edge reads as the last chip; one
+ * fading out reads as a row that carries on. Only the side that really has
+ * more is faded, so a row that fits is not given a false edge.
+ */
+function markChipOverflow() {
+  const row = app.querySelector('.filter-chips');
+  if (!row) return;
+  const max = row.scrollWidth - row.clientWidth;
+  row.classList.toggle('has-more-before', row.scrollLeft > 1);
+  row.classList.toggle('has-more-after', row.scrollLeft < max - 1);
+}
+
+// The row is replaced on every filter repaint, so the observer is re-pointed
+// rather than re-created; a new one per paint would leak one per click.
+const chipObserver = new ResizeObserver(markChipOverflow);
+
+function watchChipOverflow() {
+  const row = app.querySelector('.filter-chips');
+  if (!row) return;
+  row.addEventListener('scroll', markChipOverflow, { passive: true });
+  chipObserver.disconnect();
+  chipObserver.observe(row);
+  markChipOverflow();
+}
+
+/**
+ * The on-screen keyboard.
+ *
+ * It does not move the layout viewport on iOS, so a sheet anchored to the
+ * bottom of the page is anchored behind the keyboard, and the field being
+ * typed into can sit under it with no way back but a manual scroll. The
+ * visual viewport is the only thing that knows the keyboard is there.
+ *
+ * The inset is zero wherever the platform already shrinks the layout viewport
+ * itself (Android's default), so this never double-counts.
+ */
+function trackKeyboardInset() {
+  const viewport = window.visualViewport;
+  if (!viewport) return;
+
+  const update = () => {
+    const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+    document.documentElement.style.setProperty('--keyboard-inset', `${Math.round(inset)}px`);
+    // The sheet has just been resized under the field; put it back in view.
+    const focused = document.activeElement;
+    if (inset > 0 && focused?.closest?.('.sheet-body')) {
+      focused.scrollIntoView({ block: 'nearest' });
+    }
+  };
+
+  viewport.addEventListener('resize', update);
+  viewport.addEventListener('scroll', update);
+  update();
 }
 
 /**
@@ -1124,8 +1202,12 @@ const refreshCollapsedTitle = watchCollapsedTitle();
 
 watchFit(app);
 // The toolbar drops its button labels under 340 px and the layout changes
-// outright on rotation, so its height is re-read rather than remembered.
-window.addEventListener('resize', measureBottomFurniture);
+// outright on rotation, so the furniture is re-read rather than remembered.
+window.addEventListener('resize', () => {
+  measureBottomFurniture();
+  measureStickyInset();
+});
+trackKeyboardInset();
 window.addEventListener('online', () => void saver.handleOnline());
 window.addEventListener('offline', () => repaint(['header', 'offline']));
 

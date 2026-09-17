@@ -73,3 +73,107 @@ test('a tap on Undo still undoes', async ({ page, server }) => {
   await page.locator('.toast-action').click();
   await expect(page.locator('.card.is-locked')).toHaveCount(0);
 });
+
+test('the page does not chain its overscroll to the browser', async ({ page }) => {
+  await signInAndWaitForPlan(page);
+  const value = await page.evaluate(() => getComputedStyle(document.body).overscrollBehaviorY);
+  expect(value).toBe('contain');
+});
+
+test('the sticky inset counts every bar that is actually showing', async ({ page, server }) => {
+  await server.seed({ plan: seedPlan({ activities: [
+    activity('a', T(10), 60, { title: 'Portraits', people: ['Bride', 'Photographer'] }),
+    activity('b', T(12), 60, { title: 'Ceremony', people: ['Bride'] })
+  ] }) });
+  await signInAndWaitForPlan(page);
+
+  const read = () => page.evaluate(() =>
+    Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sticky-inset')));
+  const bare = await read();
+  const topbar = await page.locator('.topbar').evaluate(node => node.getBoundingClientRect().height);
+  expect(Math.abs(bare - topbar)).toBeLessThanOrEqual(1);
+
+  // Turning a filter on pins a second bar under the first one.
+  await page.locator('.filter-chip', { hasText: 'Photographer' }).click();
+  await expect(page.locator('.pinned-bar--filter')).toBeVisible();
+  const withFilter = await read();
+  const bar = await page.locator('.pinned-bar--filter').evaluate(node => node.getBoundingClientRect().height);
+  expect(Math.abs(withFilter - (topbar + bar))).toBeLessThanOrEqual(1);
+});
+
+test('a card tabbed onto lands clear of the sticky bars', async ({ page, server }) => {
+  const many = Array.from({ length: 14 }, (_, i) => activity(`a${i}`, T(8) + i * 60, 45, { title: `Activity ${i}` }));
+  await server.seed({ plan: seedPlan({ activities: many }) });
+  await signInAndWaitForPlan(page);
+
+  // Scroll deep into the day, then move focus to a card above the fold.
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.waitForTimeout(100);
+  await page.locator('.card[data-activity-id="a3"]').evaluate(node => node.focus());
+  await page.waitForTimeout(200);
+
+  const { cardTop, barBottom } = await page.evaluate(() => ({
+    cardTop: document.querySelector('.card[data-activity-id="a3"]').getBoundingClientRect().top,
+    barBottom: document.querySelector('.topbar').getBoundingClientRect().bottom
+  }));
+  expect(cardTop).toBeGreaterThanOrEqual(barBottom);
+});
+
+test('the chip row fades only the side that has more', async ({ page, server }) => {
+  const people = ['Bride', 'Groom', 'Photographer', 'Videographer', 'Planner', 'Celebrant', 'Florist', 'Caterer'];
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits', people })] }) });
+  await signInAndWaitForPlan(page);
+
+  // The contract is the invariant, not a fixed answer: eight chips overflow a
+  // phone and fit a desktop, and the fade has to be right either way.
+  const row = page.locator('.filter-chips');
+  const read = () => row.evaluate(node => ({
+    overflows: node.scrollWidth > node.clientWidth + 1,
+    before: node.classList.contains('has-more-before'),
+    after: node.classList.contains('has-more-after')
+  }));
+
+  const atStart = await read();
+  expect(atStart.before).toBe(false);
+  expect(atStart.after).toBe(atStart.overflows);
+
+  await row.evaluate(node => { node.scrollLeft = node.scrollWidth; });
+  await page.waitForTimeout(150);
+  const atEnd = await read();
+  expect(atEnd.before).toBe(atEnd.overflows);
+  expect(atEnd.after).toBe(false);
+});
+
+test('a chip row that fits gets no false edge', async ({ page, server }) => {
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits', people: ['Bride'] })] }) });
+  await signInAndWaitForPlan(page);
+  const row = page.locator('.filter-chips');
+  await expect(row).not.toHaveClass(/has-more-after/);
+  await expect(row).not.toHaveClass(/has-more-before/);
+});
+
+test('the sheet lifts above the on-screen keyboard', async ({ page, server }) => {
+  test.skip(!isPhoneLayout(page), 'the bottom sheet is the narrow layout');
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+  await signInAndWaitForPlan(page);
+  await page.locator('.card').first().click();
+  await page.locator('.toolbar [data-action="edit"]').click();
+  await expect(page.locator('#activity-dialog')).toBeVisible();
+
+  const restingBottom = await page.locator('.sheet').evaluate(n => n.getBoundingClientRect().bottom);
+
+  // Playwright cannot raise a real keyboard, so the visual viewport is shrunk
+  // the way one does and the resize event is fired by hand.
+  await page.evaluate(() => {
+    const vv = window.visualViewport;
+    Object.defineProperty(vv, 'height', { configurable: true, get: () => window.innerHeight - 300 });
+    vv.dispatchEvent(new Event('resize'));
+  });
+  await page.waitForTimeout(150);
+
+  const inset = await page.evaluate(() =>
+    Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--keyboard-inset')));
+  expect(inset).toBe(300);
+  const liftedBottom = await page.locator('.sheet').evaluate(n => n.getBoundingClientRect().bottom);
+  expect(restingBottom - liftedBottom).toBeGreaterThanOrEqual(295);
+});

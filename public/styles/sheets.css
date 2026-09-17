@@ -30,7 +30,14 @@
 .sheet-dialog[open] .sheet { animation: sheet-in 240ms cubic-bezier(.2, .8, .2, 1); }
 .sheet-dialog[open]::backdrop { animation: scrim-in 240ms cubic-bezier(.2, .8, .2, 1); }
 
-.sheet { position: absolute; inset: auto 0 0; max-height: 92dvh; overflow: hidden; border-radius: 16px 16px 0 0; background: var(--surface); box-shadow: var(--shadow-float); display: flex; flex-direction: column; padding-top: 16px; padding-bottom: var(--safe-bottom); }
+/*
+ * `dvh` follows the browser's own chrome, not the keyboard: on iOS the layout
+ * viewport does not move when the keyboard opens, so a sheet anchored to the
+ * bottom of it is anchored behind the keyboard. `--keyboard-inset` is read
+ * from `visualViewport` (app.js) and is 0 whenever there is no keyboard, or
+ * where the platform has already shrunk the layout viewport itself.
+ */
+.sheet { position: absolute; inset: auto 0 var(--keyboard-inset, 0px); max-height: calc(92dvh - var(--keyboard-inset, 0px)); overflow: hidden; border-radius: 16px 16px 0 0; background: var(--surface); box-shadow: var(--shadow-float); display: flex; flex-direction: column; padding-top: 16px; padding-bottom: max(0px, calc(var(--safe-bottom) - var(--keyboard-inset, 0px))); }
 
 .sheet-header { height: 52px; padding: 0 12px; border-bottom: 1px solid var(--hair); display: grid; grid-template-columns: 64px 1fr 64px; align-items: center; flex: 0 0 auto; }
 
