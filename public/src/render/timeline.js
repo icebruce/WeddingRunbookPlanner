@@ -45,9 +45,9 @@ function ruler(layout) {
  * (`data-role="resize-top"` against `beforeId`, the activity this gap is
  * right before) — see gestures.js and schedule.js's `afterId`/`afterTitle`.
  * Reusing those roles means the existing pointer and keyboard resize wiring
- * needs no changes at all to pick them up. Both are always shown, even when
- * the neighbour they'd resize is locked — dragging one then simply does
- * nothing, the same way it would from that activity's own handle.
+ * needs no changes at all to pick them up. Either is absent when the
+ * activity it would resize is locked — same rule a card's own handle
+ * follows.
  */
 function openTimeBlock(gap, ui, viewOnly) {
   const thin = gap.height < 70;
@@ -68,16 +68,13 @@ function openTimeBlock(gap, ui, viewOnly) {
   // different elements can drive the same edge, and app.js's keyboard
   // handler returns focus to whichever one was actually used, by reading it
   // straight off that element rather than reconstructing it from role+id.
-  // `handle--locked` is a faded look only — the drag itself already does
-  // nothing against a locked activity (startResize, gestures.js); this just
-  // says so up front instead of only after a pointless drag.
   const tabbable = selected || thin;
-  const handles = viewOnly ? '' : `<button type="button" class="handle handle--top ${gap.afterLocked ? 'handle--locked' : ''}" data-role="resize" data-id="${escapeHtml(gap.afterId)}"
-      tabindex="${tabbable ? '0' : '-1'}" data-focus-key="resize:gap:${escapeHtml(gap.beforeId)}" aria-disabled="${gap.afterLocked}"
-      aria-label="${escapeHtml(gap.afterLocked ? `${gap.afterTitle} is locked` : `Resize the end of ${gap.afterTitle}`)}"></button>
-    <button type="button" class="handle handle--bottom ${gap.beforeLocked ? 'handle--locked' : ''}" data-role="resize-top" data-id="${escapeHtml(gap.beforeId)}"
-      tabindex="${tabbable ? '0' : '-1'}" data-focus-key="resize-top:gap:${escapeHtml(gap.beforeId)}" aria-disabled="${gap.beforeLocked}"
-      aria-label="${escapeHtml(gap.beforeLocked ? `${gap.beforeTitle} is locked` : `Resize the start of ${gap.beforeTitle}`)}"></button>`;
+  const handles = viewOnly ? '' : `${gap.afterLocked ? '' : `<button type="button" class="handle handle--top" data-role="resize" data-id="${escapeHtml(gap.afterId)}"
+      tabindex="${tabbable ? '0' : '-1'}" data-focus-key="resize:gap:${escapeHtml(gap.beforeId)}"
+      aria-label="${escapeHtml(`Resize the end of ${gap.afterTitle}`)}"></button>`}
+    ${gap.beforeLocked ? '' : `<button type="button" class="handle handle--bottom" data-role="resize-top" data-id="${escapeHtml(gap.beforeId)}"
+      tabindex="${tabbable ? '0' : '-1'}" data-focus-key="resize-top:gap:${escapeHtml(gap.beforeId)}"
+      aria-label="${escapeHtml(`Resize the start of ${gap.beforeTitle}`)}"></button>`}`;
 
   return `<div class="open-time ${thin ? 'open-time--thin' : ''} ${selected ? 'is-selected' : ''}" style="top:${gap.top}px;height:${gap.height}px"
     ${bodyAttrs} data-focus-key="open-time:${escapeHtml(gap.beforeId)}" aria-label="${label}">

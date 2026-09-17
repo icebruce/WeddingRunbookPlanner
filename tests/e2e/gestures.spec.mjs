@@ -410,7 +410,7 @@ test.describe('resize', () => {
       expect(stored.find(a => a.id === 'arrive').duration).toBe(30, 'the previous activity did not move');
     });
 
-    test('a locked neighbour still shows its side\'s handle, but dragging it does nothing', async ({ page, server, isMobile }) => {
+    test('a locked neighbour has no handle on that side of the gap', async ({ page, server, isMobile }) => {
       test.skip(Boolean(isMobile), 'measured with a mouse');
       await server.seed({ plan: seedPlan({
         activities: [
@@ -422,43 +422,8 @@ test.describe('resize', () => {
 
       const gap = page.locator('.open-time');
       await gap.locator('strong').click();
-      await expect(gap.locator('.handle--top')).toBeVisible();
-
-      const handle = await gap.locator('.handle--top').boundingBox();
-      await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
-      await page.mouse.down();
-      await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2 + 10 * PX_PER_MIN, { steps: 8 });
-      await page.mouse.up();
-
-      await expect(page.locator('.save-indicator')).not.toHaveText('Saving…');
-      const stored = (await server.read()).plan.activities;
-      expect(stored.find(a => a.id === 'arrive').duration).toBe(30, 'the locked activity did not resize');
-    });
-
-    test('a locked neighbour\'s handle looks disabled', async ({ page, server, isMobile }) => {
-      test.skip(Boolean(isMobile), 'measured with a mouse');
-      await server.seed({ plan: seedPlan({
-        activities: [
-          activity('arrive', T(13), 30, { title: 'Arrival & Buffer', locked: true }),
-          activity('ceremony', T(14), 60, { title: 'Ceremony' })
-        ]
-      }) });
-      await signInAndWaitForPlan(page);
-
-      const gap = page.locator('.open-time');
-      await gap.locator('strong').click();
-      await expect(gap.locator('.handle--top')).toHaveClass(/handle--locked/);
-      await expect(gap.locator('.handle--top')).toHaveAttribute('aria-disabled', 'true');
-      await expect(gap.locator('.handle--bottom')).not.toHaveClass(/handle--locked/);
-
-      // Faded, not just a different border colour — 0.45 is the same
-      // de-emphasis a past activity gets (DESIGN_GUIDE §4.3), reused here.
-      const [lockedOpacity, workingOpacity] = await Promise.all([
-        gap.locator('.handle--top').evaluate(el => getComputedStyle(el, '::after').opacity),
-        gap.locator('.handle--bottom').evaluate(el => getComputedStyle(el, '::after').opacity)
-      ]);
-      expect(lockedOpacity).toBe('0.45');
-      expect(workingOpacity).toBe('1');
+      await expect(gap.locator('.handle--top')).toHaveCount(0);
+      await expect(gap.locator('.handle--bottom')).toHaveCount(1);
     });
 
     test('a thin gap next to a selected card draws one handle on that edge, not two stacked', async ({ page, server, isMobile }) => {
