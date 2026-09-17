@@ -886,6 +886,13 @@ test('a sheet leaves on the same curve it arrived on', async ({ page, server }) 
   expect(await leaving.evaluate(node => node.inert)).toBe(true);
   expect(await leaving.evaluate(node => getComputedStyle(node).pointerEvents)).toBe('none');
 
+  // The exit is held open by `overlay`, so it is asked for only where that is
+  // understood: `display` on its own would draw the sheet into the middle of
+  // the page on its way out, having already left the top layer.
+  const held = await page.evaluate(() => CSS.supports('overlay', 'auto'));
+  expect(await leaving.evaluate(node => getComputedStyle(node).display))
+    .toBe(held ? 'block' : 'none');
+
   // And then gone: one leaving sheet does not become two.
   await expect(page.locator('#activity-dialog')).toHaveCount(0);
 });

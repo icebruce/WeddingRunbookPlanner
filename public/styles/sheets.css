@@ -35,12 +35,25 @@
  * decision already made, and the two action sheets and the alert, which had no
  * motion at all, now arrive on the same curve as the sheet they interrupt.
  */
-.sheet-dialog,
-.action-sheet-dialog,
-.alert-dialog {
-  transition:
-    overlay var(--dur-sheet-out) allow-discrete,
-    display var(--dur-sheet-out) allow-discrete;
+/*
+ * Guarded on `overlay` itself, and deliberately so.
+ *
+ * The exit works because `overlay` holds the dialog in the top layer for the
+ * length of the transition. Where that property is not understood, the
+ * `display` half would still be honoured — the dialog would stay `display:
+ * block` for a fifth of a second having already dropped out of the top layer,
+ * which draws the sheet into the middle of the page on its way out. An engine
+ * without `overlay` gets the old instant close instead, which is the correct
+ * half of this to have.
+ */
+@supports (overlay: auto) {
+  .sheet-dialog,
+  .action-sheet-dialog,
+  .alert-dialog {
+    transition:
+      overlay var(--dur-sheet-out) allow-discrete,
+      display var(--dur-sheet-out) allow-discrete;
+  }
 }
 
 /* The scrim lightens as a sheet is pulled down (sheet-drag.js), so the page
