@@ -948,6 +948,49 @@ test('a sheet leaves on the same curve it arrived on', async ({ page, server }) 
   await expect(page.locator('#activity-dialog')).toHaveCount(0);
 });
 
+test('a resize lands where the release is, even if the last move never arrives', async ({ page, server }) => {
+  test.skip(isPhoneLayout(page), 'a pointer drag of the bottom edge');
+  await server.seed({ plan: seedPlan({ activities: [
+    activity('a', T(10), 120, { title: 'Getting-ready Portraits', location: 'Bridal suite', people: ['Bride', 'Photographer'] })
+  ] }) });
+  await signInAndWaitForPlan(page);
+
+  const card = page.locator('.card[data-activity-id="a"]');
+  await card.click();
+  const height = () => card.evaluate(node => node.style.height);
+  const before = await height();
+
+  const box = await card.locator('[data-role="resize"]').boundingBox();
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+
+  // The id the gesture actually captured, so the release is recognised.
+  await page.evaluate(() => {
+    window.__pid = null;
+    document.addEventListener('pointerdown', event => { window.__pid = event.pointerId; }, { capture: true, once: true });
+  });
+
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y - 420, { steps: 8 });
+  await page.waitForTimeout(120);
+  expect(await height(), 'the edge followed the pointer up').not.toBe(before);
+
+  // Back at the original edge, released without the move that would have
+  // reported it: pointer events are coalesced, and the last one before a
+  // release can be dropped. The release still carries the true position, and
+  // that is what the edge has to land on.
+  await page.evaluate(([clientX, clientY]) => {
+    document.querySelector('.card[data-activity-id="a"] [data-role="resize"]')
+      .dispatchEvent(new PointerEvent('pointerup', {
+        pointerId: window.__pid ?? 1, clientX, clientY, bubbles: true, cancelable: true
+      }));
+  }, [x, y]);
+  await page.mouse.up();
+
+  await expect.poll(height, { message: 'the edge is back where it was released' }).toBe(before);
+});
+
 test('a row that comes back during a resize is faded in, not popped', async ({ page, server }) => {
   test.skip(isPhoneLayout(page), 'a pointer drag of the bottom edge');
   await server.seed({ plan: seedPlan({ activities: [
