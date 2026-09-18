@@ -2,6 +2,7 @@ import { escapeHtml } from '../dom.js';
 import { icon } from '../icons.js';
 import { STAGES, phaseVars } from '../config.js';
 import { buildSchedule, formatDuration, formatTime } from '../schedule.js';
+import { describeConflicts } from '../merge.js';
 
 /**
  * Sheets on a phone, dialogs on a laptop — the same content and the same
@@ -231,14 +232,37 @@ export function stageSheet(item) {
  * automatic version, so the choice is which one to carry on with rather than
  * which one to lose.
  */
-export function conflictSheet(latest) {
+/**
+ * The question, asked only where it is real.
+ *
+ * With a common ancestor to compare against, everything the two of you changed
+ * separately has already been merged by the time this appears, so the dialog
+ * names the one thing left in dispute instead of offering two whole days. The
+ * second form — no ancestor — is the old wholesale question, kept for the one
+ * case where this tab never saw a confirmed version and merging is impossible.
+ */
+export function conflictSheet(latest, conflicts) {
   const when = latest?.updatedAt ? formatVersionDate(latest.updatedAt) : null;
+
+  if (!conflicts?.length) {
+    return `<dialog id="conflict-dialog" class="alert-dialog">
+      <div class="alert">
+        <h2>Changed on another device</h2>
+        <p>This plan was saved somewhere else${when ? ` at ${escapeHtml(when)}` : ''}. Whichever you do not choose is kept in version history.</p>
+        <button type="button" class="button button--primary" data-action="conflict" data-choice="theirs">Use the other version</button>
+        <button type="button" class="button button--quiet" data-action="conflict" data-choice="mine">Keep my changes</button>
+      </div>
+    </dialog>`;
+  }
+
+  const names = describeConflicts(conflicts);
+  const plural = conflicts.length > 1 || new Set(conflicts.map(entry => entry.title)).size > 1;
   return `<dialog id="conflict-dialog" class="alert-dialog">
     <div class="alert">
-      <h2>Changed on another device</h2>
-      <p>This plan was saved somewhere else${when ? ` at ${escapeHtml(when)}` : ''}. Whichever you do not choose is kept in version history.</p>
-      <button type="button" class="button button--primary" data-action="conflict" data-choice="remote">Use the other version</button>
-      <button type="button" class="button button--quiet" data-action="conflict" data-choice="local">Keep my changes</button>
+      <h2>You both changed ${escapeHtml(names)}</h2>
+      <p>Everything else you each changed is already merged. Only ${plural ? 'these' : 'this'} need${plural ? '' : 's'} a decision${when ? `, from a save at ${escapeHtml(when)}` : ''}. The version you do not keep stays in version history.</p>
+      <button type="button" class="button button--primary" data-action="conflict" data-choice="mine">Keep mine</button>
+      <button type="button" class="button button--quiet" data-action="conflict" data-choice="theirs">Use the other version</button>
     </div>
   </dialog>`;
 }
@@ -407,7 +431,7 @@ export function renderSheet(ui, plan) {
   if (dialog.type === 'activity') return activitySheet(dialog, plan);
   if (dialog.type === 'open-time') return openTimeSheet(dialog.openTime, plan);
   if (dialog.type === 'stage') return stageSheet(dialog.item);
-  if (dialog.type === 'conflict') return conflictSheet(dialog.latest);
+  if (dialog.type === 'conflict') return conflictSheet(dialog.latest, dialog.conflicts);
   if (dialog.type === 'versions') return versionsSheet(ui.versions, { plan, updatedAt: dialog.updatedAt });
   if (dialog.type === 'settings') return settingsSheet(plan);
   return '';

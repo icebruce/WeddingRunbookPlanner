@@ -377,13 +377,13 @@ The strip updates every 30 seconds. Screen readers announce only when the curren
 | Server error / timeout (15 s) | Header `Not saved`; retry automatically with increasing delay (2 s up to 30 s); one error toast, not repeated. |
 | Invalid data rejected | Header `Not saved`; toast with the reason; no automatic retry; the offending change is highlighted and can be undone. |
 | Session expired | Unsaved changes are kept on the device; sign-in screen appears; after sign-in, changes are saved (or the conflict flow runs if the plan changed meanwhile). |
-| Plan changed on another device | Dialog “Changed on another device” — **Use the other version** / **Keep my changes**. Whichever is not chosen is saved as an automatic version. Never a silent overwrite. |
-| Tab closed or app backgrounded | Pending changes are sent immediately; if that fails, they remain on the device and are sent on next open. |
+| Plan changed on another device | The two plans are merged. Anything only one side changed is taken silently; a toast says changes arrived. Only the same field of the same activity, changed on both sides to different values, asks: dialog “You both changed &lt;activity&gt;” — **Keep mine** / **Use the other version**, with the losing copy saved as an automatic version. Everything already merged stays merged either way. Never a silent overwrite. |
+| Tab closed or app backgrounded | Pending changes are sent immediately; if that fails, they remain on the device and are sent on next open — merged with anything that arrived meanwhile. |
 | Storage not configured / unavailable on load | Full-screen message “Can't load the plan right now” with Retry. Never an empty plan that looks saved. |
 | App opened with no network | Last loaded plan shown read-only with the offline bar, if one is stored on the device. |
 
 ### 7.3 Device copy
-The last loaded plan and any unsaved changes are kept on the device so the plan can be read without signal and edits survive closing the app. Cleared on sign-out and when the session is rejected.
+The last loaded plan and any unsaved changes are kept on the device so the plan can be read without signal and edits survive closing the app. The plan as the server last confirmed it is kept alongside them, so unsent edits can still be merged after the app has been closed and reopened. Cleared on sign-out and when the session is rejected.
 
 ### 7.4 Other devices
 When the app comes back to the foreground (or every 60 s while visible and idle), it checks for a newer plan and loads it if there are no unsaved local changes.
@@ -465,4 +465,5 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 | D26 | Timeline model rewrite (commit `2939550`): every activity stores its own absolute `start`; nothing propagates or auto-pushes; `locked` only exempts an activity from a deliberate group move | Flexible/Fixed propagation chain with stored `gapBefore` and automatic conflict resolution |
 | D27 | Group move: Ctrl/Cmd-click selects multiple cards, dragging any selected card moves every unlocked one by the same delta | No multi-activity move; reorder moved one activity by list position |
 | D28 | Single date+time picker (flatpickr, vendored) replaces the Flexible/Fixed radio and separate time field in the activity editor | Starts: Flexible \| Fixed radio |
+| D30 | Two diverged plans are merged per activity and per field against the version the server last confirmed; only the same field changed twice is a question, and it names the activity | A dialog offering two whole plans, where choosing one discarded every unrelated change the other side had made |
 | D29 | Phone back-button/gesture closes the open sheet, menu, or card selection instead of leaving the app (a dummy history entry pushed while an overlay is open). Scroll restoration is manual: back closes the top thing and the page stays exactly where it is | Back navigated away from the app with an overlay still open; later, back also threw the reader from where they had scrolled to back to the selected card |

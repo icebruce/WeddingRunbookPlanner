@@ -279,7 +279,7 @@ change → markDirty(seq++) → debounce 650 ms → flush()
 flush(): if inFlight: return (flush again after)
          PUT /api/plan {plan, revision, deviceId}  (timeout 15 s)
   200 → revision = res.revision; savedSeq = sentSeq; state Saved; clear device draft if clean
-  409 → conflict dialog (current local plan, not a snapshot)
+  409 → three-way merge (`merge.js`) of base / local / latest; conflicts only, and only then, reach a dialog
   401 → keep plan + draft; show sign-in; after login: GET, then save or conflict
   400/413/422 → state Not saved; toast reason; no auto-retry until next change or manual retry
   offline / network / 5xx / timeout → state Offline or Not saved; retry after 2,4,8,16,30 s; also on 'online'
@@ -287,10 +287,12 @@ flush(): if inFlight: return (flush again after)
 
 - Only one request in flight. Successful save re-flushes if more changes arrived.
 - One error toast per failure episode.
-- **Device copy** (`localStorage`, key `wrp:v1:<planId>`): `{ plan, revision, dirty, savedAt }`, written after each local change and each successful load. Used as a read-only fallback when loading fails offline. Kept through a 401 so unsaved edits survive re-sign-in. Cleared only on explicit sign-out.
+- **Device copy** (`localStorage`, key `wrp:v1:<planId>`): `{ plan, revision, dirty, savedAt }`, written after each local change and each successful load. The merge ancestor lives beside it at `wrp:v1:base:<planId>` as `{ plan, revision }`, written only when the server confirms a version — never on the path of a keystroke. On load the copy is read **before** the loaded plan is written over it. Used as a read-only fallback when loading fails offline. Kept through a 401 so unsaved edits survive re-sign-in. Cleared only on explicit sign-out.
 - `pagehide` / `visibilitychange:hidden`: if dirty, send with `fetch(..., {keepalive:true})`.
 - `visibilitychange:visible` and a 60 s idle poll: `GET /api/plan?since=<revision>` (304-style `{unchanged:true}`); load newer plan only if not dirty.
-- Conflict choice: the side not chosen is saved as an automatic version (`auto:true`, name `Other device – <time>` or `My unsaved changes – <time>`).
+- Conflict choice: the side not chosen is saved as an automatic version (`auto:true`, name `Other device – <time>` or `My unsaved changes – <time>`), and the merge is re-run with `prefer` set to the answer rather than the choice being applied by a second route.
+
+**Merge (`merge.js`, pure).** `mergePlans(base, mine, theirs, { prefer })` → `{ plan, conflicts }`. Plan fields and activities (keyed by `id`, then field by field) each take the side that moved; both sides moving to the same value is agreement; both moving differently is a conflict, resolved by `prefer` and reported. A delete on one side and an edit on the other keeps the edit and reports it. Keys are enumerated from the three inputs rather than named, so a field added to the schema merges correctly the day it is added and a field removed does not come back.
 
 ---
 
