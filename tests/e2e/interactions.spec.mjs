@@ -5,7 +5,7 @@
  * rest of it together.
  */
 import { test, expect, seedPlan, activity } from './fixtures.mjs';
-import { isPhoneLayout, signInAndWaitForPlan } from './helpers.mjs';
+import { isPhoneLayout, signInAndWaitForPlan, supportsTouchDrag } from './helpers.mjs';
 
 const T = (h, m = 0) => h * 60 + m;
 
@@ -46,7 +46,108 @@ test('toast pauses while hovered and resumes after', async ({ page, server }) =>
   await expect(toast).toBeHidden({ timeout: 8000 });
 });
 
-test('a toast can be swiped away', async ({ page, server }) => {
+/**
+ * A locator's box once it has stopped moving.
+ *
+ * `boundingBox()` answers where something is now, which is not where it will
+ * be a frame later if it is mid-transition — and a synthetic pointer aimed at
+ * the answer arrives after that frame.
+ */
+async function restingBox(locator, { tries = 40, gapMs = 50 } = {}) {
+  let previous = null;
+  for (let attempt = 0; attempt < tries; attempt += 1) {
+    const box = await locator.boundingBox();
+    if (box && previous && box.x === previous.x && box.y === previous.y) return box;
+    previous = box;
+    await locator.page().waitForTimeout(gapMs);
+  }
+  throw new Error('the element never stopped moving');
+}
+
+/**
+ * The swipe itself, which only Chromium can be made to perform.
+ *
+ * This drives a mouse drag on a touch-emulated device, and horizontal movement
+ * on the toast — which is `touch-action: pan-y` — is exactly where a browser
+ * claims the gesture for itself. On WebKit it does: instrumented, one move of
+ * ten reaches the page, at five pixels against a six-pixel slop, and nothing
+ * follows it. `--toast-drag` then sits at 0 for five seconds while the page
+ * keeps answering, so the browser has stopped dispatching rather than run
+ * late. It read as passing here until the swipe was reworked from downward to
+ * sideways, and as `flaky` after that — a race being won, not a gesture being
+ * tested.
+ *
+ * So it joins every other swipe-based spec in skipping where a real swipe
+ * cannot be driven (`supportsTouchDrag`, and the note above it in helpers).
+ * What the swipe does once it starts is covered on Chromium here, and the
+ * toast's own handling of a gesture it loses is covered on every engine by the
+ * test below, which needs no drag to reach the slop.
+ */
+test('a toast can be swiped away', async ({ page, server, browserName }) => {
+  test.skip(!isPhoneLayout(page), 'the selection toolbar is the narrow layout');
+  test.skip(!supportsTouchDrag(browserName), 'a real swipe needs CDP');
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+  await signInAndWaitForPlan(page);
+  await page.locator('.card').first().click();
+  await page.locator('.toolbar [data-action="lock"]').click();
+  const toast = page.locator('.toast');
+  await expect(toast).toBeVisible();
+  /**
+   * Drag the toast, and wait for the page to have received it.
+   *
+   * `page.mouse.move` resolves once the driver has queued the input, not once
+   * the page has been given it. The ten moves of a drag arrive at whatever rate
+   * a loaded runner manages, and one move is five pixels — under the six-pixel
+   * slop, so the swipe has not started yet and a fixed wait can expire between
+   * the first move and the second. That is what made this flaky: the events on
+   * a failing run were pointerdown at clientX 46 and a single pointermove at
+   * 51, and nothing had gone wrong except the asking.
+   *
+   * So the sideways drag waits for the offset the page itself records to reach
+   * where the pointer was sent, rather than for a duration.
+   */
+  const drag = async (dx, dy, { swipes }) => {
+    // Re-read the box each time, and wait for it to stop moving: the first drag
+    // ends off the toast, which counts as a click outside the selection and
+    // takes the toolbar away — and the toast floats above whatever occupies the
+    // bottom of the screen, so it slides 44 px down to sit above the + instead.
+    // A box read mid-slide is 44 px stale by the time the pointer lands on it.
+    const box = await restingBox(toast);
+    const x = box.x + 30;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + dx / 3, y + dy / 3, { steps: 4 });
+    await page.mouse.move(x + dx, y + dy, { steps: 6 });
+
+    const offset = () => toast.evaluate(node =>
+      Number.parseFloat(node.style.getPropertyValue('--toast-drag')) || 0);
+    if (swipes) {
+      await expect.poll(offset, { message: 'the toast followed the pointer', timeout: 5_000 })
+        .toBeGreaterThanOrEqual(dx - 2);
+    } else {
+      // Absence cannot be waited for, only given a chance to show up. The real
+      // statement about a downward drag is the one after the release: the toast
+      // is still there.
+      await page.waitForTimeout(150);
+      expect(await offset(), 'a downward drag moved the toast sideways').toBe(0);
+      expect(await toast.evaluate(node => node.classList.contains('is-dragging')),
+        'a downward drag was taken for a swipe').toBe(false);
+    }
+    await page.mouse.up();
+  };
+
+  // Down is the one direction that is nearly free — the toast is already at
+  // the bottom of the screen — so it is not a dismissal.
+  await drag(0, 60, { swipes: false });
+  await expect(toast).toBeVisible();
+
+  // Sideways is.
+  await drag(60, 0, { swipes: true });
+  await expect(toast).toBeHidden({ timeout: 2000 });
+});
+
+test('a swipe whose release is never heard does not lock the toast', async ({ page, server }) => {
   test.skip(!isPhoneLayout(page), 'the selection toolbar is the narrow layout');
   await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
   await signInAndWaitForPlan(page);
@@ -54,32 +155,27 @@ test('a toast can be swiped away', async ({ page, server }) => {
   await page.locator('.toolbar [data-action="lock"]').click();
   const toast = page.locator('.toast');
   await expect(toast).toBeVisible();
-  const drag = async (dx, dy) => {
-    // Re-read it each time: the first drag ends off the toast, which counts as
-    // a click outside the selection and takes the toolbar away — and the toast
-    // floats above whatever occupies the bottom of the screen, so it moves.
-    const box = await toast.boundingBox();
-    const x = box.x + 30;
-    const y = box.y + box.height / 2;
-    await page.mouse.move(x, y);
-    await page.mouse.down();
-    await page.mouse.move(x + dx / 3, y + dy / 3, { steps: 4 });
-    await page.mouse.move(x + dx, y + dy, { steps: 6 });
-    // The move promise resolves once CDP has queued the input, not once the
-    // page's own pointermove handler has run — under CI load the release can
-    // overtake it, so onSwipeRelease sees `moved` still false and the swipe
-    // reads as a tap. Give the handler a turn before letting go.
-    await page.waitForTimeout(50);
-    await page.mouse.up();
-  };
 
-  // Down is the one direction that is nearly free — the toast is already at
-  // the bottom of the screen — so it is not a dismissal.
-  await drag(0, 60);
-  await expect(toast).toBeVisible();
+  // A press the toast hears and a release it never does. The capture that
+  // would guarantee the release is deliberately not taken until the movement
+  // proves itself, so this is not a contrived state: a drag that ends off the
+  // toast reaches it in the ordinary course of things.
+  await toast.evaluate(node => node.dispatchEvent(new PointerEvent('pointerdown', {
+    bubbles: true, button: 0, pointerId: 99, isPrimary: true, clientX: 50, clientY: 50
+  })));
 
-  // Sideways is.
-  await drag(60, 0);
+  const box = await restingBox(toast);
+  const x = box.x + 30;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 20, y, { steps: 4 });
+  await page.mouse.move(x + 60, y, { steps: 6 });
+  await page.waitForTimeout(50);
+  const dragging = await toast.evaluate(node => node.classList.contains('is-dragging'));
+  await page.mouse.up();
+
+  expect(dragging, 'the abandoned gesture did not refuse this one').toBe(true);
   await expect(toast).toBeHidden({ timeout: 2000 });
 });
 
