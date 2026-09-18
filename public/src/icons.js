@@ -9,7 +9,6 @@ const paths = {
   note: '<path d="M6 4h9l4 4v12H6Z"/><path d="M14 4v5h5M9 13h6M9 16.5h4"/>',
   reorder: '<path d="M4 8h16M4 12h16M4 16h16"/>',
   moon: '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/>',
-  flag: '<path d="M6 21V4h12l-2.5 4L18 12H6"/>',
   print: '<path d="M7 9V3.5h10V9M7 18H5a1 1 0 0 1-1-1v-6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v6a1 1 0 0 1-1 1h-2"/><path d="M7 14h10v6.5H7Z"/>',
   download: '<path d="M12 4v11M8 11.5l4 4 4-4M5 19.5h14"/>',
   live: '<circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/><path d="M7 7a7 7 0 0 0 0 10M17 7a7 7 0 0 1 0 10M4 4a11 11 0 0 0 0 16M20 4a11 11 0 0 1 0 16"/>',

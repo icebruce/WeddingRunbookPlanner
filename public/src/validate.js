@@ -11,7 +11,6 @@
  * up. Only genuinely wrong values fail, so an older stored plan keeps saving.
  */
 
-export const PLAN_STATUSES = ['Draft', 'Working', 'Confirming', 'Final'];
 
 export const STAGE_IDS = [
   'preparation',
@@ -170,6 +169,22 @@ export function validateActivity(input, { field = 'activity', seenIds } = {}) {
   return { id, title, duration, stage, location, people, notes, start, locked };
 }
 
+export const DEFAULT_TIMEZONE = 'America/Toronto';
+
+/**
+ * A zone name is valid if the platform can format with it. Listing zones here
+ * would be a list to keep up to date; asking the engine is the same question
+ * asked of the thing that will answer it.
+ */
+export function isRealTimezone(value) {
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function validatePlan(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) fail('invalid_type', 'The plan must be an object.', 'plan');
 
@@ -182,9 +197,6 @@ export function validatePlan(input) {
   const date = String(input.date ?? '');
   if (!isRealDate(date)) fail('invalid_date', 'Date must be a real date like 2026-11-21.', 'date');
 
-  const status = String(input.status ?? 'Working');
-  if (!PLAN_STATUSES.includes(status)) fail('invalid_status', 'That is not one of the plan statuses.', 'status');
-
   const rawActivities = input.activities;
   if (!Array.isArray(rawActivities)) fail('invalid_type', 'Activities must be a list.', 'activities');
   if (rawActivities.length > LIMITS.activities) fail('too_many', `A plan can hold at most ${LIMITS.activities} activities.`, 'activities');
@@ -192,12 +204,18 @@ export function validatePlan(input) {
   const seenIds = new Set();
   const activities = rawActivities.map((entry, index) => validateActivity(entry, { field: `activities[${index}]`, seenIds }));
 
+  // Where the wedding is, not where the reader is. Everything about "is it
+  // the day yet" and "what is happening now" is a question about the venue's
+  // clock, and a plan shared by link is read from other time zones.
+  const timezone = String(input.timezone ?? DEFAULT_TIMEZONE) || DEFAULT_TIMEZONE;
+  if (!isRealTimezone(timezone)) fail('invalid_timezone', 'That is not a time zone name.', 'timezone');
+
   const plan = {
     id,
     title,
     coupleLabel,
     date,
-    status,
+    timezone,
     activities
   };
 

@@ -34,7 +34,7 @@ const plan = (extra = {}) => ({
   title: 'Wedding Day',
   coupleLabel: 'Our Wedding',
   date: '2026-11-21',
-  status: 'Working',
+  timezone: 'America/Toronto',
   activities: [activity()],
   ...extra
 });
@@ -73,12 +73,21 @@ test('F15: the time format rejects impossible clock times', () => {
   rejects(plan({ activities: [activity({ start: 'soon' })] }), 'activities[0].start');
 });
 
-test('F15: the status enum is closed', () => {
-  for (const status of ['Draft', 'Working', 'Confirming', 'Final']) {
-    assert.equal(validatePlan(plan({ status })).status, status);
-  }
-  const error = rejects(plan({ status: 'Published' }), 'status');
-  assert.equal(error.code, 'invalid_status');
+test('D31: a leftover status field is dropped, not preserved', () => {
+  // Plans stored before the field was removed still carry it. Unknown fields
+  // are dropped on write, which is the whole migration.
+  assert.equal(Object.hasOwn(validatePlan(plan({ status: 'Working' })), 'status'), false);
+});
+
+test('the time zone is a real zone name, and defaults to the venue', () => {
+  assert.equal(validatePlan(plan({ timezone: 'Europe/Lisbon' })).timezone, 'Europe/Lisbon');
+
+  const withoutZone = plan();
+  delete withoutZone.timezone;
+  assert.equal(validatePlan(withoutZone).timezone, 'America/Toronto');
+
+  const error = rejects(plan({ timezone: 'Mars/Olympus' }), 'timezone');
+  assert.equal(error.code, 'invalid_timezone');
 });
 
 test('F15: the stage allowlist is closed', () => {

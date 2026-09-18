@@ -15,8 +15,13 @@ import {
 } from '../../public/src/dayof.js';
 
 const DATE = '2026-11-21';
+// A wall-clock time at the venue, as an instant. The offset is spelled out
+// because every date in this file is in November, when Montreal is on EST —
+// the app itself never assumes a fixed offset (see the time-zone tests below),
+// but a test that did not pin one would assert whatever the runner's own zone
+// happened to be, which is the bug these times exist to catch.
 const at = (hours, minutes = 0, day = 21) =>
-  new Date(`2026-11-${String(day).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`);
+  new Date(`2026-11-${String(day).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00-05:00`);
 
 const T = (h, m = 0) => h * 60 + m;
 
@@ -26,7 +31,7 @@ const activity = (id, start, duration, extra = {}) => ({
 
 const plan = (activities, extra = {}) => ({
   id: 'wedding-day', title: 'Wedding Day', coupleLabel: 'Our Wedding',
-  date: DATE, status: 'Working', activities, ...extra
+  date: DATE, timezone: 'America/Toronto', activities, ...extra
 });
 
 const day = () => plan([
@@ -36,14 +41,11 @@ const day = () => plan([
   activity('party', T(15, 45), 120, { title: 'Dancing & Party' })
 ]);
 
-test('D1: the day-of view turns itself on on the day, and when the plan is Final', () => {
+test('D1: the day-of view turns itself on on the day', () => {
   assert.equal(shouldBeOn(day(), at(0, 1)), true, 'from midnight on the date');
   assert.equal(shouldBeOn(day(), at(13)), true);
   assert.equal(shouldBeOn(day(), at(13, 0, 20)), false, 'not the day before');
   assert.equal(shouldBeOn(day(), at(13, 0, 22)), false, 'not the day after');
-
-  // Final is how one person turns it on for everyone, whatever the date.
-  assert.equal(shouldBeOn(plan(day().activities, { status: 'Final' }), at(13, 0, 15)), true);
 });
 
 test('a plan running past midnight is still today\'s plan at one in the morning', () => {
@@ -245,4 +247,54 @@ test('a storage that throws on access is treated the same as no storage at all',
     assert.doesNotThrow(() => writeOverride(DATE, true));
     assert.doesNotThrow(() => clearOverride());
   });
+});
+
+// --------------------------------------------------------------- time zones
+
+const MONTREAL = 'America/Toronto';
+
+const zoned = (extra = {}) => ({
+  id: 'wedding-day',
+  title: 'Wedding Day',
+  coupleLabel: 'Our Wedding',
+  date: '2026-11-21',
+  timezone: MONTREAL,
+  activities: [
+    { id: 'a', title: 'Ceremony', start: 14 * 60 + 45, duration: 60, stage: 'ceremony', location: '', people: [], notes: '', locked: false }
+  ],
+  ...extra
+});
+
+test('the day-of view follows the venue clock, not the reader\'s', () => {
+  // 03:30 UTC on the 22nd is 22:30 on the 21st in Montreal: still the wedding
+  // day at the venue, already the day after in London.
+  const stillTheDay = new Date('2026-11-22T03:30:00Z');
+  assert.equal(shouldBeOn(zoned(), stillTheDay), true);
+
+  // 04:00 UTC on the 21st is 23:00 on the 20th in Montreal: not yet.
+  assert.equal(shouldBeOn(zoned(), new Date('2026-11-21T04:00:00Z')), false);
+});
+
+test('minutesNow counts from midnight at the venue', () => {
+  // 19:45 UTC on the wedding day is 2:45 PM in Montreal (EST, UTC-5).
+  assert.equal(minutesNow(zoned(), new Date('2026-11-21T19:45:00Z')), 14 * 60 + 45);
+});
+
+test('a summer plan uses daylight time, which a fixed offset would get wrong', () => {
+  // July: Montreal is EDT (UTC-4). 16:00 UTC is noon, not 11 AM.
+  const summer = zoned({ date: '2026-07-11' });
+  assert.equal(minutesNow(summer, new Date('2026-07-11T16:00:00Z')), 12 * 60);
+});
+
+test('a missing time zone falls back to the venue default', () => {
+  const noZone = zoned();
+  delete noZone.timezone;
+  assert.equal(minutesNow(noZone, new Date('2026-11-21T19:45:00Z')), 14 * 60 + 45);
+});
+
+test('the plan status no longer turns the day-of view on (D31)', () => {
+  // A day that is not the wedding day stays a planning day, whatever any
+  // leftover status field says.
+  const other = zoned({ date: '2026-11-21', status: 'Final' });
+  assert.equal(shouldBeOn(other, new Date('2026-06-01T16:00:00Z')), false);
 });

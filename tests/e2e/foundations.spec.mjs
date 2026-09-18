@@ -17,24 +17,17 @@ test('F14: toggling a lock keeps focus on the button that was pressed', async ({
 });
 
 test('F14: a repaint does not move focus out of the control being used', async ({ page }) => {
-  // The status is a select in the wide top bar and a menu row on a phone
-  // (D24), so the control that survives a repaint differs by layout.
   await signInAndWaitForPlan(page);
 
-  if (isPhoneLayout(page)) {
-    const lock = firstCard(page).locator('.lock-button');
-    await lock.focus();
-    await page.keyboard.press('Enter');
-    await expect(firstCard(page).locator('.lock-button')).toBeFocused();
-    return;
-  }
+  // The lock button changes the plan, so the repaint that follows is a real
+  // one — and the button that caused it has to still be the focused thing
+  // afterwards. The whole-app innerHTML render used to send focus to <body>.
+  const lock = firstCard(page).locator('.lock-button');
+  await lock.focus();
+  await page.keyboard.press('Enter');
 
-  const status = page.locator('[data-action="status"]');
-  await status.focus();
-  await status.selectOption('Confirming');
-
-  await expect(page.locator('[data-action="status"]')).toBeFocused();
-  await expect(page.locator('[data-action="status"]')).toHaveValue('Confirming');
+  await expect(firstCard(page).locator('.lock-button')).toBeFocused();
+  await expect(firstCard(page).locator('.lock-button')).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('F14: a save landing in the background does not rebuild an open sheet', async ({ page }) => {

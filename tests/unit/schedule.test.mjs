@@ -32,7 +32,7 @@ const plan = (activities, extra = {}) => ({
   title: 'Wedding Day',
   coupleLabel: 'Our Wedding',
   date: '2026-11-21',
-  status: 'Working',
+  timezone: 'America/Toronto',
   activities,
   ...extra
 });

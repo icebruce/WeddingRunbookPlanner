@@ -585,15 +585,6 @@ dialog.is-leaving { pointer-events: none; }
 }
 .menu-popover button .menu-switch { margin-left: auto; }
 
-/* The status control lives in the phone menu and in the wide top bar, not
-   both (D24). */
-@media (min-width: 721px) {
-  .menu-popover button.is-phone-only { display: none; }
-}
-@media (max-width: 720px) {
-  .status-control { display: none; }
-}
-
 .settings-group { margin-bottom: 22px; border-radius: var(--radius); background: var(--surface-2); overflow: hidden; }
 .settings-group > .field-label { padding: 12px 14px 6px; margin: 0; }
 .settings-group .group-row input[type="time"],

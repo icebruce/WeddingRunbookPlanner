@@ -12,6 +12,7 @@
  * testable at 23:59 and at 00:00.
  */
 import { buildSchedule, formatCountdown, formatTime } from './schedule.js';
+import { DEFAULT_TIMEZONE } from './validate.js';
 
 /** How often the strip re-reads the clock. */
 export const TICK_MS = 30_000;
@@ -19,39 +20,114 @@ export const TICK_MS = 30_000;
 export const AUTO_VIEW_ONLY_MS = 5 * 60_000;
 
 /**
+ * Everything below reads the clock at the venue, not the clock on the device.
+ *
+ * It used to read the device's, which was invisible while the only people
+ * looking were in the same city as the wedding. A plan shared by link is not
+ * read from one city: "is it the day yet" and "what is happening now" are
+ * questions about where the wedding is, and answered anywhere else they are
+ * simply wrong — by the reader's offset, every time.
+ *
+ * The zone is a name (`America/Toronto`), never a fixed offset. A fixed −05:00
+ * would be right on the wedding day and wrong for the eight months of planning
+ * that run through daylight time.
+ */
+function zoneOf(plan) {
+  return plan?.timezone || DEFAULT_TIMEZONE;
+}
+
+const zoneFormatters = new Map();
+
+function formatterFor(timeZone) {
+  let formatter = zoneFormatters.get(timeZone);
+  if (!formatter) {
+    try {
+      formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        hour12: false,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+    } catch {
+      // An unknown zone name should not stop the day working; the device's own
+      // clock is a worse answer than the venue's, and a better one than none.
+      formatter = new Intl.DateTimeFormat('en-CA', {
+        hour12: false,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+    }
+    zoneFormatters.set(timeZone, formatter);
+  }
+  return formatter;
+}
+
+function partsIn(timeZone, date) {
+  const parts = {};
+  for (const part of formatterFor(timeZone).formatToParts(date)) parts[part.type] = part.value;
+  return parts;
+}
+
+/** `YYYY-MM-DD` as the venue reads it right now. */
+export function zonedDate(timeZone, now = new Date()) {
+  const { year, month, day } = partsIn(timeZone, now);
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * How far the zone is from UTC at a given instant, in milliseconds. Asked of
+ * the engine rather than tabulated, so daylight time needs no calendar here.
+ */
+function offsetAt(timeZone, date) {
+  const { year, month, day, hour, minute, second } = partsIn(timeZone, date);
+  const asIfUtc = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour) % 24, Number(minute), Number(second));
+  return date.getTime() - asIfUtc;
+}
+
+/**
+ * The instant at which it is midnight on the plan's date, at the venue.
+ *
+ * Found by correction rather than construction: guess that the wall clock is
+ * UTC, ask what the offset actually is there, and move by it. The second pass
+ * catches the twice-a-year case where the correction itself crosses a daylight
+ * boundary and the first offset was the one on the wrong side of it.
+ */
+function zonedMidnight(plan) {
+  const timeZone = zoneOf(plan);
+  const guess = new Date(`${plan.date}T00:00:00Z`);
+  const first = new Date(guess.getTime() + offsetAt(timeZone, guess));
+  const second = offsetAt(timeZone, first);
+  return new Date(guess.getTime() + second);
+}
+
+/**
  * Whether the day-of view should be on by itself.
  *
- * On the plan's date from midnight, while a plan that runs past midnight is
- * still running, and whenever the status is Final — which is how one person
- * turns it on for everyone.
+ * On the plan's date from midnight at the venue, and while a plan that runs
+ * past midnight is still running. The date is the whole rule: it used to also
+ * turn on for good whenever the plan's status was Final, which was a mode
+ * switch wearing a label's name (D31).
  */
 export function shouldBeOn(plan, now = new Date()) {
   if (!plan) return false;
-  if (plan.status === 'Final') return true;
 
-  const today = localDate(now);
-  if (today === plan.date) return true;
+  if (zonedDate(zoneOf(plan), now) === plan.date) return true;
 
   // A plan that runs past midnight is still today's plan at 1 a.m.
   const schedule = buildSchedule(plan);
   if (schedule.dayEnd <= 24 * 60) return false;
 
-  const planDay = new Date(`${plan.date}T00:00:00`);
-  const minutesSincePlanStart = (now - planDay) / 60_000;
+  const minutesSincePlanStart = (now - zonedMidnight(plan)) / 60_000;
   return minutesSincePlanStart >= 0 && minutesSincePlanStart < schedule.dayEnd;
-}
-
-function localDate(now) {
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
 /**
  * The current time as the schedule counts it: minutes from midnight on the
- * plan's date, so an activity at 1:15 AM the next morning is 1515, not 75.
+ * plan's date at the venue, so an activity at 1:15 AM the next morning is
+ * 1515, not 75.
  */
 export function minutesNow(plan, now = new Date()) {
-  const planDay = new Date(`${plan.date}T00:00:00`);
-  return Math.floor((now - planDay) / 60_000);
+  return Math.floor((now - zonedMidnight(plan)) / 60_000);
 }
 
 /**

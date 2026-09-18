@@ -111,7 +111,7 @@ type Plan = {
   timelineStart?: string | null; // HH:MM, 5-min, view only
   timelineEnd?: string | null;   // HH:MM, 5-min, view only; may be <= timelineStart (= next day)
   sunset?: string | null;        // HH:MM, any minute; null hides marker; default "16:19"
-  status: "Draft" | "Working" | "Confirming" | "Final";
+  timezone: string;         // IANA zone name, default "America/Toronto"; the venue's clock
   activities: Activity[];   // max 200
 };
 
@@ -128,7 +128,7 @@ type Activity = {
 };
 ```
 
-Migration: none required. Missing optional fields default (`sunset` "16:19", view range derived). Unknown fields are dropped on save. There is no `lockedStart`/`gapBefore` any more — an activity's position is always its own `start`, whether `locked` or not.
+Migration: none required. Missing optional fields default (`sunset` "16:19", `timezone` "America/Toronto", view range derived). `status` was removed (D31) and is dropped like any other unknown field — nothing reads it, and a stored plan still carrying it stays valid. Unknown fields are dropped on save. There is no `lockedStart`/`gapBefore` any more — an activity's position is always its own `start`, whether `locked` or not.
 
 ### 4.2 Storage envelope (Redis)
 

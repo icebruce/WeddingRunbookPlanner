@@ -2,15 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-import { PLAN_STATUSES, STAGES } from '../../public/src/config.js';
-import { PLAN_STATUSES as VALIDATED_STATUSES, STAGE_IDS } from '../../public/src/validate.js';
+import { STAGES } from '../../public/src/config.js';
+import { STAGE_IDS } from '../../public/src/validate.js';
 
 test('the stage picker and the server allowlist describe the same stages', () => {
   assert.deepEqual(STAGES.map(stage => stage.id).sort(), [...STAGE_IDS].sort());
-});
-
-test('plan statuses come from one place', () => {
-  assert.deepEqual(PLAN_STATUSES, VALIDATED_STATUSES);
 });
 
 test('every stage has a label, a phase colour, a tint and an icon', () => {

@@ -55,7 +55,7 @@ Saturday, November 21, 2026 · Ceremony at St. Peter and Paul Orthodox Sobor, 2:
 | **Open time** | Unscheduled time between activities, derived from the gaps in the merged set of occupied minutes. Not stored on any activity. |
 | **Overlap** | Any two activities whose times intersect, locked or not. Both keep their true times, drawn side by side for the overlapping stretch. There is no fixed-vs-overrunning asymmetry. |
 | **Stage** | Category of an activity. 11 stages grouped into 6 phases; the phase sets the colour. |
-| **Plan status** | Draft, Working, Confirming, Final. Final switches on day-of view. |
+| **Time zone** | Where the wedding is (`America/Toronto`). Every “is it the day yet” and “what is happening now” is read on the venue's clock, never the reader's. |
 | **Day-of view** | Read-only running view with a live strip, time line and faded past activities. |
 
 ### 2.1 Scheduling rules
@@ -310,11 +310,8 @@ Sheet / dialog, Done applies:
 - **Timeline view:** Shows from; Shows until (may be after midnight, shown as “next day”). Help: “Only changes what you see. The view always grows to fit every activity.”
 Validation inline. Changing the view range never moves activities. The dark/light appearance switch (§5.22) lives only in the main menu, not duplicated here.
 
-### 5.20 Plan status
-Draft · Working · Confirming · Final. Phone: in the menu. Desktop: control in the top bar. Setting **Final** turns on day-of view on all devices (§6).
-
 ### 5.21 Menu (phone and desktop)
-Day-of view (switch) · Dark appearance (switch) · Status (phone only) · Print or save PDF · Export backup · Version history · Plan settings · Sign out.
+Day-of view (switch) · Dark appearance (switch) · Print or save PDF · Export backup · Version history · Plan settings · Sign out.
 
 ### 5.22 Dark appearance
 Manual switch in the menu and in Plan settings. Light is the default; the app does **not** follow the system setting. The choice is remembered on the device.
@@ -333,7 +330,7 @@ The site can be added to the home screen with its own icon and name “Our Weddi
 ## 6. Day-of view
 
 ### 6.1 Turning it on and off
-- Automatically on when the device date is the plan date (from 00:00) and while a plan that runs past midnight is still running; and whenever status is **Final**.
+- Automatically on when the date **at the venue** is the plan date (from 00:00) and while a plan that runs past midnight is still running. The date is the only rule (D31).
 - Manual switch in the menu. If the user switches it off on the day, it stays off on that device for that day.
 - On other dates, the switch lets the user rehearse with the real clock.
 
@@ -417,7 +414,7 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 
 **Open time and conflicts:** open time visible and actionable; three actions behave as defined; conflicts shown in columns with correct messages and summary.
 
-**Day-of:** turns on by date and by Final; view only until Edit; strip states correct; current activity and time line correct; returns to view only after Done or 5 min away.
+**Day-of:** turns on by the date at the venue, whatever zone the reader is in; view only until Edit; strip states correct; current activity and time line correct; returns to view only after Done or 5 min away.
 
 **Saving:** offline edits survive reload and save on reconnect with a bounded number of requests; server errors show `Not saved` without request floods; invalid data never blocks later saves; expired session loses nothing; two-device conflict never overwrites silently.
 
@@ -437,7 +434,7 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 
 | # | Decision | Replaces |
 |---|---|---|
-| D1 | Day-of view, automatic on the date and when Final; view only until Edit | Final had no behaviour; no day-of support |
+| D1 | Day-of view, automatic on the date; view only until Edit | No day-of support |
 | D2 | Phone selection toolbar instead of per-card inline controls | Grip, stage chip, lock, ⋯ and resize strip on every card |
 | D3 | Solid dark lock for fixed; red only for conflict and delete | Red lock icon |
 | D4 | Stage colours by phase (6), icon identifies the stage | 11 near-duplicate pastels |
@@ -460,10 +457,11 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 | D21 | Dark appearance as an in-app switch, light default, not following the system | — |
 | D22 | Changing the password signs out all devices | Sessions survived password change |
 | D23 | *(superseded)* Reorder on phone required a short hold on the handle | Immediate drag |
-| D24 | Status control in the phone menu; stays in desktop top bar | Header pill on all sizes |
+| D24 | *(superseded by D31)* Status control in the phone menu; stays in desktop top bar | Header pill on all sizes |
 | D25 | People tags: full names then `+N`, never initials | First five names, then initials |
 | D26 | Timeline model rewrite (commit `2939550`): every activity stores its own absolute `start`; nothing propagates or auto-pushes; `locked` only exempts an activity from a deliberate group move | Flexible/Fixed propagation chain with stored `gapBefore` and automatic conflict resolution |
 | D27 | Group move: Ctrl/Cmd-click selects multiple cards, dragging any selected card moves every unlocked one by the same delta | No multi-activity move; reorder moved one activity by list position |
 | D28 | Single date+time picker (flatpickr, vendored) replaces the Flexible/Fixed radio and separate time field in the activity editor | Starts: Flexible \| Fixed radio |
+| D31 | Plan status removed. Three of its four values had no behaviour at all and the fourth, **Final**, silently forced day-of view onto every device — a mode switch wearing a label's name. Day-of now turns on by date alone, read on the plan's `timezone` (default `America/Toronto`) rather than the reader's device | Draft/Working/Confirming/Final, as a select in the desktop top bar and a row in the phone menu |
 | D30 | Two diverged plans are merged per activity and per field against the version the server last confirmed; only the same field changed twice is a question, and it names the activity | A dialog offering two whole plans, where choosing one discarded every unrelated change the other side had made |
 | D29 | Phone back-button/gesture closes the open sheet, menu, or card selection instead of leaving the app (a dummy history entry pushed while an overlay is open). Scroll restoration is manual: back closes the top thing and the page stays exactly where it is | Back navigated away from the app with an overlay still open; later, back also threw the reader from where they had scrolled to back to the selected card |

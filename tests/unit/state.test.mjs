@@ -24,7 +24,7 @@ const plan = (...activities) => ({
   title: 'Wedding Day',
   coupleLabel: 'Our Wedding',
   date: '2026-11-21',
-  status: 'Working',
+  timezone: 'America/Toronto',
   activities: activities.length ? activities : [activity('a', T(11, 30)), activity('b', T(12)), activity('c', T(12, 30))]
 });
 
@@ -291,25 +291,8 @@ test('plan.settings applies the changed fields and records one undo step', () =>
 
 test('plan.settings with only unchanged values records nothing', () => {
   const s = store();
-  const noop = s.dispatch('plan.settings', { changes: { title: s.plan.title, status: s.plan.status } });
+  const noop = s.dispatch('plan.settings', { changes: { title: s.plan.title, date: s.plan.date } });
   assert.equal(noop, null);
-  assert.equal(s.canUndo, false);
-});
-
-test('plan.status changes the status and records a readable label', () => {
-  const s = store();
-  const before = s.plan;
-
-  const result = s.dispatch('plan.status', { status: 'Final' });
-
-  assert.equal(s.plan.status, 'Final');
-  assert.equal(result.label, 'Set status to Final');
-  assert.equal(before.status, 'Working', 'the previous plan is untouched');
-});
-
-test('plan.status set to the status it already has records nothing', () => {
-  const s = store();
-  assert.equal(s.dispatch('plan.status', { status: 'Working' }), null);
   assert.equal(s.canUndo, false);
 });
 

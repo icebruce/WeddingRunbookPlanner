@@ -1,8 +1,7 @@
 // Stage ids and plan statuses come from the shared validation module so the
 // picker can never offer a value the server would reject.
-import { PLAN_STATUSES, STAGE_IDS } from './validate.js';
+import { STAGE_IDS } from './validate.js';
 
-export { PLAN_STATUSES };
 
 /*
  * Eleven stages, six phase colours. The colours themselves live in tokens.css

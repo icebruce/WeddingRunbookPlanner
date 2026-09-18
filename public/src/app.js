@@ -11,7 +11,7 @@
  */
 import './actions.js';
 import { api } from './api.js';
-import { PLAN_STATUSES, STAGES, deviceId } from './config.js';
+import { STAGES, deviceId } from './config.js';
 import { readDeviceBase, readDeviceCopy, writeDeviceBase, writeDeviceCopy } from './device.js';
 import { cssEscape, escapeHtml, focusByKey, paint, uid } from './dom.js';
 import { AUTO_VIEW_ONLY_MS, createClock, minutesNow, readOverride, shouldBeOn, stripState, writeOverride } from './dayof.js';
@@ -1039,13 +1039,6 @@ const ACTION_HANDLERS = {
       link.remove();
       return;
     }
-    if (action === 'status') {
-      const next = PLAN_STATUSES[(PLAN_STATUSES.indexOf(store.plan.status) + 1) % PLAN_STATUSES.length];
-      store.setUi({ openMenu: null }, { regions: [] });
-      commit('plan.status', { status: next }, { regions: ['header'] });
-      clock.tick();
-      return;
-    }
     if (action === 'theme') {
       setTheme(store.ui.theme === 'dark' ? 'light' : 'dark');
       store.setUi({ openMenu: null });
@@ -1326,12 +1319,6 @@ document.addEventListener('submit', event => {
 });
 
 document.addEventListener('change', event => {
-  if (event.target.dataset?.action === 'status') {
-    commit('plan.status', { status: event.target.value }, { regions: ['header'] });
-    // Final is what turns the day-of view on, so the answer is re-read now
-    // rather than up to half a minute later.
-    clock.tick();
-  }
 });
 
 /**
