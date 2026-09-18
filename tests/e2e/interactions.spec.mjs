@@ -981,6 +981,39 @@ test('the collapsed title fades into an empty cell without resizing the bar', as
   await expect(page.locator('.collapsed-title')).toContainText('8:00 AM');
 });
 
+/**
+ * The handover lands on everything already stuck to the top of the screen, not
+ * on the bar alone. Measured from the bar, the title slid under whatever was
+ * pinned beneath it and stayed out of sight for that bar's whole height before
+ * the top bar took it over.
+ */
+test('the title hands over at the bottom of the furniture, not the bar', async ({ page, server }) => {
+  const many = Array.from({ length: 10 }, (_, i) =>
+    activity(`a${i}`, T(8) + i * 60, 45, { title: `Activity ${i}`, people: ['Photographer'] }));
+  await server.seed({ plan: seedPlan({ activities: many }) });
+  await signInAndWaitForPlan(page);
+
+  // A filter pins a bar under the top bar, which is one more thing the title
+  // goes behind on its way out.
+  await page.locator('.filter-chip', { hasText: 'Photographer' }).click();
+  await expect(page.locator('.pinned-bar--filter')).toBeVisible();
+
+  const inset = await page.evaluate(() => Math.round(
+    [...document.querySelectorAll('.topbar, .live-strip, .pinned-bar')]
+      .reduce((total, node) => total + node.getBoundingClientRect().height, 0)));
+  const bar = await page.locator('.topbar').evaluate(node => Math.round(node.getBoundingClientRect().height));
+  expect(inset, 'the filter bar is part of what the title disappears behind').toBeGreaterThan(bar);
+
+  // Just past the bar but still above the filter bar: the title is on screen,
+  // so the bar must not have taken it over yet.
+  await page.evaluate(value => window.scrollTo(0, value), bar - 20);
+  await expect(page.locator('.topbar')).not.toHaveClass(/is-collapsed/);
+
+  // Once it is under the filter bar as well, it hands over.
+  await page.evaluate(value => window.scrollTo(0, value), inset + 40);
+  await expect(page.locator('.topbar')).toHaveClass(/is-collapsed/);
+});
+
 test('back clears an open-time selection instead of leaving the app', async ({ page, server }) => {
   await server.seed({ plan: seedPlan({ activities: [
     activity('a', T(10), 60, { title: 'Portraits' }),

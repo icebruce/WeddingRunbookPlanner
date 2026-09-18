@@ -76,22 +76,33 @@ function dayOfControls(ui) {
  * changes — whereas the span moves every time the first or last activity does,
  * which makes it the half of "when" worth keeping in view. A plan with nothing
  * in it has no span yet, so it falls back to the date.
+ *
+ * On the day there is no large title to take over from (D34): the strip is the
+ * day's header and the page below it is the plan itself, so this is shown
+ * outright and is the page's own `h1` rather than a copy of one — which is why
+ * it is not hidden from a screen reader there. The span is desktop-only in that
+ * mode: on a phone the bar is also carrying the mode pill and Edit, and one
+ * line of title is what is left over.
  */
-function collapsedTitle(plan) {
+function collapsedTitle(plan, dayOf) {
   const { summary } = buildSchedule(plan);
   const detail = summary.count
     ? `${formatTime(summary.start)} – ${formatTime(summary.end)}`
     : shortPlanDate(plan.date);
-  return `<span class="collapsed-title" aria-hidden="true"><b>${escapeHtml(plan.title)}</b><small>${escapeHtml(detail)}</small></span>`;
+  const body = `<b>${escapeHtml(plan.title)}</b><small>${escapeHtml(detail)}</small>`;
+  if (dayOf) return `<h1 class="collapsed-title collapsed-title--static">${body}</h1>`;
+  return `<span class="collapsed-title" aria-hidden="true">${body}</span>`;
 }
 
 export function renderHeader({ plan, ui }) {
-  // Empty at rest. The large title sits immediately below the bar, and naming
-  // the plan directly above its own title said the same thing twice — so the
-  // cell holds nothing until the title scrolls away and takes its place. The
-  // planner name is still on the sign-in screen, the print header and in Plan
-  // settings, which is where it is asked for rather than merely seen.
-  const title = `<div class="topbar-title">${collapsedTitle(plan)}</div>`;
+  // Empty at rest while the plan is being built. The large title sits
+  // immediately below the bar, and naming the plan directly above its own title
+  // said the same thing twice — so the cell holds nothing until the title
+  // scrolls away and takes its place. On the day there is no title below to
+  // duplicate, so the cell carries it from the start. The planner name is still
+  // on the sign-in screen, the print header and in Plan settings, which is
+  // where it is asked for rather than merely seen.
+  const title = `<div class="topbar-title">${collapsedTitle(plan, Boolean(ui.dayOf))}</div>`;
 
   if (ui.dayOf) {
     return `${title}<div class="topbar-actions">${dayOfControls(ui)}${appMenu(ui.openMenu === 'app', ui)}</div>`;

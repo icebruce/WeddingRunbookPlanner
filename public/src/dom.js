@@ -88,13 +88,31 @@ export function watchCollapsedTitle(root) {
     for (const observer of observers) observer.disconnect();
     observers.length = 0;
 
-    const heading = root.querySelector('.planner-heading h1');
     const topbar = root.querySelector('.topbar');
-    if (!heading || !topbar) return;
+    if (!topbar) return;
 
-    // The margin is the bar's own height, so the title hands over exactly as it
-    // goes under it — 52 px on a phone, 62 px on a desktop.
-    const barHeight = Math.round(topbar.getBoundingClientRect().height);
+    const heading = root.querySelector('.planner-heading h1');
+    // On the day there is no large title to hand over from: the bar carries the
+    // title outright (D34). Nothing collapses, so the state is cleared rather
+    // than left wherever the last scroll in planning mode put it.
+    if (!heading) {
+      topbar.classList.remove('is-collapsed');
+      return;
+    }
+
+    // The line is the bottom of everything already stuck to the top of the
+    // screen, not the bar alone. Measured from the bar it was right only while
+    // the bar was the only thing up there: on the day the live strip sits under
+    // it, so the title slid behind the strip and stayed hidden for the strip's
+    // whole height before the bar took it over — a stretch of scrolling with
+    // the title nowhere at all. Summed here rather than read from a custom
+    // property so that a share link, which has a strip of its own, gets the
+    // same answer without app.js having measured first.
+    let furniture = 0;
+    for (const node of root.querySelectorAll('.topbar, .live-strip, .pinned-bar')) {
+      furniture += node.getBoundingClientRect().height;
+    }
+    const barHeight = Math.round(furniture) || Math.round(topbar.getBoundingClientRect().height);
     const watch = (inset, collapsedWhenHidden) => {
       const observer = new IntersectionObserver(([entry]) => {
         if (entry.isIntersecting === collapsedWhenHidden) return;
@@ -103,7 +121,7 @@ export function watchCollapsedTitle(root) {
       observer.observe(heading);
       observers.push(observer);
     };
-    // Going under the bar collapses it; coming back out ten pixels below
+    // Going under the furniture collapses it; coming back out ten pixels below
     // restores it. Each observer only ever acts in its own direction.
     watch(barHeight, false);
     watch(Math.max(0, barHeight - HANDOVER_BAND), true);

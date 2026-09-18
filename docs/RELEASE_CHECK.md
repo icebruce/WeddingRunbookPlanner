@@ -69,6 +69,7 @@ rebuilt by grep rather than by reading.
 | D22 | `unit/auth.test.mjs`, `e2e/security.spec.mjs` (with F28) |
 | D23 | `e2e/gestures.spec.mjs` |
 | D24 | `e2e/features.spec.mjs` |
+| D34 | `e2e/dayof.spec.mjs`, `e2e/interactions.spec.mjs` |
 | D25 | `e2e/timeline.spec.mjs` |
 
 ## Findings

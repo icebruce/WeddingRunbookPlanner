@@ -358,3 +358,83 @@ test('reduced motion stops the pulse', async ({ page, server }) => {
   const animation = await strip(page).locator('.live-dot').evaluate(node => getComputedStyle(node).animationName);
   expect(animation).toBe('none');
 });
+
+/**
+ * D34 — on the day the title lives in the top bar.
+ *
+ * The large title used to sit under the strip, which meant it handed over to
+ * the bar *behind* the strip: it slid out of sight, stayed gone for the whole
+ * height of the strip, and only then reappeared in the bar. There is nothing to
+ * hand over from now.
+ */
+test('D34: the title is in the top bar and not on the page', async ({ page, server }) => {
+  await openAt(page, server, at(13, 0));
+  await expect(strip(page)).toBeVisible();
+
+  await expect(page.locator('.planner-heading h1')).toHaveCount(0);
+  await expect(page.locator('.summary')).toHaveCount(0);
+
+  // Shown outright, not faded in, and it is the page's own heading rather than
+  // a copy of one — so it is not hidden from a screen reader.
+  const title = page.locator('.collapsed-title--static');
+  await expect(title).toBeVisible();
+  await expect(title).toContainText('Wedding Day');
+  expect(await title.evaluate(node => node.tagName)).toBe('H1');
+  expect(await title.evaluate(node => Number(getComputedStyle(node).opacity))).toBe(1);
+  await expect(page.locator('.topbar h1')).toHaveCount(1);
+
+  // The span is desktop-only: on a phone the bar is also carrying the mode
+  // pill and Edit.
+  const span = title.locator('small');
+  expect(await span.evaluate(node => getComputedStyle(node).display))
+    .toBe(isPhoneLayout(page) ? 'none' : 'block');
+
+  // Switching back gives the page its title and summary again.
+  await page.locator('[data-action="menu"][data-menu="app"]').click();
+  await page.locator('[data-menu-action="day-of"]').click();
+  await expect(page.locator('.planner-heading h1')).toHaveText('Wedding Day');
+  await expect(page.locator('.summary-meta')).toBeVisible();
+});
+
+/**
+ * The strip is a band of its own tint with its own hairline along the bottom.
+ * A second rule between it and the bar put three edges inside sixty pixels and
+ * read as the bar having grown one.
+ */
+test('D34: the bar does not draw a hairline against the strip', async ({ page, server }) => {
+  await openAt(page, server, at(13, 0));
+  await expect(strip(page)).toBeVisible();
+
+  const border = () => page.locator('.topbar').evaluate(node => getComputedStyle(node).borderBottomColor);
+  expect(await border()).toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await expect.poll(border, { timeout: 2000 }).toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+  // Nothing collapses, because there is no large title to collapse.
+  await expect(page.locator('.topbar')).not.toHaveClass(/is-collapsed/);
+
+  // The strip keeps its own boundary, so the plan is still shown passing under
+  // something rather than under nothing.
+  const stripBorder = await strip(page).evaluate(node => getComputedStyle(node).borderBottomWidth);
+  expect(Number.parseFloat(stripBorder)).toBeGreaterThan(0);
+});
+
+/** The plan needs its own gap from the strip now that nothing else makes one. */
+test('D34: the plan clears the strip', async ({ page, server }) => {
+  await openAt(page, server, at(13, 0));
+  await expect(strip(page)).toBeVisible();
+
+  // Arriving at the day-of view scrolls the current time into the upper third,
+  // so the top of the plan has to be brought back to measure the gap at all.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const gap = await page.evaluate(() => {
+    const bottom = document.querySelector('.live-strip').getBoundingClientRect().bottom;
+    // The heading and summary sections are empty in view-only, so the first
+    // thing with a box of its own is what has to clear the strip.
+    const boxes = [...document.querySelector('.planner').children]
+      .map(node => node.getBoundingClientRect())
+      .filter(rect => rect.height > 0);
+    return Math.round(boxes[0].top - bottom);
+  });
+  expect(gap).toBeGreaterThanOrEqual(8);
+});

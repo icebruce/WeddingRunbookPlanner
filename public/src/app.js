@@ -388,9 +388,15 @@ function paintRegions(names) {
     paint(app.querySelector(`[data-region="${name}"]`), REGIONS[name](context));
   }
   settle?.();
-  if (names.includes('heading')) refreshCollapsedTitle();
   if (names.includes('toolbar')) measureBottomFurniture();
-  if (names.some(name => STICKY_REGIONS.has(name))) measureStickyInset();
+  // Measured before the handover is re-armed, because the handover lands on
+  // the inset. The strip and the pinned bars change height without the heading
+  // being touched — the strip's second line wraps, an overrun appears, a
+  // filter is turned on — and each of those moves the line the title hands
+  // over on, so they re-arm it too.
+  const stickyChanged = names.some(name => STICKY_REGIONS.has(name));
+  if (stickyChanged) measureStickyInset();
+  if (stickyChanged || names.includes('heading')) refreshCollapsedTitle();
   if (names.includes('filters')) watchChipOverflow();
   if (names.includes('timeline')) {
     gestures.bind();
@@ -444,10 +450,17 @@ function measureStickyInset() {
   // than it — a notch's safe-area inset is part of its padding — which left the
   // live strip and the pinned bars sticking somewhere inside it. They can only
   // be right if the number they use is measured.
+  //
+  // Floored rather than rounded. The bar is often a fractional number of
+  // pixels — a safe-area inset, browser zoom, a non-integer device pixel ratio
+  // — and rounding up parks the strip a fraction of a pixel below the bar,
+  // leaving a seam the plan scrolls through and making the bar's own hairline
+  // look doubled. Flooring tucks the strip that fraction *under* the bar
+  // instead, where nothing can see it: it sits below the bar in the stack.
   const topbar = app.querySelector('.topbar');
   if (topbar) {
     document.documentElement.style.setProperty(
-      '--topbar-height', `${Math.round(topbar.getBoundingClientRect().height)}px`);
+      '--topbar-height', `${Math.floor(topbar.getBoundingClientRect().height)}px`);
   }
 }
 
@@ -1401,7 +1414,10 @@ const clock = createClock(now => {
   // timeline; the countdown alone only changes the strip.
   const currentChanged = store.ui.strip?.current?.id !== changes.strip?.current?.id
     || store.ui.dayOf !== on;
-  store.setUi(changes, { regions: currentChanged ? ['header', 'heading', 'strip', 'timeline', 'toolbar'] : ['strip'] });
+  // `summary` is in the list because the summary is not shown on the day
+  // (D34) — without it, turning day-of on left the date and the open/conflict
+  // links sitting under the strip from the last planning paint.
+  store.setUi(changes, { regions: currentChanged ? ['header', 'heading', 'summary', 'strip', 'timeline', 'toolbar'] : ['strip'] });
   // The time line and the live progress bar move on every tick, not only when
   // one activity hands over to the next — without this they stood still for
   // the whole of a two-hour reception while the strip counted down beside
@@ -1506,6 +1522,9 @@ watchFit(app);
 window.addEventListener('resize', () => {
   measureBottomFurniture();
   measureStickyInset();
+  // Rotation changes both the bar's height and the strip's, and the handover
+  // line is measured from the pair of them.
+  refreshCollapsedTitle();
 });
 trackKeyboardInset();
 window.addEventListener('online', () => void saver.handleOnline());

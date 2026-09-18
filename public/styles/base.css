@@ -65,11 +65,23 @@ svg.icon { width: 1.05em; height: 1.05em; fill: none; stroke: currentColor; stro
 }
 .topbar.is-collapsed { border-bottom-color: var(--hair); }
 
+/*
+ * Except on the day, where what is passing underneath is the live strip and
+ * not the plan. The strip is a band of its own tint with its own hairline
+ * along the bottom, so a second rule between it and the bar put three edges
+ * inside sixty pixels and read as the bar having grown one. The strip owns the
+ * boundary; the tint change is the seam between the two.
+ */
+#app:has(.live-strip) .topbar.is-collapsed { border-bottom-color: transparent; }
+
 .brand { display: inline-flex; align-items: center; gap: 9px; color: var(--ink); text-decoration: none; font-family: ui-serif, Georgia, "Times New Roman", serif; font-size: 18px; letter-spacing: -.015em; }
 
 .brand .icon { width: 21px; height: 21px; color: var(--brand); stroke-width: 1.45; }
 
-.topbar-actions { display: flex; align-items: center; gap: 8px; }
+/* `flex: none` so the title is the side that gives way when the bar runs out
+   of room. The controls have to stay their full tappable size; a title can
+   ellipsise and still say which day this is. */
+.topbar-actions { display: flex; align-items: center; gap: 8px; flex: none; }
 
 /* The save state is the one place the app admits it has not stored something,
    so it is shown at every width. It used to be hidden below 760 px (F23). */
@@ -185,7 +197,9 @@ body.is-reordering { user-select: none; cursor: grabbing; }
 @media (min-width: 721px) {
   .topbar { padding: 9px 28px; }
   .planner-add { display: inline-flex; }
-  .planner-add-wrap { display: block; text-align: right; }
+  /* `margin-left: auto` rather than relying on `space-between`: on the day the
+     heading has no title beside it, and a lone add button would sit left. */
+  .planner-add-wrap { display: block; text-align: right; margin-left: auto; }
   .mobile-add { display: none; }
 }
 
@@ -384,6 +398,18 @@ body.is-moving { cursor: grabbing; }
   border-bottom: .5px solid var(--hair);
 }
 
+/*
+ * On the day the heading and the summary are gone, so the plan would start
+ * flush against the strip — and a top margin on whatever comes first collapses
+ * straight out of `.planner`, which has no padding to catch it. This is that
+ * gap, and being padding it catches the margin too.
+ *
+ * The chip row gives up its own top margin here so that the gap is the same 20
+ * px whether the plan has people in it or starts at the timeline.
+ */
+#app:has(.live-strip) .planner { padding-top: 20px; }
+#app:has(.live-strip) .filter-chips { margin-top: 0; }
+
 /* ---- the live strip ------------------------------------------------------ */
 
 .live-strip {
@@ -519,9 +545,31 @@ body.is-moving { cursor: grabbing; }
    anything that resizes the bar at the handover is the one thing a sticky
    title must not do. */
 .topbar-title { display: grid; align-items: center; min-width: 0; height: 34px; }
-.topbar-title > * { grid-area: 1 / 1; align-self: center; transition: opacity 160ms var(--ease-out), transform 160ms var(--ease-out); }
+/* A grid item is `min-width: auto` by default, which is wide enough for its
+   longest word and takes the cell with it. Zero is what lets the lines below
+   ellipsise instead of pushing the controls off the bar. */
+.topbar-title > * { grid-area: 1 / 1; align-self: center; min-width: 0; transition: opacity 160ms var(--ease-out), transform 160ms var(--ease-out); }
 
 .collapsed-title { display: flex; flex-direction: column; justify-content: center; line-height: 1.15; opacity: 0; transform: translateY(2px); pointer-events: none; }
+.collapsed-title b, .collapsed-title small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .collapsed-title b { font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
 .collapsed-title small { color: var(--soft); font-size: 12px; font-variant-numeric: tabular-nums; }
 .topbar.is-collapsed .collapsed-title { opacity: 1; transform: translateY(0); pointer-events: auto; }
+
+/*
+ * The day-of title (D34). There is no large title below to hand over from, so
+ * it is simply there — no fade, nothing to trigger, and the bar's left cell is
+ * never empty on the one day the app is read rather than built.
+ *
+ * It is the page's `h1` in that mode, hence the type reset: the size is the
+ * same 17/650 as the collapsed title it replaces, because it is the same thing
+ * arriving by a different route.
+ */
+.collapsed-title--static { margin: 0; font-size: inherit; font-weight: inherit; opacity: 1; transform: none; pointer-events: auto; }
+/* Phone: title only. The bar is also carrying the mode pill and Edit, and at
+   360 px the span is what has to give. Desktop has the width for it, and a
+   62 px bar rather than 52 to put it in. */
+.collapsed-title--static small { display: none; }
+@media (min-width: 721px) {
+  .collapsed-title--static small { display: block; }
+}

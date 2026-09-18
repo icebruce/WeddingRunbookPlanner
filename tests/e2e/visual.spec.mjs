@@ -99,10 +99,15 @@ async function settle(page) {
   await expect.poll(() => page.evaluate(() => {
     const heading = document.querySelector('.planner-heading h1');
     const topbar = document.querySelector('.topbar');
+    // No large title on the day: the bar carries it outright, nothing hands
+    // over, and there is nothing to wait for.
     if (!heading || !topbar) return true;
-    const bar = topbar.getBoundingClientRect().height;
+    // The handover lands at the bottom of everything stuck to the top of the
+    // screen, which is more than the bar as soon as a filter is pinned.
+    const inset = [...document.querySelectorAll('.topbar, .live-strip, .pinned-bar')]
+      .reduce((total, node) => total + node.getBoundingClientRect().height, 0);
     const rect = heading.getBoundingClientRect();
-    const underTheBar = rect.bottom <= bar || rect.top >= window.innerHeight;
+    const underTheBar = rect.bottom <= inset || rect.top >= window.innerHeight;
     return topbar.classList.contains('is-collapsed') === underTheBar;
   })).toBe(true);
 }
