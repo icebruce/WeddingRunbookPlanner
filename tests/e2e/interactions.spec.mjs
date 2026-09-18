@@ -72,15 +72,26 @@ test('a toast can be swiped away', async ({ page, server }) => {
   await page.locator('.toolbar [data-action="lock"]').click();
   const toast = page.locator('.toast');
   await expect(toast).toBeVisible();
-  const drag = async (dx, dy) => {
-    // Re-read it each time, and wait for it to stop: the first drag ends off
-    // the toast, which counts as a click outside the selection and takes the
-    // toolbar away — and the toast floats above whatever occupies the bottom
-    // of the screen, so it slides 44 px down to sit above the + instead. A box
-    // read while it is still sliding is 44 px stale by the time the pointer
-    // lands on it, which puts the press above the toast and starts no swipe at
-    // all; the toast then stays up and the failure reads as a dismissal that
-    // did not work.
+  /**
+   * Drag the toast, and wait for the page to have received it.
+   *
+   * `page.mouse.move` resolves once the driver has queued the input, not once
+   * the page has been given it. The ten moves of a drag arrive at whatever rate
+   * a loaded runner manages, and one move is five pixels — under the six-pixel
+   * slop, so the swipe has not started yet and a fixed wait can expire between
+   * the first move and the second. That is what made this flaky: the events on
+   * a failing run were pointerdown at clientX 46 and a single pointermove at
+   * 51, and nothing had gone wrong except the asking.
+   *
+   * So the sideways drag waits for the offset the page itself records to reach
+   * where the pointer was sent, rather than for a duration.
+   */
+  const drag = async (dx, dy, { swipes }) => {
+    // Re-read the box each time, and wait for it to stop moving: the first drag
+    // ends off the toast, which counts as a click outside the selection and
+    // takes the toolbar away — and the toast floats above whatever occupies the
+    // bottom of the screen, so it slides 44 px down to sit above the + instead.
+    // A box read mid-slide is 44 px stale by the time the pointer lands on it.
     const box = await restingBox(toast);
     const x = box.x + 30;
     const y = box.y + box.height / 2;
@@ -88,27 +99,31 @@ test('a toast can be swiped away', async ({ page, server }) => {
     await page.mouse.down();
     await page.mouse.move(x + dx / 3, y + dy / 3, { steps: 4 });
     await page.mouse.move(x + dx, y + dy, { steps: 6 });
-    // The move promise resolves once the driver has queued the input, not once
-    // the page's own pointermove handler has run — under CI load the release
-    // can overtake it, so onSwipeRelease sees `moved` still false and the swipe
-    // reads as a tap. Give the handler a turn before letting go.
-    await page.waitForTimeout(50);
-    const dragging = await toast.evaluate(node => node.classList.contains('is-dragging'));
+
+    const offset = () => toast.evaluate(node =>
+      Number.parseFloat(node.style.getPropertyValue('--toast-drag')) || 0);
+    if (swipes) {
+      await expect.poll(offset, { message: 'the toast followed the pointer', timeout: 5_000 })
+        .toBeGreaterThanOrEqual(dx - 2);
+    } else {
+      // Absence cannot be waited for, only given a chance to show up. The real
+      // statement about a downward drag is the one after the release: the toast
+      // is still there.
+      await page.waitForTimeout(150);
+      expect(await offset(), 'a downward drag moved the toast sideways').toBe(0);
+      expect(await toast.evaluate(node => node.classList.contains('is-dragging')),
+        'a downward drag was taken for a swipe').toBe(false);
+    }
     await page.mouse.up();
-    return dragging;
   };
 
   // Down is the one direction that is nearly free — the toast is already at
   // the bottom of the screen — so it is not a dismissal.
-  await drag(0, 60);
+  await drag(0, 60, { swipes: false });
   await expect(toast).toBeVisible();
 
-  // Sideways is. The toast must have taken the gesture first: a press that
-  // missed it would leave it up for a reason that has nothing to do with the
-  // rule being tested, so that is asserted by name rather than read off the
-  // toast still being there.
-  const dragging = await drag(60, 0);
-  expect(dragging, 'the press landed on the toast and started a swipe').toBe(true);
+  // Sideways is.
+  await drag(60, 0, { swipes: true });
   await expect(toast).toBeHidden({ timeout: 2000 });
 });
 
