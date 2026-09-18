@@ -233,7 +233,7 @@
    thing, leaving nothing for the tap the block itself still needs to take. */
 .open-time .handle::before { width: max(100%, 32px); height: max(100%, 32px); }
 
-.summary { margin: 8px 0 0; }
+.summary { margin: 8px 0 0; padding: 0 4px; }
 
 /*
  * The day's "when" — the date and the hours it runs — as a caption under the
