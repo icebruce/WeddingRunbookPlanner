@@ -358,20 +358,48 @@ function cardLayout(page, id) {
   }, [id, MEASURED]);
 }
 
-/** The fit pass runs on a frame, and a webfont arriving runs it again. */
+/**
+ * The card's own box, which is what the fit pass decides against.
+ *
+ * A comparison is only worth making between two settled cards: a card whose
+ * body overflows by a whole row has not been fitted yet, and every row in it
+ * is at a position the fit pass is about to take away. Reporting the box with
+ * the failure is what tells those two apart.
+ */
+function cardMetrics(page, id) {
+  return page.evaluate(activityId => {
+    const card = document.querySelector(`.card[data-activity-id="${activityId}"]`);
+    const body = card.querySelector('.card-body');
+    return {
+      card: card.offsetHeight,
+      client: body.clientHeight,
+      scroll: body.scrollHeight,
+      clipped: card.classList.contains('is-clipped')
+    };
+  }, id);
+}
+
+/** The fit pass runs on a frame, so give it one and a margin. */
 async function fitted(page) {
-  await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(150);
 }
 
 async function expectSelectionMovesNothing(page, ids) {
   for (const id of ids) {
     const card = page.locator(`.card[data-activity-id="${id}"]`);
+    const was = await cardMetrics(page, id);
     const before = await cardLayout(page, id);
     await card.click({ position: { x: 20, y: 6 } });
     await expect(card).toHaveClass(/is-selected/);
     await fitted(page);
-    expect(await cardLayout(page, id), id).toEqual(before);
+    const now = await cardMetrics(page, id);
+    // The box goes in the message rather than an assertion of its own: a card
+    // can settle with a little overflow left (the title and the warning never
+    // drop), so the number is evidence, not an invariant. What it tells a
+    // failure is whether the rows moved or whether one of the two snapshots
+    // was taken before the fit pass had run at all.
+    const note = `${id} — before ${JSON.stringify(was)} after ${JSON.stringify(now)}`;
+    expect(await cardLayout(page, id), note).toEqual(before);
     await page.keyboard.press('Escape');
     await fitted(page);
   }
