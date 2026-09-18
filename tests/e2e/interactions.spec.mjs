@@ -113,7 +113,24 @@ test('a toast can be swiped away', async ({ page, server }) => {
   // missed it would leave it up for a reason that has nothing to do with the
   // rule being tested, so that is asserted by name rather than read off the
   // toast still being there.
+  //
+  // The pointer events the second gesture actually produces are recorded too.
+  // The press lands on the toast and the swipe still does not start, and the
+  // same drag with no drag before it does start one, so what the first drag
+  // leaves behind is the question and these are the only things that can
+  // answer it.
+  await page.evaluate(() => {
+    window.__pointerLog = [];
+    for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) {
+      window.addEventListener(type, event => {
+        if (window.__pointerLog.length > 6) return;
+        const target = event.target;
+        window.__pointerLog.push(`${type}#${event.pointerId}/${event.pointerType}${event.isPrimary ? '' : ' secondary'}@${Math.round(event.clientX)} on ${target instanceof Element ? target.tagName.toLowerCase() : target}`);
+      }, true);
+    }
+  });
   const sideways = await drag(60, 0);
+  sideways.events = await page.evaluate(() => window.__pointerLog);
   expect(sideways.dragging, `the press landed on the toast and started a swipe — ${JSON.stringify(sideways)}`).toBe(true);
   await expect(toast).toBeHidden({ timeout: 2000 });
 });
