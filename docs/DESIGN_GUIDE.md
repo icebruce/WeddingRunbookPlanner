@@ -187,7 +187,7 @@ Same resize handles as a card (§4.3: 34×9 hollow `--sel` capsule), astride its
 Floating, 12 px from sides, 30 px above the home indicator, 24 px radius, glass white. Context line 13 (`**Title** · time`), optional hidden-details line 13 `--soft` (single line, ellipsis). Five equal buttons 54 px tall: 22 px icon over 12 px label; Delete in `--bad`. Replaces the + button while a card is selected.
 
 ### 4.6 Live strip
-Sticky under the top bar, full width, `--live-tint` at 94 % with blur, hairline `rgba(30,158,82,.18)` bottom border, no radius, no shadow. It is the day's header: the large title and the summary line are not shown while it is (D34), and the plan starts 20 px below it.
+Sticky under the top bar, full width, `--live-tint` at 94 % with blur, no radius, no shadow. Card-style border, top and bottom: `--live` at 45 % (darker than the tint behind it, so the band reads as a tinted card rather than floating text) — the top edge is the only seam between it and the bar above, which draws none of its own. It is the day's header: the large title and the summary line are not shown while it is (D34), and the plan starts 20 px below it.
 Phone (≈58 px): line 1 — pulsing dot 8 px, `NOW` (12/700 caps `--live`), activity (16/650, ellipsis), `23 min left` right-aligned (14/600 `--live`); line 2 — indented 16 px, `Next **1:55 PM** Arrival & Buffer` (14 `--soft`). 2 px progress line along the bottom (`--live-dot` on 12 % green).
 Desktop (44 px, one line): dot, `LIVE · 1:32 PM`, activity, `23 min left · ends 1:55 PM`, right-aligned `Next 1:55 PM Arrival & Buffer · location`.
 Pulse: `box-shadow` ring expanding 0 → 7 px and fading, 1.8 s, infinite; disabled with reduced motion.
