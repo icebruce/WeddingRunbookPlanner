@@ -4,6 +4,11 @@ A private, shared, one-day wedding planner: build the timeline on a phone or a
 laptop, and run the day from it. HTML, CSS and vanilla JavaScript — no
 framework, no bundler, no build step, and no runtime dependencies.
 
+Two people edit it behind one password, and their changes are merged rather
+than fought over. Everyone else — the photographer, the MC, the venue — gets a
+revocable read-only link that opens a page with no editor on it, and on the
+wedding day opens to what is happening now.
+
 The specifications in `docs/` are the source of truth:
 
 | Document | Decides |
