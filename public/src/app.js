@@ -183,6 +183,12 @@ let scrolledToNow = false;
 let dialogOpener = null;
 /** The pending "unhighlight" timer from the last summary-link jump. */
 let highlightTimer = null;
+/**
+ * How long the toolbar plays its exit before the + actually takes its place
+ * (DESIGN_GUIDE 4.7: toolbar in/out, 180ms). Matches `--dur-base`.
+ */
+const TOOLBAR_EXIT_MS = 180;
+let toolbarExitTimer = null;
 
 function showLoading() {
   app.innerHTML = '';
@@ -278,6 +284,29 @@ function repaint(regions = ['all']) {
   syncSheet();
 }
 
+/**
+ * Deselecting swaps the toolbar for the + instantly everywhere else in the
+ * app: `paint()` is a straight `innerHTML` replace. The toolbar is the one
+ * region with an exit of its own (DESIGN_GUIDE 4.7), so leaving it is held
+ * back long enough to play it — the old toolbar stays put, `is-leaving`, and
+ * the actual swap to the + happens after.
+ */
+function paintToolbar(context) {
+  const container = app.querySelector('[data-region="toolbar"]');
+  clearTimeout(toolbarExitTimer);
+  const outgoing = container.querySelector('.toolbar:not(.is-leaving)');
+  const html = REGIONS.toolbar(context);
+  if (outgoing && !html.includes('class="toolbar')) {
+    outgoing.classList.add('is-leaving');
+    toolbarExitTimer = setTimeout(() => {
+      paint(container, html);
+      measureBottomFurniture();
+    }, TOOLBAR_EXIT_MS);
+    return;
+  }
+  paint(container, html);
+}
+
 function paintRegions(names) {
   const context = { plan: store.plan, ui: store.ui };
   // The timeline is rebuilt wholesale, so the only record of where everything
@@ -285,6 +314,7 @@ function paintRegions(names) {
   // difference straight after, before anything else gets a chance to scroll.
   const settle = names.includes('timeline') ? captureSettle() : null;
   for (const name of names) {
+    if (name === 'toolbar') { paintToolbar(context); continue; }
     paint(app.querySelector(`[data-region="${name}"]`), REGIONS[name](context));
   }
   settle?.();
