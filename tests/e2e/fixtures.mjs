@@ -82,6 +82,9 @@ export const test = base.extend({
     // Versions live in their own store, so resetting the plan alone would let
     // one test's versions turn up in the next one.
     const versionsFile = `${dataFile}.versions.json`;
+    // The share link has its own store too, and a token minted by one test is
+    // still live for the next one in the same worker unless it is cleared.
+    const shareFile = `${dataFile}.share.json`;
 
     const readFile = async file => {
       try {
@@ -96,6 +99,7 @@ export const test = base.extend({
       baseURL,
       dataFile,
       versionsFile,
+      shareFile,
 
       /** Replace the whole stored state. Call before navigating. */
       async seed({ plan = seedPlan(), revision = 1, versions = [], updatedAt = new Date().toISOString(), updatedBy = null, legacyEnvelope = false } = {}) {
@@ -104,15 +108,18 @@ export const test = base.extend({
         if (legacyEnvelope) envelope.versions = versions;
         await fs.writeFile(dataFile, JSON.stringify(envelope, null, 2), 'utf8');
         await fs.writeFile(versionsFile, JSON.stringify({ versions: legacyEnvelope ? [] : versions }, null, 2), 'utf8');
+        await fs.rm(shareFile, { force: true });
       },
 
       /** Read the stored envelope back, to assert what the server actually kept. */
       read: () => readFile(dataFile),
       readVersions: async () => (await readFile(versionsFile))?.versions ?? [],
+      readShare: () => readFile(shareFile),
 
       async clear() {
         await fs.rm(dataFile, { force: true });
         await fs.rm(versionsFile, { force: true });
+        await fs.rm(shareFile, { force: true });
       }
     });
 

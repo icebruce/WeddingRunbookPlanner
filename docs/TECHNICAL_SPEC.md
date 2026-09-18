@@ -111,7 +111,7 @@ type Plan = {
   timelineStart?: string | null; // HH:MM, 5-min, view only
   timelineEnd?: string | null;   // HH:MM, 5-min, view only; may be <= timelineStart (= next day)
   sunset?: string | null;        // HH:MM, any minute; null hides marker; default "16:19"
-  status: "Draft" | "Working" | "Confirming" | "Final";
+  timezone: string;         // IANA zone name, default "America/Toronto"; the venue's clock
   activities: Activity[];   // max 200
 };
 
@@ -128,7 +128,7 @@ type Activity = {
 };
 ```
 
-Migration: none required. Missing optional fields default (`sunset` "16:19", view range derived). Unknown fields are dropped on save. There is no `lockedStart`/`gapBefore` any more — an activity's position is always its own `start`, whether `locked` or not.
+Migration: none required. Missing optional fields default (`sunset` "16:19", `timezone` "America/Toronto", view range derived). `status` was removed (D31) and is dropped like any other unknown field — nothing reads it, and a stored plan still carrying it stays valid. Unknown fields are dropped on save. There is no `lockedStart`/`gapBefore` any more — an activity's position is always its own `start`, whether `locked` or not.
 
 ### 4.2 Storage envelope (Redis)
 
@@ -136,9 +136,12 @@ Migration: none required. Missing optional fields default (`sunset` "16:19", vie
 |---|---|
 | `wedding-planner:data:v1` | `{ revision, updatedAt, updatedBy, plan }` (versions removed from here) |
 | `wedding-planner:versions:v1` | `{ versions: Version[] }` (max 40) |
+| `wedding-planner:share:v1` | `{ token, createdAt }` — the current read-only link; replacing it revokes the old one |
 | `wedding-planner:rl:<ip>` | login attempt counter (TTL 15 min) |
 
-`Version = { id, name, createdAt, auto: boolean, summary: { count, start, end }, plan }`.
+`Version = { id, name, createdAt, auto: boolean, kind: "backup" | null, summary: { count, start, end }, plan }`.
+
+`kind: "backup"` marks a routine automatic backup, and is the only thing thinning touches. The plan envelope carries `autoSnapshotAt`; `savePlan` reads it off the envelope it is already writing rather than the versions list, so the six-hourly question costs no extra round trip on a save that happens every second while someone is working. The backup holds the plan the save replaced, and is written after the plan, never allowed to fail it — a stamp that moved without a backup behind it costs one window, not a retry on every save.
 Migration: on first read, if the data key still contains `versions`, move them to the versions key (atomic script) and drop the field.
 
 `updatedBy` is a random per-device id (stored on the device) used only to say “another device”.
@@ -279,7 +282,7 @@ change → markDirty(seq++) → debounce 650 ms → flush()
 flush(): if inFlight: return (flush again after)
          PUT /api/plan {plan, revision, deviceId}  (timeout 15 s)
   200 → revision = res.revision; savedSeq = sentSeq; state Saved; clear device draft if clean
-  409 → conflict dialog (current local plan, not a snapshot)
+  409 → three-way merge (`merge.js`) of base / local / latest; conflicts only, and only then, reach a dialog
   401 → keep plan + draft; show sign-in; after login: GET, then save or conflict
   400/413/422 → state Not saved; toast reason; no auto-retry until next change or manual retry
   offline / network / 5xx / timeout → state Offline or Not saved; retry after 2,4,8,16,30 s; also on 'online'
@@ -287,10 +290,12 @@ flush(): if inFlight: return (flush again after)
 
 - Only one request in flight. Successful save re-flushes if more changes arrived.
 - One error toast per failure episode.
-- **Device copy** (`localStorage`, key `wrp:v1:<planId>`): `{ plan, revision, dirty, savedAt }`, written after each local change and each successful load. Used as a read-only fallback when loading fails offline. Kept through a 401 so unsaved edits survive re-sign-in. Cleared only on explicit sign-out.
+- **Device copy** (`localStorage`, key `wrp:v1:<planId>`): `{ plan, revision, dirty, savedAt }`, written after each local change and each successful load. The merge ancestor lives beside it at `wrp:v1:base:<planId>` as `{ plan, revision }`, written only when the server confirms a version — never on the path of a keystroke. On load the copy is read **before** the loaded plan is written over it. Used as a read-only fallback when loading fails offline. Kept through a 401 so unsaved edits survive re-sign-in. Cleared only on explicit sign-out.
 - `pagehide` / `visibilitychange:hidden`: if dirty, send with `fetch(..., {keepalive:true})`.
 - `visibilitychange:visible` and a 60 s idle poll: `GET /api/plan?since=<revision>` (304-style `{unchanged:true}`); load newer plan only if not dirty.
-- Conflict choice: the side not chosen is saved as an automatic version (`auto:true`, name `Other device – <time>` or `My unsaved changes – <time>`).
+- Conflict choice: the side not chosen is saved as an automatic version (`auto:true`, name `Other device – <time>` or `My unsaved changes – <time>`), and the merge is re-run with `prefer` set to the answer rather than the choice being applied by a second route.
+
+**Merge (`merge.js`, pure).** `mergePlans(base, mine, theirs, { prefer })` → `{ plan, conflicts }`. Plan fields and activities (keyed by `id`, then field by field) each take the side that moved; both sides moving to the same value is agreement; both moving differently is a conflict, resolved by `prefer` and reported. A delete on one side and an edit on the other keeps the edit and reports it. Keys are enumerated from the three inputs rather than named, so a field added to the schema merges correctly the day it is added and a field removed does not come back.
 
 ---
 
@@ -311,6 +316,13 @@ All responses `Cache-Control: no-store`, JSON, `{ error: { code, message, field?
 | `DELETE /api/versions?id=` | ✓ same-origin | – | `204` |
 | `GET /api/template` | ✓ | – | `{ activities }` |
 | `GET /api/export` | ✓ | – | `Content-Disposition: attachment` plan JSON |
+| `GET /api/share` | ✓ | – | `{ share: { token, createdAt } }`; mints one on first ask |
+| `POST /api/share` | ✓ same-origin | – | `{ share }` with a new token; the old one stops working at once |
+| `GET /api/shared` | share token in `X-Share-Token` | – | `{ plan, updatedAt }`, or 404. Sets no cookie |
+
+**Read-only sharing.** The token is compared in constant time against the stored one and grants exactly one thing: reading the plan through `GET /api/shared`. It is not a session and no mutating route accepts it — "read-only" is which endpoints exist, not a role remembered in each of them. `public/share.html` + `src/share.js` render the plan with the shared region modules and `ui.viewOnly` fixed on; the editor's gestures, store and save pipeline are not loaded on that page at all. The token lives in the URL fragment (never sent to a server) and moves in a header; `hashchange` reloads, so a replacement link works in a tab still holding the old one.
+
+**View-only** is one predicate, `isViewOnly(ui)` in `dayof.js` — true on the day before Edit, and always on a shared page. It was previously re-derived in four renderers, two of which drew controls anyway: the stage pill was built as a button regardless of mode, and an open-time block kept its `+`.
 
 ### 11.1 Validation (`validate.js`)
 Shared rules from §4.1, applied on every write; returns the first failing field. Client uses the same module (served copy in `public/src/validate.js`, kept identical by a unit test).
@@ -340,6 +352,7 @@ Shared rules from §4.1, applied on every write; returns the first failing field
 - Rate limit (`ratelimit.js`): Upstash `INCR` + `EXPIRE 900` per IP (`x-forwarded-for` first entry) and a global ceiling (100 / 15 min). Local file mode: in-memory.
 - Headers (`vercel.json`): CSP `default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'`, `X-Content-Type-Options`, `Referrer-Policy: same-origin`, `Permissions-Policy`, `X-Robots-Tag: noindex`.
 - **Only `public/` is served** (F8). Seed/template data lives in `lib/server/seed-template.js`.
+- Share token: 24 random bytes, base64url. Held in the URL fragment so it never reaches a server in a URL; presented in `X-Share-Token`. Revoked by replacement. It is a bearer credential by design (D32): anyone holding the link can read the plan, which is the cost of “tap it and it works”.
 - Repo visibility: return to **private** once Claude Code has access (contains the template timeline).
 - Device copy contains the plan in `localStorage`; acceptable per decision D20; cleared on sign-out.
 

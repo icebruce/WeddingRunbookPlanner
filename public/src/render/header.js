@@ -1,6 +1,5 @@
 import { escapeHtml } from '../dom.js';
 import { icon } from '../icons.js';
-import { PLAN_STATUSES } from '../config.js';
 import { SAVE_STATES } from '../save.js';
 import { buildSchedule, formatTime } from '../schedule.js';
 import { shortPlanDate } from './timeline.js';
@@ -22,49 +21,34 @@ export function saveIndicator(saveState) {
   return `<span class="save-indicator save-indicator--${saveState}" role="status"><span class="save-dot"></span>${label}</span>`;
 }
 
-function statusControl(plan) {
-  return `<label class="status-control">
-    <span class="sr-only">Plan status</span>
-    <span class="status-dot" aria-hidden="true"></span>
-    <select data-action="status" data-focus-key="status" aria-label="Plan status">
-      ${PLAN_STATUSES.map(status => `<option ${status === plan.status ? 'selected' : ''}>${escapeHtml(status)}</option>`).join('')}
-    </select>
-    ${icon('chevron')}
-  </label>`;
-}
-
 const MENU_ITEMS = [
   { action: 'day-of', label: 'Day-of view', glyph: 'live', switch: true },
   { action: 'theme', label: 'Dark appearance', glyph: 'moon', switch: true },
-  { action: 'status', label: 'Status', glyph: 'flag', phoneOnly: true },
-  { action: 'print', label: 'Print or save PDF', glyph: 'print', group: true },
+  { action: 'share', label: 'Share read-only link', glyph: 'link', group: true },
+  { action: 'print', label: 'Print or save PDF', glyph: 'print' },
   { action: 'export', label: 'Export backup', glyph: 'download' },
   { action: 'versions', label: 'Version history', glyph: 'history' },
   { action: 'settings', label: 'Plan settings', glyph: 'settings' },
   { action: 'logout', label: 'Sign out', glyph: 'logout', group: true }
 ];
 
-function menuRow(item, plan, ui) {
+function menuRow(item, ui) {
   const on = item.action === 'day-of' ? Boolean(ui.dayOf) : item.action === 'theme' ? ui.theme === 'dark' : false;
-  const trailing = item.switch
-    ? `<span class="menu-switch ${on ? '' : 'is-off'}"></span>`
-    : item.action === 'status'
-      ? `<small>${escapeHtml(plan.status)}</small>`
-      : '';
+  const trailing = item.switch ? `<span class="menu-switch ${on ? '' : 'is-off'}"></span>` : '';
 
-  return `<button type="button" role="menuitem" class="${item.group ? 'is-grouped' : ''} ${item.phoneOnly ? 'is-phone-only' : ''}"
+  return `<button type="button" role="menuitem" class="${item.group ? 'is-grouped' : ''}"
     data-action="menu-action" data-menu-action="${item.action}" ${item.switch ? `aria-pressed="${on}"` : ''}>
     ${icon(item.glyph)}<span>${escapeHtml(item.label)}</span>${trailing}</button>`;
 }
 
-function appMenu(open, openMenuUi) {
+function appMenu(open, ui) {
   // A <details> element cannot be closed from the outside, which is why Escape
   // and a click elsewhere used to leave the menu open (F26). A plain button
   // plus state can be closed by anything.
   return `<div class="app-menu ${open ? 'is-open' : ''}">
     <button type="button" class="icon-button icon-button--outlined" data-action="menu" data-menu="app" data-focus-key="menu-app" aria-label="Open menu" aria-haspopup="menu" aria-expanded="${open}">${icon('menu')}</button>
     ${open ? `<div class="menu-popover" role="menu">
-      ${MENU_ITEMS.map(item => menuRow(item, openMenuUi.plan, openMenuUi)).join('')}
+      ${MENU_ITEMS.map(item => menuRow(item, ui)).join('')}
     </div>` : ''}
   </div>`;
 }
@@ -93,7 +77,7 @@ function dayOfControls(ui) {
  * which makes it the half of "when" worth keeping in view. A plan with nothing
  * in it has no span yet, so it falls back to the date.
  *
- * On the day there is no large title to take over from (D25): the strip is the
+ * On the day there is no large title to take over from (D34): the strip is the
  * day's header and the page below it is the plan itself, so this is shown
  * outright and is the page's own `h1` rather than a copy of one — which is why
  * it is not hidden from a screen reader there. The span is desktop-only in that
@@ -121,14 +105,13 @@ export function renderHeader({ plan, ui }) {
   const title = `<div class="topbar-title">${collapsedTitle(plan, Boolean(ui.dayOf))}</div>`;
 
   if (ui.dayOf) {
-    return `${title}<div class="topbar-actions">${dayOfControls(ui)}${appMenu(ui.openMenu === 'app', { ...ui, plan })}</div>`;
+    return `${title}<div class="topbar-actions">${dayOfControls(ui)}${appMenu(ui.openMenu === 'app', ui)}</div>`;
   }
 
   return `${title}
     <div class="topbar-actions">
       ${saveIndicator(ui.saveState)}
-      ${statusControl(plan)}
-      ${appMenu(ui.openMenu === 'app', { ...ui, plan })}
+      ${appMenu(ui.openMenu === 'app', ui)}
     </div>`;
 }
 

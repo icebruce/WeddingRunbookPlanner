@@ -108,18 +108,6 @@ svg.icon { width: 1.05em; height: 1.05em; fill: none; stroke: currentColor; stro
 
 @keyframes pulse { 50% { opacity: .35; } }
 
-.status-control { height: 36px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px 0 10px; border-radius: 999px; background: var(--fill); color: var(--ink-2); position: relative; }
-
-/* The select fills the pill, so the ring goes round the pill: an outline on
-   the select alone would be a rectangle inside a rounded shape (F25). */
-.status-control select { appearance: none; border: 0; outline: 0; background: transparent; padding: 0 18px 0 0; font-size: 12px; font-weight: 650; cursor: pointer; }
-
-.status-control:has(select:focus-visible) { outline: 2px solid var(--sel); outline-offset: 2px; }
-
-.status-control > .icon { position: absolute; right: 8px; width: 12px; height: 12px; pointer-events: none; }
-
-.status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--live); box-shadow: 0 0 0 3px var(--live-tint); }
-
 .icon-button { width: 36px; height: 36px; border: 0; border-radius: 10px; display: inline-grid; place-items: center; background: transparent; color: var(--soft); }
 
 .icon-button:hover { background: var(--surface-2); color: var(--ink); }
@@ -569,7 +557,7 @@ body.is-moving { cursor: grabbing; }
 .topbar.is-collapsed .collapsed-title { opacity: 1; transform: translateY(0); pointer-events: auto; }
 
 /*
- * The day-of title (D25). There is no large title below to hand over from, so
+ * The day-of title (D34). There is no large title below to hand over from, so
  * it is simply there — no fade, nothing to trigger, and the bar's left cell is
  * never empty on the one day the app is read rather than built.
  *

@@ -207,7 +207,7 @@ test('F15: the server rejects invalid plans with the field that failed', async (
 
   const cases = [
     [{ ...current.plan, title: '   ' }, 'title'],
-    [{ ...current.plan, status: 'Published' }, 'status'],
+    [{ ...current.plan, timezone: 'Mars/Olympus' }, 'timezone'],
     [{ ...current.plan, activities: [{ ...current.plan.activities[0], start: -5 }] }, 'activities[0].start'],
     [{ ...current.plan, coupleLabel: '' }, 'coupleLabel'],
     [{ ...current.plan, activities: [{ ...current.plan.activities[0], stage: 'after-party' }] }, 'activities[0].stage'],

@@ -66,3 +66,64 @@ export function focusByKey(root, key) {
   target.focus({ preventScroll: true });
   return true;
 }
+
+/**
+ * Once the large title has scrolled past, the top bar takes it over.
+ *
+ * Watched rather than measured on every scroll event, so it costs nothing
+ * while scrolling a long day — and watched *twice*, at two lines ten pixels
+ * apart. One boundary means that resting the scroll on the handover, where
+ * momentum and sub-pixel rounding leave it wandering back and forth across a
+ * single line, flips the title with it. Collapsing at the lower line and
+ * coming back only at the higher one gives the decision somewhere to sit.
+ *
+ * Returns a function that re-reads the page; call it after the regions that
+ * hold the heading and the bar have been repainted.
+ */
+const HANDOVER_BAND = 10;
+
+export function watchCollapsedTitle(root) {
+  const observers = [];
+  return () => {
+    for (const observer of observers) observer.disconnect();
+    observers.length = 0;
+
+    const topbar = root.querySelector('.topbar');
+    if (!topbar) return;
+
+    const heading = root.querySelector('.planner-heading h1');
+    // On the day there is no large title to hand over from: the bar carries the
+    // title outright (D34). Nothing collapses, so the state is cleared rather
+    // than left wherever the last scroll in planning mode put it.
+    if (!heading) {
+      topbar.classList.remove('is-collapsed');
+      return;
+    }
+
+    // The line is the bottom of everything already stuck to the top of the
+    // screen, not the bar alone. Measured from the bar it was right only while
+    // the bar was the only thing up there: on the day the live strip sits under
+    // it, so the title slid behind the strip and stayed hidden for the strip's
+    // whole height before the bar took it over — a stretch of scrolling with
+    // the title nowhere at all. Summed here rather than read from a custom
+    // property so that a share link, which has a strip of its own, gets the
+    // same answer without app.js having measured first.
+    let furniture = 0;
+    for (const node of root.querySelectorAll('.topbar, .live-strip, .pinned-bar')) {
+      furniture += node.getBoundingClientRect().height;
+    }
+    const barHeight = Math.round(furniture) || Math.round(topbar.getBoundingClientRect().height);
+    const watch = (inset, collapsedWhenHidden) => {
+      const observer = new IntersectionObserver(([entry]) => {
+        if (entry.isIntersecting === collapsedWhenHidden) return;
+        topbar.classList.toggle('is-collapsed', !entry.isIntersecting);
+      }, { rootMargin: `-${inset}px 0px 0px 0px`, threshold: 0 });
+      observer.observe(heading);
+      observers.push(observer);
+    };
+    // Going under the furniture collapses it; coming back out ten pixels below
+    // restores it. Each observer only ever acts in its own direction.
+    watch(barHeight, false);
+    watch(Math.max(0, barHeight - HANDOVER_BAND), true);
+  };
+}

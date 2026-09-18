@@ -1270,11 +1270,19 @@ test('a row that comes back during a resize is faded in, not popped', async ({ p
 });
 
 test('the now line eases between ticks rather than stepping', async ({ page, server }) => {
-  const now = new Date();
-  const minutes = now.getHours() * 60 + now.getMinutes();
+  // Both halves read the venue clock: the test runs in Node, which may be in
+  // any zone, while the day-of view turns on by the date at the wedding. Taking
+  // the date from one clock and the minute from another lands the now line on
+  // the wrong day whenever the two disagree.
+  const parts = {};
+  for (const part of new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Toronto', hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+  }).formatToParts(new Date())) parts[part.type] = part.value;
+
+  const minutes = (Number(parts.hour) % 24) * 60 + Number(parts.minute);
   await server.seed({ plan: seedPlan({
-    date: now.toISOString().slice(0, 10),
-    status: 'Final',
+    date: `${parts.year}-${parts.month}-${parts.day}`,
     activities: [activity('a', Math.max(0, minutes - 20), 90, { title: 'Happening now' })]
   }) });
   await signInAndWaitForPlan(page);

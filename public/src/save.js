@@ -117,15 +117,21 @@ export function createSavePipeline({
     sentSeq = dirtySeq;
     setState(pendingState());
 
+    // Held rather than re-read: what the server confirms is what was sent,
+    // and the caller keeps it as the base a later three-way merge measures
+    // both sides against. A plan is replaced, never mutated in place, so this
+    // reference still describes exactly what went over the wire.
+    const sending = getPlan();
+
     inFlight = (async () => {
       try {
-        const result = await save(getPlan(), currentRevision, deviceId);
+        const result = await save(sending, currentRevision, deviceId);
         currentRevision = result?.revision ?? currentRevision;
         savedSeq = Math.max(savedSeq, sentSeq);
         attempt = 0;
         episodeReported = false;
         blindSentAt = null;
-        onSaved({ revision: currentRevision, updatedAt: result?.updatedAt ?? null });
+        onSaved({ revision: currentRevision, updatedAt: result?.updatedAt ?? null, plan: sending });
         return { ok: true };
       } catch (error) {
         return { ok: false, error };
@@ -175,7 +181,7 @@ export function createSavePipeline({
       if (ourBlindWrite) {
         blindSentAt = null;
         currentRevision = latest.revision;
-        onSaved({ revision: currentRevision, updatedAt: latest.updatedAt ?? null });
+        onSaved({ revision: currentRevision, updatedAt: latest.updatedAt ?? null, plan: latest.plan ?? null });
         void flush();
         return;
       }

@@ -273,10 +273,11 @@ test('nothing is announced twice: only the toast and strip are live', async ({ p
 });
 
 /*
- * F25 — the status control and the day-of switch had no visible focus at all:
- * tabbing through the header, the ring simply vanished for two stops.
+ * F25 — the day-of switch had no visible focus at all: tabbing through the
+ * header, the ring simply vanished. (The status control, the other half of
+ * this finding, no longer exists — see D31.)
  */
-test('F25: every control shows where the focus is', async ({ page, server, isMobile }) => {
+test('F25: every control shows where the focus is', async ({ page, server }) => {
   await server.seed({ plan: plan() });
   await signInAndWaitForPlan(page);
 
@@ -287,18 +288,7 @@ test('F25: every control shows where the focus is', async ({ page, server, isMob
 
   // Tabbed to rather than focused by script: :focus-visible is about how the
   // focus was reached, and a ring that only appears for the mouse is the bug.
-  if (!isMobile) {
-    const status = page.locator('.status-control select');
-    // The bar's left is empty now, so tab in from the top of the document.
-    await page.evaluate(() => document.activeElement?.blur?.());
-    await tabTo(page, status, 12);
-    // The ring is on the pill, not on the select inside it.
-    const seen = await ring(page.locator('.status-control'));
-    expect(seen.width, 'the status control').toBeGreaterThanOrEqual(2);
-    expect(seen.style).not.toBe('none');
-    expect(seen.colour).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
-  }
-
+  //
   // The day-of switch lives in the menu, and is a button carrying a track.
   const opener = page.locator('[data-action="menu"][data-menu="app"]');
   await opener.focus();
