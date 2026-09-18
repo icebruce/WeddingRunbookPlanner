@@ -328,6 +328,76 @@ test('a card re-fits while it is being resized, not after', async ({ page, serve
   await page.mouse.up();
 });
 
+/**
+ * Selection is a ring and two handles. It is not a different card.
+ *
+ * The right padding that reserves the lock button's column is the trap: it was
+ * once declared twice, and the selected value differed from the unselected one
+ * by two pixels. Two pixels is enough for the time row to wrap on one and not
+ * the other, so tapping a card slid everything under it up a whole line and
+ * handed back a row the fit pass had dropped.
+ */
+const MEASURED = ['.card-title', '.card-time', '.card-stage', '.card-location', '.card-people', '.card-warn', '.card-line-time'];
+
+/** Every row's box relative to its own card, so a scroll is not a difference. */
+function cardLayout(page, id) {
+  return page.evaluate(([activityId, selectors]) => {
+    const card = document.querySelector(`.card[data-activity-id="${activityId}"]`);
+    const base = card.getBoundingClientRect();
+    const round = value => Math.round(value * 10) / 10;
+    const out = {};
+    for (const selector of selectors) {
+      const row = card.querySelector(selector);
+      if (!row) continue;
+      const box = row.getBoundingClientRect();
+      out[selector] = row.hidden || getComputedStyle(row).display === 'none'
+        ? 'dropped'
+        : [round(box.top - base.top), round(box.left - base.left), round(box.width), round(box.height)].join();
+    }
+    return out;
+  }, [id, MEASURED]);
+}
+
+/** The fit pass runs on a frame, and a webfont arriving runs it again. */
+async function fitted(page) {
+  await page.evaluate(() => document.fonts.ready);
+  await page.waitForTimeout(150);
+}
+
+async function expectSelectionMovesNothing(page, ids) {
+  for (const id of ids) {
+    const card = page.locator(`.card[data-activity-id="${id}"]`);
+    const before = await cardLayout(page, id);
+    await card.click({ position: { x: 20, y: 6 } });
+    await expect(card).toHaveClass(/is-selected/);
+    await fitted(page);
+    expect(await cardLayout(page, id), id).toEqual(before);
+    await page.keyboard.press('Escape');
+    await fitted(page);
+  }
+}
+
+test('selecting a card moves nothing inside it', async ({ page }) => {
+  await signInAndWaitForPlan(page);
+  await expect(page.locator('.card').first()).toBeVisible();
+  await fitted(page);
+
+  const ids = await page.locator('.card').evaluateAll(cards => cards.map(card => card.dataset.activityId));
+  await expectSelectionMovesNothing(page, ids);
+});
+
+test('selecting one of two overlapping cards moves nothing inside it', async ({ page, server }) => {
+  await server.seed({ plan: seedPlan({ activities: [
+    activity('a', T(10), 60, { title: 'Bridal party portraits by the lake', location: 'Lakeside lawn', people: ['Anna', 'Ben'] }),
+    activity('b', T(10, 20), 60, { title: 'Groomsmen portraits in the courtyard', location: 'Courtyard', people: ['Carl'] })
+  ] }) });
+  await signInAndWaitForPlan(page);
+  await expect(page.locator('.card')).toHaveCount(2);
+  await fitted(page);
+
+  await expectSelectionMovesNothing(page, ['a', 'b']);
+});
+
 test('the fit pass costs a handful of layouts, not one per card', async ({ page, server }) => {
   const many = Array.from({ length: 24 }, (_, i) => activity(`a${i}`, T(7) + i * 35, 30, {
     title: `Activity number ${i} with a reasonably long title`,

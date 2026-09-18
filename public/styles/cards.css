@@ -205,8 +205,11 @@
 .card.is-selected .handle { opacity: 1; pointer-events: auto; }
 
 .card:focus-visible { outline: 2px solid var(--sel); outline-offset: 2px; }
+/* A ring and the handles, and nothing else. Selection must not change the box
+   the rows are laid out in: the lock button's column is reserved on every card
+   whether it is selected or not, because a couple of pixels either way is
+   enough to re-wrap the time row and send everything under it up a line. */
 .card.is-selected { box-shadow: 0 0 0 2px var(--sel), 0 8px 22px rgba(10, 108, 255, .14); }
-.card.is-selected .card-body { padding-right: 44px; }
 /* A group selection reads differently from a single one: this card will move
    together with others, not open for editing on its own. */
 .card.is-group-selected { box-shadow: 0 0 0 2px var(--sel), 0 0 0 5px var(--sel-tint); }
@@ -343,8 +346,10 @@
   .card:not(.card--narrow):not(.card--line) .card-warn,
   .card:not(.card--narrow):not(.card--line) .card-progress { grid-column: 3; }
 
-  /* A selected card's controls do not move, so the column does not change. */
-  .card.is-selected .card-body { padding-right: 46px; }
+  /* An overlap card keeps the phone's stack, so it also keeps the phone's
+     reserved column for the lock button, which is drawn over the card at any
+     width. */
+  .card--narrow:not(.card--line) .card-body { padding-right: 46px; }
 
   /* Under half an hour the card is 120 px: it loses the people and closes up. */
   .card--small .card-people { display: none; }
