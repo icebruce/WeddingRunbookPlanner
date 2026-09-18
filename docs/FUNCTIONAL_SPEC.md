@@ -301,7 +301,9 @@ Sheet (phone) / dialog (desktop):
 - List: **Current plan** first (marked, “Edited 2 min ago on this phone”), then saved versions newest first. Each shows name, date/time, and a summary `12 activities · 11:30 AM – 10:45 PM`.
 - **Restore**: asks for confirmation, then saves the current plan as `Before restore – <time>` automatically, then restores.
 - **Delete**: a delete button on the row; undoable via toast.
-- Automatic versions are labelled “saved automatically”. Up to 40 versions; the oldest automatic ones are removed first.
+- Automatic versions are labelled “saved automatically”.
+- **Automatic backups** are kept without anyone asking: when a save lands and the plan has gone six hours without one, a copy of the plan *as it was before that save* is kept, named “Automatic backup”. A run of edits inside one window produces one backup, not one per edit.
+- Up to 40 versions. Automatic backups are kept at a resolution that drops with age — every one from the past day, then one a day for a week, one a week for two months, one a month before that — so the list spans months rather than the ten days it would hold at full resolution. A version someone named, and the copy kept when a conflict was resolved, are never thinned; past 40 the oldest automatic ones go first.
 
 ### 5.19 Plan settings
 Sheet / dialog, Done applies:
@@ -475,6 +477,7 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 | D26 | Timeline model rewrite (commit `2939550`): every activity stores its own absolute `start`; nothing propagates or auto-pushes; `locked` only exempts an activity from a deliberate group move | Flexible/Fixed propagation chain with stored `gapBefore` and automatic conflict resolution |
 | D27 | Group move: Ctrl/Cmd-click selects multiple cards, dragging any selected card moves every unlocked one by the same delta | No multi-activity move; reorder moved one activity by list position |
 | D28 | Single date+time picker (flatpickr, vendored) replaces the Flexible/Fixed radio and separate time field in the activity editor | Starts: Flexible \| Fixed radio |
+| D33 | Automatic backups every six hours, of the state each save replaced, thinned at a resolution that drops with age | Automatic versions existed only at the two moments something had already gone wrong — a conflict, or a restore — so version history was empty exactly when it was needed |
 | D32 | A read-only link: one revocable token, opening a separate page that has no editor on it at all. Read-only is the shape of what exists rather than a permission each action has to remember to check | One shared password and one permission level — the photographer and the venue could delete the ceremony |
 | D31 | Plan status removed. Three of its four values had no behaviour at all and the fourth, **Final**, silently forced day-of view onto every device — a mode switch wearing a label's name. Day-of now turns on by date alone, read on the plan's `timezone` (default `America/Toronto`) rather than the reader's device | Draft/Working/Confirming/Final, as a select in the desktop top bar and a row in the phone menu |
 | D30 | Two diverged plans are merged per activity and per field against the version the server last confirmed; only the same field changed twice is a question, and it names the activity | A dialog offering two whole plans, where choosing one discarded every unrelated change the other side had made |

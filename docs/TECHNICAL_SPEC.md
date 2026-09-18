@@ -139,7 +139,9 @@ Migration: none required. Missing optional fields default (`sunset` "16:19", `ti
 | `wedding-planner:share:v1` | `{ token, createdAt }` — the current read-only link; replacing it revokes the old one |
 | `wedding-planner:rl:<ip>` | login attempt counter (TTL 15 min) |
 
-`Version = { id, name, createdAt, auto: boolean, summary: { count, start, end }, plan }`.
+`Version = { id, name, createdAt, auto: boolean, kind: "backup" | null, summary: { count, start, end }, plan }`.
+
+`kind: "backup"` marks a routine automatic backup, and is the only thing thinning touches. The plan envelope carries `autoSnapshotAt`; `savePlan` reads it off the envelope it is already writing rather than the versions list, so the six-hourly question costs no extra round trip on a save that happens every second while someone is working. The backup holds the plan the save replaced, and is written after the plan, never allowed to fail it — a stamp that moved without a backup behind it costs one window, not a retry on every save.
 Migration: on first read, if the data key still contains `versions`, move them to the versions key (atomic script) and drop the field.
 
 `updatedBy` is a random per-device id (stored on the device) used only to say “another device”.

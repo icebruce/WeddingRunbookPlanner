@@ -314,7 +314,9 @@ test.describe('version history', () => {
 
     await page.locator('[data-action="menu"][data-menu="app"]').click();
     await page.locator('[data-menu-action="versions"]').click();
-    await page.locator('.restore-version').click();
+    // Named rather than "the only one": the first save of a plan also keeps an
+    // automatic backup of what it replaced, so there are two rows by now.
+    await page.locator('.version-item', { hasText: 'The good version' }).locator('.restore-version').click();
 
     await expect(card(page, 'ready')).toContainText('Getting Ready');
     const versions = await page.evaluate(async () => (await (await fetch('/api/versions')).json()).versions);
@@ -416,4 +418,36 @@ test('F18: a plan stored in the old shape keeps its versions and its revision', 
   await rename(page, 'ready', 'Still works');
   await saved(page);
   expect((await server.read()).plan.activities[0].title).toBe('Still works');
+});
+
+test('editing a plan leaves an automatic backup of what it replaced', async ({ page, server }) => {
+  await server.seed({ plan: base() });
+  await signInAndWaitForPlan(page);
+
+  await rename(page, 'ready', 'Changed my mind later');
+  await saved(page);
+
+  const versions = await page.evaluate(async () => (await (await fetch('/api/versions')).json()).versions);
+  const backup = versions.find(version => version.name === 'Automatic backup');
+  expect(backup, 'a backup was kept without anyone asking').toBeTruthy();
+  expect(backup.auto).toBe(true);
+
+  // It holds the plan as it was before the edit, which is the point of it.
+  const restored = await page.evaluate(async id =>
+    (await (await fetch(`/api/versions?id=${id}`)).json()).version.plan, backup.id);
+  expect(restored.activities[0].title).toBe('Getting Ready');
+});
+
+test('a run of edits does not fill version history', async ({ page, server }) => {
+  await server.seed({ plan: base() });
+  await signInAndWaitForPlan(page);
+
+  for (const title of ['One', 'Two', 'Three', 'Four']) {
+    await rename(page, 'ready', title);
+    await saved(page);
+  }
+
+  const versions = await page.evaluate(async () => (await (await fetch('/api/versions')).json()).versions);
+  const backups = versions.filter(version => version.name === 'Automatic backup');
+  expect(backups.length, 'four saves inside one window is one backup, not four').toBe(1);
 });

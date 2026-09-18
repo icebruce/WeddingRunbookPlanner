@@ -7,6 +7,7 @@ import os from 'node:os';
 import { createSeedEnvelope } from '../../lib/server/seed-template.js';
 import { UpstashClient } from '../../lib/server/upstash.js';
 import {
+  AUTO_SNAPSHOT_MS,
   COMPARE_AND_SET,
   DATA_KEY,
   MAX_VERSIONS,
@@ -457,4 +458,124 @@ test('the compare-and-set script never re-encodes the stored document', () => {
   // only decode far enough to read the revision and write Node's JSON verbatim.
   assert.doesNotMatch(COMPARE_AND_SET, /cjson\.encode/);
   assert.match(COMPARE_AND_SET, /redis\.call\('SET', KEYS\[1\], ARGV\[2\]\)/);
+});
+
+// ------------------------------------------------------- automatic backups
+
+const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
+
+test('a routine backup is kept when the plan has gone long enough without one', async () => {
+  const driver = fakeDriver();
+  setDriver(driver);
+
+  const start = Date.parse('2026-09-01T09:00:00Z');
+  const plan = (await readData()).plan;
+
+  // The first save ever has no previous stamp, so it takes one.
+  let envelope = await savePlan(plan, (await readData()).revision, { now: start });
+  assert.equal((await readVersions()).length, 1);
+  assert.equal((await readVersions())[0].name, 'Automatic backup');
+  assert.equal(envelope.autoSnapshotAt, new Date(start).toISOString());
+
+  // Everything inside the window rides on that one.
+  for (let i = 1; i <= 5; i += 1) {
+    await savePlan(plan, (await readData()).revision, { now: start + i * HOUR });
+  }
+  assert.equal((await readVersions()).length, 1, 'an hour of editing is not six hours of history');
+
+  await savePlan(plan, (await readData()).revision, { now: start + AUTO_SNAPSHOT_MS });
+  assert.equal((await readVersions()).length, 2);
+});
+
+test('a backup that cannot be written costs one window, not every save after it', async () => {
+  const driver = fakeDriver();
+  setDriver(driver);
+  const plan = (await readData()).plan;
+  const start = Date.parse('2026-09-01T09:00:00Z');
+
+  // The versions document refuses every write.
+  const realPut = driver.put;
+  driver.put = async (key, value) => {
+    if (key === VERSIONS_KEY) throw new Error('versions store is down');
+    return realPut.call(driver, key, value);
+  };
+  driver.seed = async (next, key) => {
+    if (key === VERSIONS_KEY) throw new Error('versions store is down');
+    return false;
+  };
+
+  const envelope = await savePlan(plan, (await readData()).revision, { now: start });
+  assert.equal(envelope.revision, 2, 'the save itself still succeeded');
+  assert.equal(envelope.autoSnapshotAt, new Date(start).toISOString(), 'and the window moved on');
+});
+
+test('routine backups are kept at a resolution that drops with age', async () => {
+  const driver = fakeDriver();
+  setDriver(driver);
+  // Ages are measured back from the real clock, which is what the thinning
+  // reads too — the bands are relative, so this is deterministic.
+  const now = Date.now();
+
+  const backupAt = age => ({
+    id: `b${age}`,
+    name: 'Automatic backup',
+    createdAt: new Date(now - age).toISOString(),
+    auto: true,
+    kind: 'backup',
+    summary: { count: 1, start: '11:30 AM', end: '12:15 PM' },
+    plan: { activities: [] }
+  });
+
+  driver.keys.set(VERSIONS_KEY, {
+    revision: 1,
+    versions: [
+      backupAt(1 * HOUR), backupAt(5 * HOUR), backupAt(11 * HOUR),   // today: all kept
+      backupAt(2 * DAY), backupAt(2 * DAY + 3 * HOUR),               // same day, one kept
+      backupAt(30 * DAY), backupAt(30 * DAY + 5 * HOUR),             // same week, one kept
+      backupAt(200 * DAY), backupAt(203 * DAY)                       // same month, one kept
+    ]
+  });
+
+  // Any write runs the thinning over the whole list.
+  await createVersion('Named', {});
+
+  const kept = await readVersions();
+  const backups = kept.filter(version => version.kind === 'backup');
+
+  assert.equal(backups.length, 6, 'three from today, one that day, one that week, one that month');
+  assert.ok(kept.some(version => version.name === 'Named'));
+
+  // The one kept from a bucket is the most recent in it.
+  assert.ok(backups.some(version => version.id === `b${2 * DAY}`));
+  assert.ok(!backups.some(version => version.id === `b${2 * DAY + 3 * HOUR}`));
+});
+
+test('thinning never touches a named version or a conflict copy', async () => {
+  const driver = fakeDriver();
+  setDriver(driver);
+  const now = Date.now();
+
+  const at = (id, age, extra) => ({
+    id, createdAt: new Date(now - age).toISOString(),
+    summary: { count: 0, start: null, end: null }, plan: { activities: [] }, ...extra
+  });
+
+  driver.keys.set(VERSIONS_KEY, {
+    revision: 1,
+    versions: [
+      // Two conflict copies from the same old day: both are the losing side of
+      // a real decision, and neither is a sample of anything.
+      at('c1', 40 * DAY, { name: 'Other device – 3:14 PM', auto: true, kind: null }),
+      at('c2', 40 * DAY + HOUR, { name: 'My unsaved changes – 2:02 PM', auto: true, kind: null }),
+      at('n1', 40 * DAY + 2 * HOUR, { name: 'After photographer review', auto: false, kind: null })
+    ]
+  });
+
+  await createVersion('Another', {});
+  const kept = await readVersions();
+
+  for (const id of ['c1', 'c2', 'n1']) {
+    assert.ok(kept.some(version => version.id === id), `${id} survives thinning`);
+  }
 });
