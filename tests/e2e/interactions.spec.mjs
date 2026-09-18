@@ -85,6 +85,12 @@ test('a toast can be swiped away', async ({ page, server }) => {
     const x = box.x + 30;
     const y = box.y + box.height / 2;
     await page.mouse.move(x, y);
+    // What is actually under the press, so a miss can be told from a press
+    // that landed and started nothing.
+    const under = await page.evaluate(([px, py]) => {
+      const node = document.elementFromPoint(px, py);
+      return node ? `${node.tagName.toLowerCase()}.${node.className}` : 'nothing';
+    }, [x, y]);
     await page.mouse.down();
     await page.mouse.move(x + dx / 3, y + dy / 3, { steps: 4 });
     await page.mouse.move(x + dx, y + dy, { steps: 6 });
@@ -95,7 +101,7 @@ test('a toast can be swiped away', async ({ page, server }) => {
     await page.waitForTimeout(50);
     const dragging = await toast.evaluate(node => node.classList.contains('is-dragging'));
     await page.mouse.up();
-    return dragging;
+    return { dragging, under, aim: `${Math.round(x)},${Math.round(y)}`, box: `${Math.round(box.x)},${Math.round(box.y)},${Math.round(box.width)},${Math.round(box.height)}` };
   };
 
   // Down is the one direction that is nearly free — the toast is already at
@@ -107,8 +113,8 @@ test('a toast can be swiped away', async ({ page, server }) => {
   // missed it would leave it up for a reason that has nothing to do with the
   // rule being tested, so that is asserted by name rather than read off the
   // toast still being there.
-  const dragging = await drag(60, 0);
-  expect(dragging, 'the press landed on the toast and started a swipe').toBe(true);
+  const sideways = await drag(60, 0);
+  expect(sideways.dragging, `the press landed on the toast and started a swipe — ${JSON.stringify(sideways)}`).toBe(true);
   await expect(toast).toBeHidden({ timeout: 2000 });
 });
 
