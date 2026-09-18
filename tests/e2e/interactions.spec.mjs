@@ -254,10 +254,12 @@ test('the chip row fades only the side that has more', async ({ page, server }) 
   expect(atStart.after).toBe(atStart.overflows);
 
   await row.evaluate(node => { node.scrollLeft = node.scrollWidth; });
-  await page.waitForTimeout(150);
+  // The classes come from a `scroll` listener, not the assignment above, so
+  // this polls for it rather than sleeping a fixed amount and reading once —
+  // a slow CI runner can take longer than any one guess at how long that takes.
+  await expect.poll(read).toMatchObject({ after: false });
   const atEnd = await read();
   expect(atEnd.before).toBe(atEnd.overflows);
-  expect(atEnd.after).toBe(false);
 });
 
 test('a chip row that fits gets no false edge', async ({ page, server }) => {
@@ -1242,8 +1244,9 @@ test('a row that comes back during a resize is faded in, not popped', async ({ p
   await page.mouse.down();
   // Down to a quarter of an hour: rows go as the card shrinks under the finger.
   await page.mouse.move(x, y - 420, { steps: 12 });
-  await page.waitForTimeout(120);
-  expect(await hidden(), 'the card re-fits while it is being resized').toBeGreaterThan(0);
+  // Polled rather than a fixed sleep: the fit pass this is waiting for runs in
+  // its own frame, and a busy CI runner can take longer than any one guess.
+  await expect.poll(hidden, { message: 'the card re-fits while it is being resized' }).toBeGreaterThan(0);
 
   // Each row comes back at its own point in the drag and its fade is over in
   // 140 ms, so asking what is running at the end catches nothing. Count them
@@ -1263,9 +1266,12 @@ test('a row that comes back during a resize is faded in, not popped', async ({ p
   await page.mouse.up();
 
   // The drop commits and repaints, and the fit pass that follows runs in a
-  // frame of its own — so this is polled rather than read once.
-  await expect.poll(hidden, { message: 'and they are back' }).toBe(0);
-  expect(await page.evaluate(() => window.__rowFades), 'the rows that came back were faded in')
+  // frame of its own — so this is polled rather than read once. The timeout is
+  // raised past the suite default: this is the same fit pass as above, run a
+  // second time, and a runner slow enough to need the first poll's full window
+  // needs at least as long for the second.
+  await expect.poll(hidden, { message: 'and they are back', timeout: 15_000 }).toBe(0);
+  await expect.poll(() => page.evaluate(() => window.__rowFades), { message: 'the rows that came back were faded in' })
     .toBeGreaterThan(0);
 });
 
