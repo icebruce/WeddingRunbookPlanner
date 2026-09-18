@@ -46,6 +46,24 @@ test('toast pauses while hovered and resumes after', async ({ page, server }) =>
   await expect(toast).toBeHidden({ timeout: 8000 });
 });
 
+/**
+ * A locator's box once it has stopped moving.
+ *
+ * `boundingBox()` answers where something is now, which is not where it will
+ * be a frame later if it is mid-transition — and a synthetic pointer aimed at
+ * the answer arrives after that frame.
+ */
+async function restingBox(locator, { tries = 40, gapMs = 50 } = {}) {
+  let previous = null;
+  for (let attempt = 0; attempt < tries; attempt += 1) {
+    const box = await locator.boundingBox();
+    if (box && previous && box.x === previous.x && box.y === previous.y) return box;
+    previous = box;
+    await locator.page().waitForTimeout(gapMs);
+  }
+  throw new Error('the element never stopped moving');
+}
+
 test('a toast can be swiped away', async ({ page, server }) => {
   test.skip(!isPhoneLayout(page), 'the selection toolbar is the narrow layout');
   await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
@@ -55,22 +73,29 @@ test('a toast can be swiped away', async ({ page, server }) => {
   const toast = page.locator('.toast');
   await expect(toast).toBeVisible();
   const drag = async (dx, dy) => {
-    // Re-read it each time: the first drag ends off the toast, which counts as
-    // a click outside the selection and takes the toolbar away — and the toast
-    // floats above whatever occupies the bottom of the screen, so it moves.
-    const box = await toast.boundingBox();
+    // Re-read it each time, and wait for it to stop: the first drag ends off
+    // the toast, which counts as a click outside the selection and takes the
+    // toolbar away — and the toast floats above whatever occupies the bottom
+    // of the screen, so it slides 44 px down to sit above the + instead. A box
+    // read while it is still sliding is 44 px stale by the time the pointer
+    // lands on it, which puts the press above the toast and starts no swipe at
+    // all; the toast then stays up and the failure reads as a dismissal that
+    // did not work.
+    const box = await restingBox(toast);
     const x = box.x + 30;
     const y = box.y + box.height / 2;
     await page.mouse.move(x, y);
     await page.mouse.down();
     await page.mouse.move(x + dx / 3, y + dy / 3, { steps: 4 });
     await page.mouse.move(x + dx, y + dy, { steps: 6 });
-    // The move promise resolves once CDP has queued the input, not once the
-    // page's own pointermove handler has run — under CI load the release can
-    // overtake it, so onSwipeRelease sees `moved` still false and the swipe
+    // The move promise resolves once the driver has queued the input, not once
+    // the page's own pointermove handler has run — under CI load the release
+    // can overtake it, so onSwipeRelease sees `moved` still false and the swipe
     // reads as a tap. Give the handler a turn before letting go.
     await page.waitForTimeout(50);
+    const dragging = await toast.evaluate(node => node.classList.contains('is-dragging'));
     await page.mouse.up();
+    return dragging;
   };
 
   // Down is the one direction that is nearly free — the toast is already at
@@ -78,8 +103,12 @@ test('a toast can be swiped away', async ({ page, server }) => {
   await drag(0, 60);
   await expect(toast).toBeVisible();
 
-  // Sideways is.
-  await drag(60, 0);
+  // Sideways is. The toast must have taken the gesture first: a press that
+  // missed it would leave it up for a reason that has nothing to do with the
+  // rule being tested, so that is asserted by name rather than read off the
+  // toast still being there.
+  const dragging = await drag(60, 0);
+  expect(dragging, 'the press landed on the toast and started a swipe').toBe(true);
   await expect(toast).toBeHidden({ timeout: 2000 });
 });
 
