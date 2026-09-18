@@ -62,6 +62,15 @@ svg.icon { width: 1.05em; height: 1.05em; fill: none; stroke: currentColor; stro
    */
   border-bottom: 1px solid transparent;
   transition: border-color 160ms var(--ease-out);
+  /*
+   * `position: sticky` plus `backdrop-filter` on Chrome for Android repaints a
+   * frame late while the browser's own URL bar collapses or expands during a
+   * scroll-direction change — the bar (and anything stuck under it) visibly
+   * lags the content for an instant. Promoting it to its own compositor layer
+   * keeps it painted independently of that reflow instead of catching up after.
+   */
+  transform: translateZ(0);
+  will-change: transform;
 }
 .topbar.is-collapsed { border-bottom-color: var(--hair); }
 
@@ -420,11 +429,19 @@ body.is-moving { cursor: grabbing; }
   background: color-mix(in srgb, var(--live-tint) 94%, transparent);
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
+  /* Its own compositor layer for the same reason as the bar above it — see
+     the comment on `.topbar`. */
+  transform: translateZ(0);
+  will-change: transform;
   /* A card's own two edges, top and bottom, not just the one shared with the
      bar above it — the bar's own bottom edge stays transparent in this mode
-     (below) so the strip is the only thing drawing the seam between them. */
-  border-top: .5px solid color-mix(in srgb, var(--live) 45%, transparent);
-  border-bottom: .5px solid color-mix(in srgb, var(--live) 45%, transparent);
+     (below) so the strip is the only thing drawing the seam between them.
+     Mixed with the tint rather than with transparent: a translucent hairline
+     of the vivid brand green read as too saturated against the pale card —
+     mixing toward the tint (dark in dark mode too) gives the softer, opaque
+     sage-green edge an actual card border reads as, in either theme. */
+  border-top: 1px solid color-mix(in srgb, var(--live) 45%, var(--live-tint));
+  border-bottom: 1px solid color-mix(in srgb, var(--live) 45%, var(--live-tint));
 }
 .live-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .live-dot {
