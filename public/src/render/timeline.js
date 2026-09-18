@@ -142,7 +142,13 @@ export function renderTimeline({ plan, ui }) {
  * and the count is still on every version row and the filter bar, where it
  * answers a question someone is actually asking.
  */
-export function renderSummary({ plan }) {
+export function renderSummary({ plan, ui }) {
+  // Not on the day (D25). The strip already answers what is happening and what
+  // is next, the span is in the top bar, and neither open time nor a conflict
+  // is something anyone acts on while the day is running — acting on one means
+  // pressing Edit first.
+  if (ui?.dayOf) return '';
+
   const { summary } = buildSchedule(plan);
 
   const range = summary.count
@@ -168,9 +174,13 @@ export function renderHeading({ plan, ui }) {
   // Adding is editing, so on the day this is not offered until Edit has been
   // pressed — the same rule the + on a phone follows.
   const viewOnly = Boolean(ui?.dayOf && !ui?.editingOnDay);
-  return `<div>
+  // On the day the title moves into the top bar (D25). A large title that
+  // scrolls away behind the live strip earns nothing on the one day the strip
+  // is the header — and the handover happened where nobody could see it.
+  const heading = ui?.dayOf ? '' : `<div>
       <h1>${escapeHtml(plan.title)}</h1>
-    </div>
+    </div>`;
+  return `${heading}
     ${viewOnly ? '' : `<div class="planner-add-wrap">
       <button class="button button--primary planner-add" type="button" data-action="add" data-focus-key="add">${icon('plus')}<span>Add activity</span></button>
       <p class="add-hint">Adds after the selected activity</p>

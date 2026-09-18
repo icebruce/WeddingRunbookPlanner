@@ -76,11 +76,11 @@ Saturday, November 21, 2026 · Ceremony at St. Peter and Paul Orthodox Sobor, 2:
 
 Top to bottom:
 
-1. **Top bar** (sticky): nothing on the left at rest, save state, menu. Desktop also shows the status control. When the large title scrolls away, “Wedding Day · 11:30 AM – 10:45 PM” fades into the empty space — the span rather than the date, because the date is a given by then and does not change, while the span moves whenever the first or last activity does. An empty plan has no span and shows the date instead. The planner name is not shown here — it would repeat the title directly below it.
+1. **Top bar** (sticky): nothing on the left at rest, save state, menu. Desktop also shows the status control. When the large title scrolls away, “Wedding Day · 11:30 AM – 10:45 PM” fades into the empty space — the span rather than the date, because the date is a given by then and does not change, while the span moves whenever the first or last activity does. An empty plan has no span and shows the date instead. The planner name is not shown here — it would repeat the title directly below it. **On the day** the title is in the bar from the start and the large title and summary line are not shown at all (D25); phone shows the title alone, desktop adds the span.
 2. **Live strip** (day-of only, sticky under the top bar).
 3. **Pinned filter row** (only while a person filter is on, sticky).
-4. **Large title**: day title.
-5. **Summary line**: `SAT, NOV 21 · 11:30 AM – 10:45 PM` as a caption under the title (the date shows even when the plan is empty), then on its own line the actionable items: `35 min open ›` (blue) and `20 min conflict ›` (red) when present. Tapping an actionable item scrolls to the first open time or conflict and highlights it. The rest is plain text.
+4. **Large title**: day title. Not shown in the day-of view — the top bar carries it (D25).
+5. **Summary line** (not shown in the day-of view, D25): `SAT, NOV 21 · 11:30 AM – 10:45 PM` as a caption under the title (the date shows even when the plan is empty), then on its own line the actionable items: `35 min open ›` (blue) and `20 min conflict ›` (red) when present. Tapping an actionable item scrolls to the first open time or conflict and highlights it. The rest is plain text.
 6. **Person filter chips**: Everyone plus each distinct person or group used in the plan, in first-use order.
 7. **Timeline**: time ruler on the left, activities and open time on the right, end-of-day marker.
 8. **Add**: floating + button on phones (hidden while a card is selected), “Add activity” button in the desktop header with the note “Adds after the selected activity”.
@@ -461,6 +461,7 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 | D22 | Changing the password signs out all devices | Sessions survived password change |
 | D23 | *(superseded)* Reorder on phone required a short hold on the handle | Immediate drag |
 | D24 | Status control in the phone menu; stays in desktop top bar | Header pill on all sizes |
+| D25 | Day-of: the title lives in the top bar; no large title, no summary line | Keeping the large title and handing it over behind the strip |
 | D25 | People tags: full names then `+N`, never initials | First five names, then initials |
 | D26 | Timeline model rewrite (commit `2939550`): every activity stores its own absolute `start`; nothing propagates or auto-pushes; `locked` only exempts an activity from a deliberate group move | Flexible/Fixed propagation chain with stored `gapBefore` and automatic conflict resolution |
 | D27 | Group move: Ctrl/Cmd-click selects multiple cards, dragging any selected card moves every unlocked one by the same delta | No multi-activity move; reorder moved one activity by list position |

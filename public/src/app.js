@@ -318,9 +318,15 @@ function paintRegions(names) {
     paint(app.querySelector(`[data-region="${name}"]`), REGIONS[name](context));
   }
   settle?.();
-  if (names.includes('heading')) refreshCollapsedTitle();
   if (names.includes('toolbar')) measureBottomFurniture();
-  if (names.some(name => STICKY_REGIONS.has(name))) measureStickyInset();
+  // Measured before the handover is re-armed, because the handover lands on
+  // the inset. The strip and the pinned bars change height without the heading
+  // being touched — the strip's second line wraps, an overrun appears, a
+  // filter is turned on — and each of those moves the line the title hands
+  // over on, so they re-arm it too.
+  const stickyChanged = names.some(name => STICKY_REGIONS.has(name));
+  if (stickyChanged) measureStickyInset();
+  if (stickyChanged || names.includes('heading')) refreshCollapsedTitle();
   if (names.includes('filters')) watchChipOverflow();
   if (names.includes('timeline')) {
     gestures.bind();
@@ -362,22 +368,33 @@ function measureBottomFurniture() {
  */
 const STICKY_REGIONS = new Set(['header', 'strip', 'offline', 'filterbar']);
 
+/** The last measured inset, for the title handover, which lands on the same line. */
+let stickyInset = 0;
+
 function measureStickyInset() {
   let total = 0;
   for (const node of app.querySelectorAll('.topbar, .live-strip, .pinned-bar')) {
     total += node.getBoundingClientRect().height;
   }
-  document.documentElement.style.setProperty('--sticky-inset', `${Math.round(total)}px`);
+  stickyInset = Math.round(total);
+  document.documentElement.style.setProperty('--sticky-inset', `${stickyInset}px`);
 
   // The bar's real height, for the bars that stick to its underside. The token
   // is a design floor (52 px, 62 px on a desktop) and the bar is often taller
   // than it — a notch's safe-area inset is part of its padding — which left the
   // live strip and the pinned bars sticking somewhere inside it. They can only
   // be right if the number they use is measured.
+  //
+  // Floored rather than rounded. The bar is often a fractional number of
+  // pixels — a safe-area inset, browser zoom, a non-integer device pixel ratio
+  // — and rounding up parks the strip a fraction of a pixel below the bar,
+  // leaving a seam the plan scrolls through and making the bar's own hairline
+  // look doubled. Flooring tucks the strip that fraction *under* the bar
+  // instead, where nothing can see it: it sits below the bar in the stack.
   const topbar = app.querySelector('.topbar');
   if (topbar) {
     document.documentElement.style.setProperty(
-      '--topbar-height', `${Math.round(topbar.getBoundingClientRect().height)}px`);
+      '--topbar-height', `${Math.floor(topbar.getBoundingClientRect().height)}px`);
   }
 }
 
@@ -1278,7 +1295,10 @@ const clock = createClock(now => {
   // timeline; the countdown alone only changes the strip.
   const currentChanged = store.ui.strip?.current?.id !== changes.strip?.current?.id
     || store.ui.dayOf !== on;
-  store.setUi(changes, { regions: currentChanged ? ['header', 'heading', 'strip', 'timeline', 'toolbar'] : ['strip'] });
+  // `summary` is in the list because the summary is not shown on the day
+  // (D25) — without it, turning day-of on left the date and the open/conflict
+  // links sitting under the strip from the last planning paint.
+  store.setUi(changes, { regions: currentChanged ? ['header', 'heading', 'summary', 'strip', 'timeline', 'toolbar'] : ['strip'] });
   // The time line and the live progress bar move on every tick, not only when
   // one activity hands over to the next — without this they stood still for
   // the whole of a two-hour reception while the strip counted down beside
@@ -1420,13 +1440,25 @@ function watchCollapsedTitle() {
     for (const observer of observers) observer.disconnect();
     observers.length = 0;
 
-    const heading = app.querySelector('.planner-heading h1');
     const topbar = app.querySelector('.topbar');
-    if (!heading || !topbar) return;
+    if (!topbar) return;
 
-    // The margin is the bar's own height, so the title hands over exactly as it
-    // goes under it — 52 px on a phone, 62 px on a desktop.
-    const barHeight = Math.round(topbar.getBoundingClientRect().height);
+    const heading = app.querySelector('.planner-heading h1');
+    // On the day there is no large title to hand over from: the bar carries the
+    // title outright. Nothing collapses, so the state is cleared rather than
+    // left wherever the last scroll in planning mode put it.
+    if (!heading) {
+      topbar.classList.remove('is-collapsed');
+      return;
+    }
+
+    // The line is everything already stuck to the top of the screen, not the
+    // bar alone. Measured from the bar alone it was right only when the bar was
+    // the only thing up there: on the day the live strip sits under it, so the
+    // title slid behind the strip and stayed hidden for the strip's whole
+    // height before the bar took it over — a stretch of scrolling with the
+    // title nowhere at all.
+    const barHeight = stickyInset || Math.round(topbar.getBoundingClientRect().height);
     const watch = (inset, collapsedWhenHidden) => {
       const observer = new IntersectionObserver(([entry]) => {
         if (entry.isIntersecting === collapsedWhenHidden) return;
@@ -1435,7 +1467,7 @@ function watchCollapsedTitle() {
       observer.observe(heading);
       observers.push(observer);
     };
-    // Going under the bar collapses it; coming back out ten pixels below
+    // Going under the furniture collapses it; coming back out ten pixels below
     // restores it. Each observer only ever acts in its own direction.
     watch(barHeight, false);
     watch(Math.max(0, barHeight - HANDOVER_BAND), true);
@@ -1450,6 +1482,9 @@ watchFit(app);
 window.addEventListener('resize', () => {
   measureBottomFurniture();
   measureStickyInset();
+  // Rotation changes both the bar's height and the strip's, and the handover
+  // line is measured from the pair of them.
+  refreshCollapsedTitle();
 });
 trackKeyboardInset();
 window.addEventListener('online', () => void saver.handleOnline());
