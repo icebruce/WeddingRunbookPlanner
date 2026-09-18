@@ -16,6 +16,18 @@ import { DEFAULT_TIMEZONE } from './validate.js';
 
 /** How often the strip re-reads the clock. */
 export const TICK_MS = 30_000;
+/**
+ * Whether the plan is being read rather than built.
+ *
+ * Two different reasons give the same answer: it is the day and nobody has
+ * tapped Edit, or this is a share link, where there is no Edit to tap. The
+ * renderers ask this one question instead of each re-deriving it, so a third
+ * reason would not need finding in four places.
+ */
+export function isViewOnly(ui) {
+  return Boolean(ui?.viewOnly || (ui?.dayOf && !ui?.editingOnDay));
+}
+
 /** Away this long and the day-of view goes back to read-only. */
 export const AUTO_VIEW_ONLY_MS = 5 * 60_000;
 

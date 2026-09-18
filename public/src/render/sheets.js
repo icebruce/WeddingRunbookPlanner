@@ -267,6 +267,41 @@ export function conflictSheet(latest, conflicts) {
   </dialog>`;
 }
 
+/**
+ * The read-only link.
+ *
+ * One link, and one button that replaces it. There is no list of links to
+ * curate and no expiry to set, because the plan stops mattering the day after
+ * the wedding and a link nobody can turn off would be worse than one anybody
+ * can replace. What it does and does not allow is said plainly: the people
+ * being sent it are being trusted with the day's locations and everyone's
+ * names, and whoever sends it should know that before they do.
+ */
+export function shareSheet(share, { origin = '' } = {}) {
+  const url = share?.token ? `${origin}/share#${share.token}` : '';
+
+  return `<dialog id="share-dialog" class="sheet-dialog">
+    <section class="sheet" ${SHEET_FOCUS}>
+      <header class="sheet-header">
+        <button class="button button--text sheet-close" type="button">Close</button>
+        <h2>Share read-only link</h2>
+        <span class="sheet-header-spacer"></span>
+      </header>
+      <div class="sheet-body">
+        <p class="sheet-note">Anyone with this link can read the plan and print it. They cannot change anything, and they are never asked for the password. On the wedding day it opens straight to what is happening now.</p>
+
+        <div class="share-link">
+          <input id="share-link-field" type="text" readonly value="${escapeHtml(url)}" aria-label="Read-only link">
+          <button type="button" class="button button--primary" data-action="share-copy">${icon('copy')}<span>Copy</span></button>
+        </div>
+
+        <p class="sheet-note">Keep it to the people who need it — it works for anyone it is passed on to. Replacing it stops the old one working everywhere, straight away.</p>
+        <button type="button" class="button button--quiet" data-action="share-rotate">Replace link</button>
+      </div>
+    </section>
+  </dialog>`;
+}
+
 /** "Discard changes?" — the one question the editor asks. */
 export function discardSheet() {
   return `<dialog id="discard-dialog" class="alert-dialog">
@@ -432,6 +467,7 @@ export function renderSheet(ui, plan) {
   if (dialog.type === 'open-time') return openTimeSheet(dialog.openTime, plan);
   if (dialog.type === 'stage') return stageSheet(dialog.item);
   if (dialog.type === 'conflict') return conflictSheet(dialog.latest, dialog.conflicts);
+  if (dialog.type === 'share') return shareSheet(dialog.share, { origin: dialog.origin });
   if (dialog.type === 'versions') return versionsSheet(ui.versions, { plan, updatedAt: dialog.updatedAt });
   if (dialog.type === 'settings') return settingsSheet(plan);
   return '';

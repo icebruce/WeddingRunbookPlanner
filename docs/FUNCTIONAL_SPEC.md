@@ -24,7 +24,7 @@ It stays small: one plan, one shared password, no accounts, no guest/vendor/budg
 | User | Needs |
 |---|---|
 | The couple (primary) | Build and change the plan on phone and laptop; run it on the day |
-| Family, MC, photographer, venue staff (given the password) | Read the plan, filter to their part, print it; occasional edits |
+| Family, MC, photographer, venue staff (given the read-only link) | Read the plan, filter to their part, print it; on the day, see what is happening now. They are never given the password and can change nothing (§5.20) |
 
 ### 1.2 Principles (in priority order when they conflict)
 
@@ -310,8 +310,21 @@ Sheet / dialog, Done applies:
 - **Timeline view:** Shows from; Shows until (may be after midnight, shown as “next day”). Help: “Only changes what you see. The view always grows to fit every activity.”
 Validation inline. Changing the view range never moves activities. The dark/light appearance switch (§5.22) lives only in the main menu, not duplicated here.
 
+### 5.20 Share read-only link
+Sheet / dialog from the menu:
+- One link, of the form `/share#<token>`. Minted the first time the sheet is opened, so an unshared plan has no link to leak.
+- **Copy** puts it on the clipboard; if the clipboard is refused, the link is selected instead and the toast says so.
+- **Replace link** issues a new one and stops the old one working immediately, everywhere. This is the only way to revoke it.
+- The sheet says plainly what the link allows: read and print, no password, and that it works for anyone it is passed on to.
+
+What the link opens is **not the planner in a different mode** — it is a separate page with no editor on it. No menu, no save state, no version history, no settings, no add button, no handles, no stage control. The person filter and Print or save PDF are offered, because filtering to your own part and printing it is the reason a vendor opens it at all. Dark appearance can be switched, remembered on that device.
+
+The token is held in the URL fragment, which browsers never send to a server, and handed to the API in a header — so it stays out of request logs and out of any `Referer`.
+
+The live strip (§6) appears on the shared page **by date only**, read on the venue's clock: a link opened three weeks early is a plan to read, and the same link on the wedding day opens to what is happening now.
+
 ### 5.21 Menu (phone and desktop)
-Day-of view (switch) · Dark appearance (switch) · Print or save PDF · Export backup · Version history · Plan settings · Sign out.
+Day-of view (switch) · Dark appearance (switch) · Share read-only link · Print or save PDF · Export backup · Version history · Plan settings · Sign out.
 
 ### 5.22 Dark appearance
 Manual switch in the menu and in Plan settings. Light is the default; the app does **not** follow the system setting. The choice is remembered on the device.
@@ -418,7 +431,7 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 
 **Saving:** offline edits survive reload and save on reconnect with a bounded number of requests; server errors show `Not saved` without request floods; invalid data never blocks later saves; expired session loses nothing; two-device conflict never overwrites silently.
 
-**Security/privacy:** server code and seed data are not downloadable from the site; login attempts are rate-limited.
+**Security/privacy:** server code and seed data are not downloadable from the site; login attempts are rate-limited; a share token can be used to read the plan and nothing else — it grants no session and every write refuses it.
 
 **Other features:** add after selected; duplicate; undo for each listed action; person filter and pinned row; print layout; export; empty state and template; versions with auto-snapshot and delete; settings validation; dark switch persists per device; home-screen install.
 
@@ -462,6 +475,7 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 | D26 | Timeline model rewrite (commit `2939550`): every activity stores its own absolute `start`; nothing propagates or auto-pushes; `locked` only exempts an activity from a deliberate group move | Flexible/Fixed propagation chain with stored `gapBefore` and automatic conflict resolution |
 | D27 | Group move: Ctrl/Cmd-click selects multiple cards, dragging any selected card moves every unlocked one by the same delta | No multi-activity move; reorder moved one activity by list position |
 | D28 | Single date+time picker (flatpickr, vendored) replaces the Flexible/Fixed radio and separate time field in the activity editor | Starts: Flexible \| Fixed radio |
+| D32 | A read-only link: one revocable token, opening a separate page that has no editor on it at all. Read-only is the shape of what exists rather than a permission each action has to remember to check | One shared password and one permission level — the photographer and the venue could delete the ceremony |
 | D31 | Plan status removed. Three of its four values had no behaviour at all and the fourth, **Final**, silently forced day-of view onto every device — a mode switch wearing a label's name. Day-of now turns on by date alone, read on the plan's `timezone` (default `America/Toronto`) rather than the reader's device | Draft/Working/Confirming/Final, as a select in the desktop top bar and a row in the phone menu |
 | D30 | Two diverged plans are merged per activity and per field against the version the server last confirmed; only the same field changed twice is a question, and it names the activity | A dialog offering two whole plans, where choosing one discarded every unrelated change the other side had made |
 | D29 | Phone back-button/gesture closes the open sheet, menu, or card selection instead of leaving the app (a dummy history entry pushed while an overlay is open). Scroll restoration is manual: back closes the top thing and the page stays exactly where it is | Back navigated away from the app with an overlay still open; later, back also threw the reader from where they had scrolled to back to the selected card |

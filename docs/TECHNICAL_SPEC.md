@@ -136,6 +136,7 @@ Migration: none required. Missing optional fields default (`sunset` "16:19", `ti
 |---|---|
 | `wedding-planner:data:v1` | `{ revision, updatedAt, updatedBy, plan }` (versions removed from here) |
 | `wedding-planner:versions:v1` | `{ versions: Version[] }` (max 40) |
+| `wedding-planner:share:v1` | `{ token, createdAt }` — the current read-only link; replacing it revokes the old one |
 | `wedding-planner:rl:<ip>` | login attempt counter (TTL 15 min) |
 
 `Version = { id, name, createdAt, auto: boolean, summary: { count, start, end }, plan }`.
@@ -313,6 +314,13 @@ All responses `Cache-Control: no-store`, JSON, `{ error: { code, message, field?
 | `DELETE /api/versions?id=` | ✓ same-origin | – | `204` |
 | `GET /api/template` | ✓ | – | `{ activities }` |
 | `GET /api/export` | ✓ | – | `Content-Disposition: attachment` plan JSON |
+| `GET /api/share` | ✓ | – | `{ share: { token, createdAt } }`; mints one on first ask |
+| `POST /api/share` | ✓ same-origin | – | `{ share }` with a new token; the old one stops working at once |
+| `GET /api/shared` | share token in `X-Share-Token` | – | `{ plan, updatedAt }`, or 404. Sets no cookie |
+
+**Read-only sharing.** The token is compared in constant time against the stored one and grants exactly one thing: reading the plan through `GET /api/shared`. It is not a session and no mutating route accepts it — "read-only" is which endpoints exist, not a role remembered in each of them. `public/share.html` + `src/share.js` render the plan with the shared region modules and `ui.viewOnly` fixed on; the editor's gestures, store and save pipeline are not loaded on that page at all. The token lives in the URL fragment (never sent to a server) and moves in a header; `hashchange` reloads, so a replacement link works in a tab still holding the old one.
+
+**View-only** is one predicate, `isViewOnly(ui)` in `dayof.js` — true on the day before Edit, and always on a shared page. It was previously re-derived in four renderers, two of which drew controls anyway: the stage pill was built as a button regardless of mode, and an open-time block kept its `+`.
 
 ### 11.1 Validation (`validate.js`)
 Shared rules from §4.1, applied on every write; returns the first failing field. Client uses the same module (served copy in `public/src/validate.js`, kept identical by a unit test).
@@ -342,6 +350,7 @@ Shared rules from §4.1, applied on every write; returns the first failing field
 - Rate limit (`ratelimit.js`): Upstash `INCR` + `EXPIRE 900` per IP (`x-forwarded-for` first entry) and a global ceiling (100 / 15 min). Local file mode: in-memory.
 - Headers (`vercel.json`): CSP `default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'`, `X-Content-Type-Options`, `Referrer-Policy: same-origin`, `Permissions-Policy`, `X-Robots-Tag: noindex`.
 - **Only `public/` is served** (F8). Seed/template data lives in `lib/server/seed-template.js`.
+- Share token: 24 random bytes, base64url. Held in the URL fragment so it never reaches a server in a URL; presented in `X-Share-Token`. Revoked by replacement. It is a bearer credential by design (D32): anyone holding the link can read the plan, which is the cost of “tap it and it works”.
 - Repo visibility: return to **private** once Claude Code has access (contains the template timeline).
 - Device copy contains the plan in `localStorage`; acceptable per decision D20; cleared on sign-out.
 

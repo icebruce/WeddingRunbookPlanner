@@ -65,6 +65,23 @@ test.describe('D31: the date decides, read on the venue clock', () => {
   });
 });
 
+test('view only means no control on a card does anything', async ({ page, server }) => {
+  await openAt(page, server, at(13));
+  await expect(page.locator('.mode-pill--view')).toContainText('View only');
+
+  // Each of these used to be drawn on the day regardless: the stage pill was
+  // built as a button whatever the mode, and an open-time block kept its "+".
+  // Neither could change anything — commit refuses in view only — so they were
+  // controls that looked live, took focus and announced themselves to a screen
+  // reader, and did nothing at all.
+  for (const absent of ['.handle', '.card-controls', '.open-time-add', '.stage-tag--button', '[data-action="add"]']) {
+    await expect(page.locator(absent), absent).toHaveCount(0);
+  }
+
+  // The stage is still shown — it just reads as the label it is.
+  await expect(page.locator('.card[data-activity-id="ready"] .stage-tag')).toBeVisible();
+});
+
 test.describe('D13: what the strip says', () => {
   const cases = [
     ['before the first activity', at(11, 0), 'Starts in 30 min', 'Getting Ready, 11:30 AM'],

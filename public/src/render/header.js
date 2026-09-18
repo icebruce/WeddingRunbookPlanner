@@ -24,7 +24,8 @@ export function saveIndicator(saveState) {
 const MENU_ITEMS = [
   { action: 'day-of', label: 'Day-of view', glyph: 'live', switch: true },
   { action: 'theme', label: 'Dark appearance', glyph: 'moon', switch: true },
-  { action: 'print', label: 'Print or save PDF', glyph: 'print', group: true },
+  { action: 'share', label: 'Share read-only link', glyph: 'link', group: true },
+  { action: 'print', label: 'Print or save PDF', glyph: 'print' },
   { action: 'export', label: 'Export backup', glyph: 'download' },
   { action: 'versions', label: 'Version history', glyph: 'history' },
   { action: 'settings', label: 'Plan settings', glyph: 'settings' },

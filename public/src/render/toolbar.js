@@ -9,6 +9,7 @@
 import { escapeHtml } from '../dom.js';
 import { icon } from '../icons.js';
 import { buildSchedule } from '../schedule.js';
+import { isViewOnly } from '../dayof.js';
 
 const BUTTONS = [
   { action: 'edit', label: 'Edit', glyph: 'settings' },
@@ -47,7 +48,7 @@ function viewOnlyButton() {
 }
 
 export function renderToolbar({ plan, ui, hiddenDetails = '' }) {
-  const viewOnly = Boolean(ui.dayOf && !ui.editingOnDay);
+  const viewOnly = isViewOnly(ui);
   const item = ui.selectedId ? buildSchedule(plan).items.find(entry => entry.id === ui.selectedId) : null;
   if (!item) return viewOnly ? '' : addButton;
 

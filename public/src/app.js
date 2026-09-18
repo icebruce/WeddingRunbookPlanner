@@ -13,8 +13,8 @@ import './actions.js';
 import { api } from './api.js';
 import { STAGES, deviceId } from './config.js';
 import { readDeviceBase, readDeviceCopy, writeDeviceBase, writeDeviceCopy } from './device.js';
-import { cssEscape, escapeHtml, focusByKey, paint, uid } from './dom.js';
-import { AUTO_VIEW_ONLY_MS, createClock, minutesNow, readOverride, shouldBeOn, stripState, writeOverride } from './dayof.js';
+import { cssEscape, escapeHtml, focusByKey, paint, uid, watchCollapsedTitle } from './dom.js';
+import { AUTO_VIEW_ONLY_MS, createClock, isViewOnly, minutesNow, readOverride, shouldBeOn, stripState, writeOverride } from './dayof.js';
 import { createGestures } from './gestures.js';
 import { bump } from './haptics.js';
 import { bindSheetDrag } from './sheet-drag.js';
@@ -23,6 +23,7 @@ import { icon } from './icons.js';
 import { mergePlans } from './merge.js';
 import { SAVE_STATES, createSavePipeline } from './save.js';
 import { createStore } from './state.js';
+import { paintBrowserChrome, readTheme, writeTheme } from './theme.js';
 import { createAuth } from './auth.js';
 import { createVersions } from './versions.js';
 import { createActivityForm } from './activity-form.js';
@@ -564,6 +565,7 @@ function dialogKey(dialog) {
   if (!dialog) return null;
   if (dialog.type === 'conflict') return `conflict:${dialog.latest?.revision ?? 'unknown'}`;
   if (dialog.type === 'activity') return `activity:${dialog.mode}:${dialog.activity.id}`;
+  if (dialog.type === 'share') return `share:${dialog.share?.token ?? 'none'}`;
   if (dialog.type === 'versions') return `versions:${store.ui.versions.length}:${store.revision}`;
   if (dialog.type === 'open-time') return `open-time:${dialog.openTime.beforeId}:${dialog.openTime.start}`;
   if (dialog.type === 'stage') return `stage:${dialog.item.id}`;
@@ -814,7 +816,7 @@ function commit(action, payload, options = {}) {
   // One gate for every change, whatever raised it — a gesture, a keyboard
   // shortcut, a sheet. Blocking each entry point separately would eventually
   // miss one.
-  if (isViewOnly()) return null;
+  if (isViewOnly(store.ui)) return null;
 
   const result = store.dispatch(action, payload, options);
   if (!result) return null;
@@ -828,13 +830,8 @@ function commit(action, payload, options = {}) {
   return result;
 }
 
-/** On the day, nothing changes until someone has pressed Edit. */
-function isViewOnly() {
-  return Boolean(store.ui.dayOf && !store.ui.editingOnDay);
-}
-
 function undo() {
-  if (isViewOnly()) return;
+  if (isViewOnly(store.ui)) return;
   const result = store.undo({ regions: ['all'] });
   if (!result) return;
   // Undo puts the plan back somewhere it has already been, which is the one
@@ -1044,6 +1041,7 @@ const ACTION_HANDLERS = {
       store.setUi({ openMenu: null });
       return;
     }
+    if (action === 'share') return void openShare();
     if (action === 'versions') return void versions.openVersions();
     if (action === 'settings') {
       rememberOpener('menu-app');
@@ -1053,6 +1051,12 @@ const ACTION_HANDLERS = {
   },
   conflict(_, element) {
     void resolveConflict(element.dataset.choice);
+  },
+  'share-copy'() {
+    void copyShareLink();
+  },
+  'share-rotate'() {
+    void rotateShareLink();
   },
   'select-open-time'(_, element) {
     // Never toggles off on a repeat tap — same as a card's own 'select' —
@@ -1140,6 +1144,54 @@ const ACTION_HANDLERS = {
     void (store.ui.authenticated ? loadPlan() : init());
   }
 };
+
+/**
+ * The read-only link.
+ *
+ * Asked for rather than kept: the token is minted the first time anyone opens
+ * this sheet, so a plan nobody has shared has no link to leak.
+ */
+async function openShare() {
+  rememberOpener('menu-app');
+  try {
+    const { share } = await api.share();
+    store.setUi({ openMenu: null, dialog: { type: 'share', share, origin: location.origin } });
+  } catch (error) {
+    toast(error.message || 'Could not open the shared link.', { tone: 'error' });
+  }
+}
+
+async function copyShareLink() {
+  const field = document.getElementById('share-link-field');
+  if (!field) return;
+  try {
+    await navigator.clipboard.writeText(field.value);
+    toast('Link copied');
+  } catch {
+    // No clipboard permission, or an insecure context. Selecting the text is
+    // the fallback every platform still has.
+    field.focus();
+    field.select();
+    toast('Copy the selected link');
+  }
+}
+
+/**
+ * Replacing the link is the only way to revoke it, so it says so first. The
+ * old one stops working the moment this returns — including for anyone
+ * currently reading the plan through it.
+ */
+async function rotateShareLink() {
+  try {
+    const { share } = await api.rotateShare();
+    // The sheet's identity is the token it is showing, so replacing the token
+    // is what rebuilds it — no separate nudge needed.
+    store.setUi({ dialog: { type: 'share', share, origin: location.origin } });
+    toast('New link created. The old one no longer works.');
+  } catch (error) {
+    toast(error.message || 'Could not replace the link.', { tone: 'error' });
+  }
+}
 
 /**
  * Answering the one question a merge could not answer by itself.
@@ -1421,39 +1473,12 @@ function advanceNow(nowMinutes) {
  * system setting (D21): a plan read in a dark room at a venue and the same
  * plan on a laptop should look like the same plan.
  */
-const THEME_KEY = 'wrp:theme';
-
-/**
- * The colour the browser paints its own chrome with — the bar behind the clock
- * on a phone, the title bar of an installed app. It cannot be a media query,
- * because the app does not follow the system setting (D21): it has to follow
- * the choice made in the app.
- */
-function paintBrowserChrome(theme) {
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (!meta) return;
-  meta.setAttribute('content', theme === 'dark' ? '#111214' : '#F7F7F4');
-}
-
 function setTheme(theme) {
   const next = theme === 'dark' ? 'dark' : 'light';
   document.documentElement.dataset.theme = next;
   paintBrowserChrome(next);
-  try {
-    localStorage.setItem(THEME_KEY, next);
-  } catch {
-    // Without storage the choice lasts as long as the tab, which is better
-    // than refusing to make it.
-  }
+  writeTheme(next);
   store.setUi({ theme: next }, { regions: ['header'] });
-}
-
-function readTheme() {
-  try {
-    return localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light';
-  } catch {
-    return 'light';
-  }
 }
 
 /** Starting from a wedding that already exists, rather than a blank page. */
@@ -1473,47 +1498,7 @@ async function useTemplate() {
   }
 }
 
-/**
- * Once the large title has scrolled past, the top bar takes it over.
- *
- * Watched rather than measured on every scroll event, so it costs nothing
- * while scrolling a long day — and watched *twice*, at two lines ten pixels
- * apart. One boundary means that resting the scroll on the handover, where
- * momentum and sub-pixel rounding leave it wandering back and forth across a
- * single line, flips the title with it. Collapsing at the lower line and
- * coming back only at the higher one gives the decision somewhere to sit.
- */
-const HANDOVER_BAND = 10;
-
-function watchCollapsedTitle() {
-  const observers = [];
-  return () => {
-    for (const observer of observers) observer.disconnect();
-    observers.length = 0;
-
-    const heading = app.querySelector('.planner-heading h1');
-    const topbar = app.querySelector('.topbar');
-    if (!heading || !topbar) return;
-
-    // The margin is the bar's own height, so the title hands over exactly as it
-    // goes under it — 52 px on a phone, 62 px on a desktop.
-    const barHeight = Math.round(topbar.getBoundingClientRect().height);
-    const watch = (inset, collapsedWhenHidden) => {
-      const observer = new IntersectionObserver(([entry]) => {
-        if (entry.isIntersecting === collapsedWhenHidden) return;
-        topbar.classList.toggle('is-collapsed', !entry.isIntersecting);
-      }, { rootMargin: `-${inset}px 0px 0px 0px`, threshold: 0 });
-      observer.observe(heading);
-      observers.push(observer);
-    };
-    // Going under the bar collapses it; coming back out ten pixels below
-    // restores it. Each observer only ever acts in its own direction.
-    watch(barHeight, false);
-    watch(Math.max(0, barHeight - HANDOVER_BAND), true);
-  };
-}
-
-const refreshCollapsedTitle = watchCollapsedTitle();
+const refreshCollapsedTitle = watchCollapsedTitle(app);
 
 watchFit(app);
 // The toolbar drops its button labels under 340 px and the layout changes

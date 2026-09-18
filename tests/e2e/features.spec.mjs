@@ -196,7 +196,7 @@ test.describe('the menu', () => {
       .evaluateAll(nodes => nodes.map(node => node.dataset.menuAction));
 
     // The same list at every width, now that the status row is gone (D31).
-    expect(actions).toEqual(['day-of', 'theme', 'print', 'export', 'versions', 'settings', 'logout']);
+    expect(actions).toEqual(['day-of', 'theme', 'share', 'print', 'export', 'versions', 'settings', 'logout']);
   });
 
   test('theme lives only in the menu, not in settings too', async ({ page, server }, testInfo) => {
