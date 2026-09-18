@@ -336,7 +336,7 @@ test('an overlap puts the two activities in lanes, both on their real times', as
   await expect(page.locator('.card[data-activity-id="ceremony"] .card-warn')).toContainText('Overlaps 15 min with Travel to Church');
 });
 
-test('D11: the summary counts the day and offers the problems as links', async ({ page, server }) => {
+test('D11: the summary gives the day and offers the problems as links', async ({ page, server }) => {
   await server.seed({
     plan: seedPlan({
       activities: [
@@ -348,8 +348,9 @@ test('D11: the summary counts the day and offers the problems as links', async (
   });
   await signInAndWaitForPlan(page);
 
-  await expect(page.locator('.summary')).toContainText('1:00 PM – 5:00 PM');
-  await expect(page.locator('.summary')).toContainText('3 activities');
+  await expect(page.locator('.summary-meta')).toContainText('1:00 PM – 5:00 PM');
+  // The count was dropped: start and end already say how big the day is.
+  await expect(page.locator('.summary')).not.toContainText('activities');
   await expect(page.locator('.summary-link').first()).toContainText('open');
   await expect(page.locator('.summary-link--bad')).toContainText('conflict');
 });

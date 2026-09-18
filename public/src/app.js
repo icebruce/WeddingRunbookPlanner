@@ -1514,7 +1514,13 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('pagehide', () => saver.flushOnHide(api.saveOnHide));
 
 store.subscribe(change => {
-  repaint(change.regions);
+  // The top bar carries the day's start and end once the title has collapsed,
+  // so every change to the plan's data has to reach it. Adding it here rather
+  // than to each caller's region list is deliberate: those lists are about
+  // what must not reflow under a moving finger, and a gesture that forgot the
+  // bar would leave a stale time sitting at the top of the screen. The bar is
+  // a fixed height, so repainting it never moves anything.
+  repaint(change.data ? [...change.regions, 'header'] : change.regions);
   syncOverlayHistory();
 });
 

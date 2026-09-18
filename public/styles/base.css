@@ -519,23 +519,21 @@ body.is-moving { cursor: grabbing; }
 /* ---- the collapsed title ------------------------------------------------- */
 
 /*
- * The brand and the collapsed title occupy the same cell and cross-fade, with
- * a 2 px rise, rather than being shown and hidden. A `display` swap is a hard
- * cut at the one scroll position where the handover happens, and the pair of
- * them jittering across that line is the thing a sticky title most needs not
- * to do. The hysteresis that stops the line itself being jittered is in
- * app.js.
+ * Nothing sits in this cell at rest: the large title is immediately below the
+ * bar, so naming the plan above it said the same thing twice. The cell stays
+ * empty until the title scrolls away, then fades it in with a 2 px rise rather
+ * than showing and hiding it. A `display` swap is a hard cut at the one scroll
+ * position where the handover happens, and a sticky title jittering across
+ * that line is the thing it most needs not to do. The hysteresis that stops
+ * the line itself being jittered is in app.js.
  */
-/* A fixed height, because the two halves of the cross-fade are not the same
-   shape: the brand is one line and the collapsed title is two. Sharing a grid
-   cell already stacks them, but the cell itself would still be sized by
-   whichever is taller — and anything that resizes the bar at the handover is
-   the one thing a sticky title must not do. */
+/* A fixed height, so that an empty cell and a two-line title measure the same:
+   anything that resizes the bar at the handover is the one thing a sticky
+   title must not do. */
 .topbar-title { display: grid; align-items: center; min-width: 0; height: 34px; }
 .topbar-title > * { grid-area: 1 / 1; align-self: center; transition: opacity 160ms var(--ease-out), transform 160ms var(--ease-out); }
 
 .collapsed-title { display: flex; flex-direction: column; justify-content: center; line-height: 1.15; opacity: 0; transform: translateY(2px); pointer-events: none; }
 .collapsed-title b { font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
-.collapsed-title small { color: var(--soft); font-size: 12px; }
-.topbar.is-collapsed .brand { opacity: 0; transform: translateY(-2px); pointer-events: none; }
+.collapsed-title small { color: var(--soft); font-size: 12px; font-variant-numeric: tabular-nums; }
 .topbar.is-collapsed .collapsed-title { opacity: 1; transform: translateY(0); pointer-events: auto; }

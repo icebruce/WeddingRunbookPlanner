@@ -752,35 +752,38 @@ test('the app menu is drawn at the sizes the design guide gives', async ({ page 
     .toBeGreaterThanOrEqual(phone ? 46 : 40);
 });
 
-test('the brand and the collapsed title cross-fade in one place', async ({ page, server }) => {
+test('the collapsed title fades into an empty cell without resizing the bar', async ({ page, server }) => {
   const many = Array.from({ length: 10 }, (_, i) => activity(`a${i}`, T(8) + i * 60, 45, { title: `Activity ${i}` }));
   await server.seed({ plan: seedPlan({ activities: many }) });
   await signInAndWaitForPlan(page);
 
   const read = () => page.evaluate(() => {
-    const brand = document.querySelector('.topbar .brand');
     const title = document.querySelector('.collapsed-title');
     return {
-      brand: Number(getComputedStyle(brand).opacity),
       title: Number(getComputedStyle(title).opacity),
-      // Neither is ever display:none, so neither ever costs a reflow.
-      brandShown: getComputedStyle(brand).display !== 'none',
+      // Never display:none, so the handover costs no reflow.
       titleShown: getComputedStyle(title).display !== 'none',
-      sameCell: brand.getBoundingClientRect().left === title.getBoundingClientRect().left
+      // The bar must measure the same empty as it does full.
+      cell: Math.round(document.querySelector('.topbar-title').getBoundingClientRect().height),
+      bar: Math.round(document.querySelector('.topbar').getBoundingClientRect().height)
     };
   });
 
+  // There is no wordmark any more: the cell is empty until the title arrives.
+  await expect(page.locator('.topbar .brand')).toHaveCount(0);
+
   const atTop = await read();
-  expect(atTop.brand).toBe(1);
   expect(atTop.title).toBe(0);
-  expect(atTop.sameCell).toBe(true);
+  expect(atTop.titleShown).toBe(true);
 
   await page.evaluate(() => window.scrollTo(0, 600));
   await expect.poll(async () => (await read()).title).toBe(1);
   const scrolled = await read();
-  expect(scrolled.brand).toBe(0);
-  expect(scrolled.brandShown).toBe(true);
-  expect(scrolled.titleShown).toBe(true);
+  expect(scrolled.cell).toBe(atTop.cell);
+  expect(scrolled.bar).toBe(atTop.bar);
+
+  // It carries the day's span, not its date.
+  await expect(page.locator('.collapsed-title')).toContainText('8:00 AM');
 });
 
 test('back clears an open-time selection instead of leaving the app', async ({ page, server }) => {

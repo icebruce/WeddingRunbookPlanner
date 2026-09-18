@@ -92,10 +92,10 @@ async function settle(page) {
   const indicator = page.locator('.save-indicator');
   if (await indicator.count()) await expect(indicator).toHaveText(/Saved|Offline|Not saved/);
 
-  // The top bar swaps the brand for the collapsed title from an
+  // The top bar fades the collapsed title into its empty cell from an
   // IntersectionObserver, which reports after the scroll rather than with it.
-  // Shooting before it has reported catches whichever of the two got there
-  // first, which is not a property of the app.
+  // Shooting before it has reported catches the cell mid-handover, which is
+  // not a property of the app.
   await expect.poll(() => page.evaluate(() => {
     const heading = document.querySelector('.planner-heading h1');
     const topbar = document.querySelector('.topbar');

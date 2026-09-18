@@ -2,6 +2,8 @@ import { escapeHtml } from '../dom.js';
 import { icon } from '../icons.js';
 import { PLAN_STATUSES } from '../config.js';
 import { SAVE_STATES } from '../save.js';
+import { buildSchedule, formatTime } from '../schedule.js';
+import { shortPlanDate } from './timeline.js';
 
 const SAVE_LABELS = {
   [SAVE_STATES.saved]: 'Saved',
@@ -84,29 +86,34 @@ function dayOfControls(ui) {
 /**
  * Once the large title has scrolled away the top bar takes it over, so that
  * "which day is this?" is answerable from anywhere in a long plan.
+ *
+ * It carries the day's span rather than its date. By the time the title has
+ * collapsed the date is a given — it was on screen a moment ago and it never
+ * changes — whereas the span moves every time the first or last activity does,
+ * which makes it the half of "when" worth keeping in view. A plan with nothing
+ * in it has no span yet, so it falls back to the date.
  */
 function collapsedTitle(plan) {
-  const date = new Date(`${plan.date}T12:00:00`);
-  const short = Number.isNaN(date.getTime())
-    ? plan.date
-    : new Intl.DateTimeFormat('en-CA', { weekday: 'short', month: 'short', day: 'numeric' }).format(date);
-  return `<span class="collapsed-title" aria-hidden="true"><b>${escapeHtml(plan.title)}</b><small>${escapeHtml(short)}</small></span>`;
+  const { summary } = buildSchedule(plan);
+  const detail = summary.count
+    ? `${formatTime(summary.start)} – ${formatTime(summary.end)}`
+    : shortPlanDate(plan.date);
+  return `<span class="collapsed-title" aria-hidden="true"><b>${escapeHtml(plan.title)}</b><small>${escapeHtml(detail)}</small></span>`;
 }
 
 export function renderHeader({ plan, ui }) {
-  // The two live in one grid cell so they can cross-fade in place. Side by
-  // side they would have had to be shown and hidden outright, which is a hard
-  // cut at the exact scroll position where the handover happens.
-  const brand = `<div class="topbar-title">
-    <a href="#main-plan" class="brand" aria-label="${escapeHtml(plan.coupleLabel || 'Our Wedding')} planner">${icon('heart')}<span>${escapeHtml(plan.coupleLabel || 'Our Wedding')}</span></a>
-    ${collapsedTitle(plan)}
-  </div>`;
+  // Empty at rest. The large title sits immediately below the bar, and naming
+  // the plan directly above its own title said the same thing twice — so the
+  // cell holds nothing until the title scrolls away and takes its place. The
+  // planner name is still on the sign-in screen, the print header and in Plan
+  // settings, which is where it is asked for rather than merely seen.
+  const title = `<div class="topbar-title">${collapsedTitle(plan)}</div>`;
 
   if (ui.dayOf) {
-    return `${brand}<div class="topbar-actions">${dayOfControls(ui)}${appMenu(ui.openMenu === 'app', { ...ui, plan })}</div>`;
+    return `${title}<div class="topbar-actions">${dayOfControls(ui)}${appMenu(ui.openMenu === 'app', { ...ui, plan })}</div>`;
   }
 
-  return `${brand}
+  return `${title}
     <div class="topbar-actions">
       ${saveIndicator(ui.saveState)}
       ${statusControl(plan)}

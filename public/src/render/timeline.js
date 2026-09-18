@@ -134,11 +134,21 @@ export function renderTimeline({ plan, ui }) {
 /**
  * The summary is plain text; only the parts worth acting on look tappable, and
  * tapping one scrolls to the first open time or conflict (D11).
+ *
+ * The date lives here rather than under the title, so that "when" is one line
+ * — the day and the hours it runs — instead of two stacked ones. It is shown
+ * even before the first activity exists: an empty plan still has a day. The
+ * activity count is gone; the start and end already say how big the day is,
+ * and the count is still on every version row and the filter bar, where it
+ * answers a question someone is actually asking.
  */
-export function renderSummary({ plan, ui }) {
-  const schedule = buildSchedule(plan);
-  const { summary } = schedule;
-  if (!summary.count) return '';
+export function renderSummary({ plan }) {
+  const { summary } = buildSchedule(plan);
+
+  const range = summary.count
+    ? `<span class="summary-sep" aria-hidden="true">·</span>
+       <span>${escapeHtml(formatTime(summary.start))} – ${escapeHtml(formatTime(summary.end))}</span>`
+    : '';
 
   const links = [];
   if (summary.openMinutes) {
@@ -148,12 +158,10 @@ export function renderSummary({ plan, ui }) {
     links.push(`<button type="button" class="summary-link summary-link--bad" data-action="jump" data-target="conflict">${icon('warning')}${escapeHtml(formatDuration(summary.conflictMinutes))} conflict${icon('chevron')}</button>`);
   }
 
-  return `<p class="summary">
-    <span>${escapeHtml(formatTime(summary.start))} – ${escapeHtml(formatTime(summary.end))}</span>
-    <span class="summary-sep" aria-hidden="true">·</span>
-    <span>${summary.count} ${summary.count === 1 ? 'activity' : 'activities'}</span>
-    ${links.length ? `<span class="summary-break"></span>${links.join('')}` : ''}
-  </p>`;
+  return `<div class="summary">
+    <p class="summary-meta">${escapeHtml(shortPlanDate(plan.date))}${range}</p>
+    ${links.length ? `<p class="summary-links">${links.join('')}</p>` : ''}
+  </div>`;
 }
 
 export function renderHeading({ plan, ui }) {
@@ -162,7 +170,6 @@ export function renderHeading({ plan, ui }) {
   const viewOnly = Boolean(ui?.dayOf && !ui?.editingOnDay);
   return `<div>
       <h1>${escapeHtml(plan.title)}</h1>
-      <p class="planner-date">${escapeHtml(formatPlanDate(plan.date))}</p>
     </div>
     ${viewOnly ? '' : `<div class="planner-add-wrap">
       <button class="button button--primary planner-add" type="button" data-action="add" data-focus-key="add">${icon('plus')}<span>Add activity</span></button>
@@ -170,8 +177,12 @@ export function renderHeading({ plan, ui }) {
     </div>`}`;
 }
 
-export function formatPlanDate(value) {
+/**
+ * `Sat, Nov 21` — the one short-date form in the app, shared by the summary
+ * meta line and the collapsed title in the top bar, which have to agree.
+ */
+export function shortPlanDate(value) {
   const date = new Date(`${value}T12:00:00`);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('en-CA', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(date);
+  return new Intl.DateTimeFormat('en-CA', { weekday: 'short', month: 'short', day: 'numeric' }).format(date);
 }

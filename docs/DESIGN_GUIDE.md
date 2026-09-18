@@ -81,7 +81,7 @@ Font: `-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Hel
 | Body | 17 | 15 | 400 | Form values, list rows |
 | Subhead | 15/20 | 14/19 | 400 | Card time, location, summary line, date |
 | Footnote | 13 | 13 | 400–600 | Tags, labels, help, save state, toolbar context |
-| Caption | 12 | 12 | 500–700 | Toolbar labels, live label (caps, +0.04em), ruler quarter labels, pills |
+| Caption | 12 | 12 | 500–700 | Toolbar labels, live label and summary meta line (caps, +0.04em), ruler quarter labels, pills |
 | Ruler hour / half / quarter | 14 / 13 / 12 | same | 700 / 600 / 500 | Time ruler |
 
 Minimum: 12 px anywhere; 16 px for any text input on phones (prevents iOS zoom).
@@ -124,12 +124,12 @@ Minimum: 12 px anywhere; 16 px for any text input on phones (prevents iOS zoom).
 ## 4. Components
 
 ### 4.1 Top bar
-Height 52 phone / 62 desktop **minimum**, sticky, glass. The hairline bottom border is drawn only once something is passing underneath — it fades in over 160 ms on the same handover that brings in the collapsed title, and there is no rule at rest. The bar is often taller than the minimum (a notch's safe-area inset is part of its padding), so everything that sticks to its underside reads the measured height (`--topbar-height`, written by app.js) rather than the floor (`--topbar-min`). The title cell is a fixed 34 px, because the brand is one line and the collapsed title is two and the bar must not resize at the handover.
-Left: brand (heart 20 px + serif 19 px) or, once scrolled, collapsed title (`Wedding Day` 17/650 over `Sat, Nov 21` 12). The two share one grid cell and cross-fade over 160 ms with a 2 px rise; neither is ever `display: none`, so the handover costs no reflow. The line that triggers it has a 10 px band — collapse as the title goes under the bar, restore only once it is 10 px clear — so resting the scroll on the handover cannot flip it back and forth. Right: save state (footnote, 7 px dot), then 44 px menu button. Desktop adds status control (34 px pill) before the menu.
+Height 52 phone / 62 desktop **minimum**, sticky, glass. The hairline bottom border is drawn only once something is passing underneath — it fades in over 160 ms on the same handover that brings in the collapsed title, and there is no rule at rest. The bar is often taller than the minimum (a notch's safe-area inset is part of its padding), so everything that sticks to its underside reads the measured height (`--topbar-height`, written by app.js) rather than the floor (`--topbar-min`). The title cell is a fixed 34 px, because an empty cell and the two-line collapsed title must measure the same and the bar must not resize at the handover.
+Left: empty at rest — the large title is immediately below, and the planner name above it said the same thing twice — then, once scrolled, the collapsed title (`Wedding Day` 17/650 over `11:30 AM – 10:45 PM` 12, tabular) fades into that space. The two share one grid cell and cross-fade over 160 ms with a 2 px rise; neither is ever `display: none`, so the handover costs no reflow. The line that triggers it has a 10 px band — collapse as the title goes under the bar, restore only once it is 10 px clear — so resting the scroll on the handover cannot flip it back and forth. Right: save state (footnote, 7 px dot), then 44 px menu button. Desktop adds status control (34 px pill) before the menu.
 Day-of right side: `🔒 View only` pill (30 px) + **Edit** text button (17/600 `--sel`). Editing on the day: amber `● Editing` pill + **Done**.
 
 ### 4.2 Summary line and filter chips
-Summary: subhead `--soft`; separators `·` in `#C4C5C9`; actionable items on their own line, 600 weight, `--sel` (open time) or `--bad` (conflict) with a 13 px chevron.
+Summary: the date and time range on one caption line under the title (12/700 caps, +0.04em, `--soft`, tabular); separators `·`; no activity count. Actionable items on their own line, subhead 600, `--sel` (open time) or `--bad` (conflict) with a 13 px chevron, each given a 44 px hit area by a pseudo-element so the line still reads as one 20 px row.
 Filter chips: 36 px tall, 18 px radius, 15 px text, `--surface` with hairline; selected: `--ink` fill, white text. Horizontal scroll, no scrollbar.
 Pinned filter row: 44 px, `--sel-tint` glass, `Showing **Photographer** · 2 of 12` and a 44 px ✕.
 
