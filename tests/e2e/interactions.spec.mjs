@@ -5,7 +5,7 @@
  * rest of it together.
  */
 import { test, expect, seedPlan, activity } from './fixtures.mjs';
-import { isPhoneLayout, signInAndWaitForPlan } from './helpers.mjs';
+import { isPhoneLayout, signInAndWaitForPlan, supportsTouchDrag } from './helpers.mjs';
 
 const T = (h, m = 0) => h * 60 + m;
 
@@ -46,7 +46,108 @@ test('toast pauses while hovered and resumes after', async ({ page, server }) =>
   await expect(toast).toBeHidden({ timeout: 8000 });
 });
 
-test('a toast can be swiped away', async ({ page, server }) => {
+/**
+ * A locator's box once it has stopped moving.
+ *
+ * `boundingBox()` answers where something is now, which is not where it will
+ * be a frame later if it is mid-transition — and a synthetic pointer aimed at
+ * the answer arrives after that frame.
+ */
+async function restingBox(locator, { tries = 40, gapMs = 50 } = {}) {
+  let previous = null;
+  for (let attempt = 0; attempt < tries; attempt += 1) {
+    const box = await locator.boundingBox();
+    if (box && previous && box.x === previous.x && box.y === previous.y) return box;
+    previous = box;
+    await locator.page().waitForTimeout(gapMs);
+  }
+  throw new Error('the element never stopped moving');
+}
+
+/**
+ * The swipe itself, which only Chromium can be made to perform.
+ *
+ * This drives a mouse drag on a touch-emulated device, and horizontal movement
+ * on the toast — which is `touch-action: pan-y` — is exactly where a browser
+ * claims the gesture for itself. On WebKit it does: instrumented, one move of
+ * ten reaches the page, at five pixels against a six-pixel slop, and nothing
+ * follows it. `--toast-drag` then sits at 0 for five seconds while the page
+ * keeps answering, so the browser has stopped dispatching rather than run
+ * late. It read as passing here until the swipe was reworked from downward to
+ * sideways, and as `flaky` after that — a race being won, not a gesture being
+ * tested.
+ *
+ * So it joins every other swipe-based spec in skipping where a real swipe
+ * cannot be driven (`supportsTouchDrag`, and the note above it in helpers).
+ * What the swipe does once it starts is covered on Chromium here, and the
+ * toast's own handling of a gesture it loses is covered on every engine by the
+ * test below, which needs no drag to reach the slop.
+ */
+test('a toast can be swiped away', async ({ page, server, browserName }) => {
+  test.skip(!isPhoneLayout(page), 'the selection toolbar is the narrow layout');
+  test.skip(!supportsTouchDrag(browserName), 'a real swipe needs CDP');
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+  await signInAndWaitForPlan(page);
+  await page.locator('.card').first().click();
+  await page.locator('.toolbar [data-action="lock"]').click();
+  const toast = page.locator('.toast');
+  await expect(toast).toBeVisible();
+  /**
+   * Drag the toast, and wait for the page to have received it.
+   *
+   * `page.mouse.move` resolves once the driver has queued the input, not once
+   * the page has been given it. The ten moves of a drag arrive at whatever rate
+   * a loaded runner manages, and one move is five pixels — under the six-pixel
+   * slop, so the swipe has not started yet and a fixed wait can expire between
+   * the first move and the second. That is what made this flaky: the events on
+   * a failing run were pointerdown at clientX 46 and a single pointermove at
+   * 51, and nothing had gone wrong except the asking.
+   *
+   * So the sideways drag waits for the offset the page itself records to reach
+   * where the pointer was sent, rather than for a duration.
+   */
+  const drag = async (dx, dy, { swipes }) => {
+    // Re-read the box each time, and wait for it to stop moving: the first drag
+    // ends off the toast, which counts as a click outside the selection and
+    // takes the toolbar away — and the toast floats above whatever occupies the
+    // bottom of the screen, so it slides 44 px down to sit above the + instead.
+    // A box read mid-slide is 44 px stale by the time the pointer lands on it.
+    const box = await restingBox(toast);
+    const x = box.x + 30;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + dx / 3, y + dy / 3, { steps: 4 });
+    await page.mouse.move(x + dx, y + dy, { steps: 6 });
+
+    const offset = () => toast.evaluate(node =>
+      Number.parseFloat(node.style.getPropertyValue('--toast-drag')) || 0);
+    if (swipes) {
+      await expect.poll(offset, { message: 'the toast followed the pointer', timeout: 5_000 })
+        .toBeGreaterThanOrEqual(dx - 2);
+    } else {
+      // Absence cannot be waited for, only given a chance to show up. The real
+      // statement about a downward drag is the one after the release: the toast
+      // is still there.
+      await page.waitForTimeout(150);
+      expect(await offset(), 'a downward drag moved the toast sideways').toBe(0);
+      expect(await toast.evaluate(node => node.classList.contains('is-dragging')),
+        'a downward drag was taken for a swipe').toBe(false);
+    }
+    await page.mouse.up();
+  };
+
+  // Down is the one direction that is nearly free — the toast is already at
+  // the bottom of the screen — so it is not a dismissal.
+  await drag(0, 60, { swipes: false });
+  await expect(toast).toBeVisible();
+
+  // Sideways is.
+  await drag(60, 0, { swipes: true });
+  await expect(toast).toBeHidden({ timeout: 2000 });
+});
+
+test('a swipe whose release is never heard does not lock the toast', async ({ page, server }) => {
   test.skip(!isPhoneLayout(page), 'the selection toolbar is the narrow layout');
   await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
   await signInAndWaitForPlan(page);
@@ -54,32 +155,27 @@ test('a toast can be swiped away', async ({ page, server }) => {
   await page.locator('.toolbar [data-action="lock"]').click();
   const toast = page.locator('.toast');
   await expect(toast).toBeVisible();
-  const drag = async (dx, dy) => {
-    // Re-read it each time: the first drag ends off the toast, which counts as
-    // a click outside the selection and takes the toolbar away — and the toast
-    // floats above whatever occupies the bottom of the screen, so it moves.
-    const box = await toast.boundingBox();
-    const x = box.x + 30;
-    const y = box.y + box.height / 2;
-    await page.mouse.move(x, y);
-    await page.mouse.down();
-    await page.mouse.move(x + dx / 3, y + dy / 3, { steps: 4 });
-    await page.mouse.move(x + dx, y + dy, { steps: 6 });
-    // The move promise resolves once CDP has queued the input, not once the
-    // page's own pointermove handler has run — under CI load the release can
-    // overtake it, so onSwipeRelease sees `moved` still false and the swipe
-    // reads as a tap. Give the handler a turn before letting go.
-    await page.waitForTimeout(50);
-    await page.mouse.up();
-  };
 
-  // Down is the one direction that is nearly free — the toast is already at
-  // the bottom of the screen — so it is not a dismissal.
-  await drag(0, 60);
-  await expect(toast).toBeVisible();
+  // A press the toast hears and a release it never does. The capture that
+  // would guarantee the release is deliberately not taken until the movement
+  // proves itself, so this is not a contrived state: a drag that ends off the
+  // toast reaches it in the ordinary course of things.
+  await toast.evaluate(node => node.dispatchEvent(new PointerEvent('pointerdown', {
+    bubbles: true, button: 0, pointerId: 99, isPrimary: true, clientX: 50, clientY: 50
+  })));
 
-  // Sideways is.
-  await drag(60, 0);
+  const box = await restingBox(toast);
+  const x = box.x + 30;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 20, y, { steps: 4 });
+  await page.mouse.move(x + 60, y, { steps: 6 });
+  await page.waitForTimeout(50);
+  const dragging = await toast.evaluate(node => node.classList.contains('is-dragging'));
+  await page.mouse.up();
+
+  expect(dragging, 'the abandoned gesture did not refuse this one').toBe(true);
   await expect(toast).toBeHidden({ timeout: 2000 });
 });
 
@@ -326,6 +422,105 @@ test('a card re-fits while it is being resized, not after', async ({ page, serve
   expect(overflow).toBeLessThanOrEqual(1);
 
   await page.mouse.up();
+});
+
+/**
+ * Selection is a ring and two handles. It is not a different card.
+ *
+ * The right padding that reserves the lock button's column is the trap: it was
+ * once declared twice, and the selected value differed from the unselected one
+ * by two pixels. Two pixels is enough for the time row to wrap on one and not
+ * the other, so tapping a card slid everything under it up a whole line and
+ * handed back a row the fit pass had dropped.
+ */
+const MEASURED = ['.card-title', '.card-time', '.card-stage', '.card-location', '.card-people', '.card-warn', '.card-line-time'];
+
+/**
+ * Every row's box relative to its own card, and the card's own box with it.
+ *
+ * One read, not two. Taken separately they are two different moments, and a
+ * fit pass landing between them reports rows from before it against a box from
+ * after — which reads exactly like rows that moved on their own.
+ */
+function cardSnapshot(page, id) {
+  return page.evaluate(([activityId, selectors]) => {
+    const card = document.querySelector(`.card[data-activity-id="${activityId}"]`);
+    const body = card.querySelector('.card-body');
+    const base = card.getBoundingClientRect();
+    const round = value => Math.round(value * 10) / 10;
+    const rows = {};
+    for (const selector of selectors) {
+      const row = card.querySelector(selector);
+      if (!row) continue;
+      const box = row.getBoundingClientRect();
+      rows[selector] = row.hidden || getComputedStyle(row).display === 'none'
+        ? 'dropped'
+        : [round(box.top - base.top), round(box.left - base.left), round(box.width), round(box.height)].join();
+    }
+    return {
+      rows,
+      box: {
+        card: card.offsetHeight,
+        client: body.clientHeight,
+        scroll: body.scrollHeight,
+        clipped: card.classList.contains('is-clipped')
+      }
+    };
+  }, [id, MEASURED]);
+}
+
+/**
+ * Run the fit pass and wait for it to finish.
+ *
+ * It runs on a frame, and not the frame the paint happened in, so waiting a
+ * fixed interval is a race — one this sandbox wins on Chromium and a loaded
+ * runner can lose on WebKit. Asking for the pass and awaiting its own callback
+ * is the same thing the layout-count test does, and it makes the comparison
+ * about selection rather than about how quickly the first fit landed.
+ */
+async function settleFit(page) {
+  await page.evaluate(async () => {
+    const { fitCards } = await import('/src/render/fit.js');
+    await new Promise(resolve => fitCards(document.querySelector('#app'), resolve));
+  });
+}
+
+async function expectSelectionMovesNothing(page, ids) {
+  for (const id of ids) {
+    const card = page.locator(`.card[data-activity-id="${id}"]`);
+    await settleFit(page);
+    const before = await cardSnapshot(page, id);
+    await card.click({ position: { x: 20, y: 6 } });
+    await expect(card).toHaveClass(/is-selected/);
+    await settleFit(page);
+    const after = await cardSnapshot(page, id);
+    // The boxes go in the message rather than an assertion of their own: a card
+    // can settle with a little overflow left, since the title and the warning
+    // never drop, so the number is evidence rather than an invariant.
+    const note = `${id} — before ${JSON.stringify(before.box)} after ${JSON.stringify(after.box)}`;
+    expect(after.rows, note).toEqual(before.rows);
+    await page.keyboard.press('Escape');
+    await settleFit(page);
+  }
+}
+
+test('selecting a card moves nothing inside it', async ({ page }) => {
+  await signInAndWaitForPlan(page);
+  await expect(page.locator('.card').first()).toBeVisible();
+
+  const ids = await page.locator('.card').evaluateAll(cards => cards.map(card => card.dataset.activityId));
+  await expectSelectionMovesNothing(page, ids);
+});
+
+test('selecting one of two overlapping cards moves nothing inside it', async ({ page, server }) => {
+  await server.seed({ plan: seedPlan({ activities: [
+    activity('a', T(10), 60, { title: 'Bridal party portraits by the lake', location: 'Lakeside lawn', people: ['Anna', 'Ben'] }),
+    activity('b', T(10, 20), 60, { title: 'Groomsmen portraits in the courtyard', location: 'Courtyard', people: ['Carl'] })
+  ] }) });
+  await signInAndWaitForPlan(page);
+  await expect(page.locator('.card')).toHaveCount(2);
+
+  await expectSelectionMovesNothing(page, ['a', 'b']);
 });
 
 test('the fit pass costs a handful of layouts, not one per card', async ({ page, server }) => {

@@ -149,7 +149,7 @@ Pinned filter row: 44 px, `--sel-tint` glass, `Showing **Photographer** · 2 of 
 ```
 
 - Stage bar: 3 px wide, 2 px radius, 10 px from the left, inset 8 px top/bottom (5 px on one-line cards).
-- Body: left 26 px, padding 9/12 (small cards 7/12, row gap 2), row gap 4.
+- Body: left 26 px, padding 9/12 (small cards 7/12, row gap 2), row gap 4. The lock button's column — 46 px of right padding, 42 px on a one-line card — is reserved on every card at every width, selected or not, so selecting a card never re-wraps or re-fits its rows.
 - One-line cards (≤10 min): title 15/18, lock, dots, start time (13 `--soft`) on one line.
 - Drop order when space runs out: people → stage → location → progress → time. Title and warning never drop.
 - “More” dots: three 3.5 px dots, 2.5 px apart, 9 px from right, 7 px from bottom.
@@ -168,7 +168,7 @@ Pinned filter row: 44 px, `--sel-tint` glass, `Showing **Photographer** · 2 of 
 | Pressed (touch) | Scale 0.99, 100 ms |
 | Charging (touch) | Scale 0.972 over the 300 ms hold, linear, with hover elevation. The press visibly deepens so the lift is telegraphed rather than sprung — with no handle to advertise the gesture, this is the affordance. |
 | Focus | 2 px `--sel` ring offset 2 px |
-| Selected | 2 px `--sel` ring + `0 8px 22px rgba(10,108,255,.14)`; handles 34×9 hollow `--sel` capsule top (unless locked) and bottom; body right padding 46 px |
+| Selected | 2 px `--sel` ring + `0 8px 22px rgba(10,108,255,.14)`; handles 34×9 hollow `--sel` capsule top (unless locked) and bottom. Nothing inside the card moves |
 | Resizing | Selected + snap line/label + bubble (`--ink` background, white 13/600, 10 px radius) |
 | Dragging (move) | Lifted elevation, scale 1.03, **no tilt** — on a timeline the card's edges are read against the snap line, and rotating them puts the two out of parallel exactly when the reading matters; the shadow carries the elevation instead. The card follows the pointer with a live snap line/label at its new time, same treatment as resizing; a group move (§5.6 of `FUNCTIONAL_SPEC.md`) animates the other selected, unlocked cards to their new positions on release |
 | Drop would overlap | Lifted card outlined 1.5 px `--bad`; both cards hatched over the exact colliding minutes and outlined as any overlap is; the snap line, its label and the bubble all turn `--bad` and the bubble reports `Overlaps N min` in place of the time |
