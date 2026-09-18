@@ -368,97 +368,78 @@ test('a card re-fits while it is being resized, not after', async ({ page, serve
  */
 const MEASURED = ['.card-title', '.card-time', '.card-stage', '.card-location', '.card-people', '.card-warn', '.card-line-time'];
 
-/** Every row's box relative to its own card, so a scroll is not a difference. */
-function cardLayout(page, id) {
+/**
+ * Every row's box relative to its own card, and the card's own box with it.
+ *
+ * One read, not two. Taken separately they are two different moments, and a
+ * fit pass landing between them reports rows from before it against a box from
+ * after — which reads exactly like rows that moved on their own.
+ */
+function cardSnapshot(page, id) {
   return page.evaluate(([activityId, selectors]) => {
     const card = document.querySelector(`.card[data-activity-id="${activityId}"]`);
+    const body = card.querySelector('.card-body');
     const base = card.getBoundingClientRect();
     const round = value => Math.round(value * 10) / 10;
-    const out = {};
+    const rows = {};
     for (const selector of selectors) {
       const row = card.querySelector(selector);
       if (!row) continue;
       const box = row.getBoundingClientRect();
-      out[selector] = row.hidden || getComputedStyle(row).display === 'none'
+      rows[selector] = row.hidden || getComputedStyle(row).display === 'none'
         ? 'dropped'
         : [round(box.top - base.top), round(box.left - base.left), round(box.width), round(box.height)].join();
     }
-    return out;
+    return {
+      rows,
+      box: {
+        card: card.offsetHeight,
+        client: body.clientHeight,
+        scroll: body.scrollHeight,
+        clipped: card.classList.contains('is-clipped')
+      }
+    };
   }, [id, MEASURED]);
 }
 
 /**
- * The card's own box, which is what the fit pass decides against.
+ * Run the fit pass and wait for it to finish.
  *
- * A comparison is only worth making between two settled cards: a card whose
- * body overflows by a whole row has not been fitted yet, and every row in it
- * is at a position the fit pass is about to take away. Reporting the box with
- * the failure is what tells those two apart.
+ * It runs on a frame, and not the frame the paint happened in, so waiting a
+ * fixed interval is a race — one this sandbox wins on Chromium and a loaded
+ * runner can lose on WebKit. Asking for the pass and awaiting its own callback
+ * is the same thing the layout-count test does, and it makes the comparison
+ * about selection rather than about how quickly the first fit landed.
  */
-function cardMetrics(page, id) {
-  return page.evaluate(activityId => {
-    const card = document.querySelector(`.card[data-activity-id="${activityId}"]`);
-    const body = card.querySelector('.card-body');
-    return {
-      card: card.offsetHeight,
-      client: body.clientHeight,
-      scroll: body.scrollHeight,
-      clipped: card.classList.contains('is-clipped')
-    };
-  }, id);
-}
-
-/**
- * A card's rows once they have stopped moving.
- *
- * The fit pass runs on a frame, and the frame it runs on is not the frame the
- * paint happened in — so a fixed wait is a race, and on a loaded runner it is
- * a race that can be lost. Both snapshots are polled to a standstill instead,
- * which is the only way the comparison means what it says: two settled cards,
- * not one settled and one still being fitted.
- */
-async function restingLayout(page, id, { tries = 40, gapMs = 100 } = {}) {
-  let previous = null;
-  for (let attempt = 0; attempt < tries; attempt += 1) {
-    const layout = await cardLayout(page, id);
-    const serialised = JSON.stringify(layout);
-    if (serialised === previous) return layout;
-    previous = serialised;
-    await page.waitForTimeout(gapMs);
-  }
-  throw new Error(`${id} never stopped being fitted: ${previous}`);
-}
-
-/** The fit pass runs on a frame, so give it one and a margin. */
-async function fitted(page) {
-  await page.waitForTimeout(150);
+async function settleFit(page) {
+  await page.evaluate(async () => {
+    const { fitCards } = await import('/src/render/fit.js');
+    await new Promise(resolve => fitCards(document.querySelector('#app'), resolve));
+  });
 }
 
 async function expectSelectionMovesNothing(page, ids) {
   for (const id of ids) {
     const card = page.locator(`.card[data-activity-id="${id}"]`);
-    const before = await restingLayout(page, id);
-    const was = await cardMetrics(page, id);
+    await settleFit(page);
+    const before = await cardSnapshot(page, id);
     await card.click({ position: { x: 20, y: 6 } });
     await expect(card).toHaveClass(/is-selected/);
-    await restingLayout(page, id);
-    const now = await cardMetrics(page, id);
-    // The box goes in the message rather than an assertion of its own: a card
-    // can settle with a little overflow left (the title and the warning never
-    // drop), so the number is evidence, not an invariant. What it tells a
-    // failure is whether the rows moved or whether one of the two snapshots
-    // was taken before the fit pass had run at all.
-    const note = `${id} — before ${JSON.stringify(was)} after ${JSON.stringify(now)}`;
-    expect(await cardLayout(page, id), note).toEqual(before);
+    await settleFit(page);
+    const after = await cardSnapshot(page, id);
+    // The boxes go in the message rather than an assertion of their own: a card
+    // can settle with a little overflow left, since the title and the warning
+    // never drop, so the number is evidence rather than an invariant.
+    const note = `${id} — before ${JSON.stringify(before.box)} after ${JSON.stringify(after.box)}`;
+    expect(after.rows, note).toEqual(before.rows);
     await page.keyboard.press('Escape');
-    await fitted(page);
+    await settleFit(page);
   }
 }
 
 test('selecting a card moves nothing inside it', async ({ page }) => {
   await signInAndWaitForPlan(page);
   await expect(page.locator('.card').first()).toBeVisible();
-  await fitted(page);
 
   const ids = await page.locator('.card').evaluateAll(cards => cards.map(card => card.dataset.activityId));
   await expectSelectionMovesNothing(page, ids);
@@ -471,7 +452,6 @@ test('selecting one of two overlapping cards moves nothing inside it', async ({ 
   ] }) });
   await signInAndWaitForPlan(page);
   await expect(page.locator('.card')).toHaveCount(2);
-  await fitted(page);
 
   await expectSelectionMovesNothing(page, ['a', 'b']);
 });
