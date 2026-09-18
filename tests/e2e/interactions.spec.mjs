@@ -424,6 +424,105 @@ test('a card re-fits while it is being resized, not after', async ({ page, serve
   await page.mouse.up();
 });
 
+/**
+ * Selection is a ring and two handles. It is not a different card.
+ *
+ * The right padding that reserves the lock button's column is the trap: it was
+ * once declared twice, and the selected value differed from the unselected one
+ * by two pixels. Two pixels is enough for the time row to wrap on one and not
+ * the other, so tapping a card slid everything under it up a whole line and
+ * handed back a row the fit pass had dropped.
+ */
+const MEASURED = ['.card-title', '.card-time', '.card-stage', '.card-location', '.card-people', '.card-warn', '.card-line-time'];
+
+/**
+ * Every row's box relative to its own card, and the card's own box with it.
+ *
+ * One read, not two. Taken separately they are two different moments, and a
+ * fit pass landing between them reports rows from before it against a box from
+ * after — which reads exactly like rows that moved on their own.
+ */
+function cardSnapshot(page, id) {
+  return page.evaluate(([activityId, selectors]) => {
+    const card = document.querySelector(`.card[data-activity-id="${activityId}"]`);
+    const body = card.querySelector('.card-body');
+    const base = card.getBoundingClientRect();
+    const round = value => Math.round(value * 10) / 10;
+    const rows = {};
+    for (const selector of selectors) {
+      const row = card.querySelector(selector);
+      if (!row) continue;
+      const box = row.getBoundingClientRect();
+      rows[selector] = row.hidden || getComputedStyle(row).display === 'none'
+        ? 'dropped'
+        : [round(box.top - base.top), round(box.left - base.left), round(box.width), round(box.height)].join();
+    }
+    return {
+      rows,
+      box: {
+        card: card.offsetHeight,
+        client: body.clientHeight,
+        scroll: body.scrollHeight,
+        clipped: card.classList.contains('is-clipped')
+      }
+    };
+  }, [id, MEASURED]);
+}
+
+/**
+ * Run the fit pass and wait for it to finish.
+ *
+ * It runs on a frame, and not the frame the paint happened in, so waiting a
+ * fixed interval is a race — one this sandbox wins on Chromium and a loaded
+ * runner can lose on WebKit. Asking for the pass and awaiting its own callback
+ * is the same thing the layout-count test does, and it makes the comparison
+ * about selection rather than about how quickly the first fit landed.
+ */
+async function settleFit(page) {
+  await page.evaluate(async () => {
+    const { fitCards } = await import('/src/render/fit.js');
+    await new Promise(resolve => fitCards(document.querySelector('#app'), resolve));
+  });
+}
+
+async function expectSelectionMovesNothing(page, ids) {
+  for (const id of ids) {
+    const card = page.locator(`.card[data-activity-id="${id}"]`);
+    await settleFit(page);
+    const before = await cardSnapshot(page, id);
+    await card.click({ position: { x: 20, y: 6 } });
+    await expect(card).toHaveClass(/is-selected/);
+    await settleFit(page);
+    const after = await cardSnapshot(page, id);
+    // The boxes go in the message rather than an assertion of their own: a card
+    // can settle with a little overflow left, since the title and the warning
+    // never drop, so the number is evidence rather than an invariant.
+    const note = `${id} — before ${JSON.stringify(before.box)} after ${JSON.stringify(after.box)}`;
+    expect(after.rows, note).toEqual(before.rows);
+    await page.keyboard.press('Escape');
+    await settleFit(page);
+  }
+}
+
+test('selecting a card moves nothing inside it', async ({ page }) => {
+  await signInAndWaitForPlan(page);
+  await expect(page.locator('.card').first()).toBeVisible();
+
+  const ids = await page.locator('.card').evaluateAll(cards => cards.map(card => card.dataset.activityId));
+  await expectSelectionMovesNothing(page, ids);
+});
+
+test('selecting one of two overlapping cards moves nothing inside it', async ({ page, server }) => {
+  await server.seed({ plan: seedPlan({ activities: [
+    activity('a', T(10), 60, { title: 'Bridal party portraits by the lake', location: 'Lakeside lawn', people: ['Anna', 'Ben'] }),
+    activity('b', T(10, 20), 60, { title: 'Groomsmen portraits in the courtyard', location: 'Courtyard', people: ['Carl'] })
+  ] }) });
+  await signInAndWaitForPlan(page);
+  await expect(page.locator('.card')).toHaveCount(2);
+
+  await expectSelectionMovesNothing(page, ['a', 'b']);
+});
+
 test('the fit pass costs a handful of layouts, not one per card', async ({ page, server }) => {
   const many = Array.from({ length: 24 }, (_, i) => activity(`a${i}`, T(7) + i * 35, 30, {
     title: `Activity number ${i} with a reasonably long title`,
