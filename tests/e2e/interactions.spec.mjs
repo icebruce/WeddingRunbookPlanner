@@ -112,6 +112,38 @@ test('a toast can be swiped away', async ({ page, server }) => {
   await expect(toast).toBeHidden({ timeout: 2000 });
 });
 
+test('a swipe whose release is never heard does not lock the toast', async ({ page, server }) => {
+  test.skip(!isPhoneLayout(page), 'the selection toolbar is the narrow layout');
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+  await signInAndWaitForPlan(page);
+  await page.locator('.card').first().click();
+  await page.locator('.toolbar [data-action="lock"]').click();
+  const toast = page.locator('.toast');
+  await expect(toast).toBeVisible();
+
+  // A press the toast hears and a release it never does. The capture that
+  // would guarantee the release is deliberately not taken until the movement
+  // proves itself, so this is not a contrived state: a drag that ends off the
+  // toast reaches it in the ordinary course of things.
+  await toast.evaluate(node => node.dispatchEvent(new PointerEvent('pointerdown', {
+    bubbles: true, button: 0, pointerId: 99, isPrimary: true, clientX: 50, clientY: 50
+  })));
+
+  const box = await restingBox(toast);
+  const x = box.x + 30;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 20, y, { steps: 4 });
+  await page.mouse.move(x + 60, y, { steps: 6 });
+  await page.waitForTimeout(50);
+  const dragging = await toast.evaluate(node => node.classList.contains('is-dragging'));
+  await page.mouse.up();
+
+  expect(dragging, 'the abandoned gesture did not refuse this one').toBe(true);
+  await expect(toast).toBeHidden({ timeout: 2000 });
+});
+
 test('a tap on Undo still undoes', async ({ page, server }) => {
   test.skip(!isPhoneLayout(page), 'the selection toolbar is the narrow layout');
   await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
