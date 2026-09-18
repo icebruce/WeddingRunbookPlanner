@@ -3,6 +3,7 @@ import { icon } from '../icons.js';
 import { buildLayout } from '../layout.js';
 import { buildSchedule, formatDuration, formatTime } from '../schedule.js';
 import { renderCard, renderCardMenu } from './card.js';
+import { isViewOnly } from '../dayof.js';
 
 /** Hour, half hour and quarter hour are labelled; five-minute lines are not. */
 function tickLabel(minute) {
@@ -60,7 +61,7 @@ function openTimeBlock(gap, ui, viewOnly) {
   const bodyAttrs = viewOnly ? '' : `data-action="select-open-time" data-before="${escapeHtml(gap.beforeId)}"
     data-start="${gap.start}" data-end="${gap.end}" role="button" tabindex="0" aria-pressed="${selected}"`;
 
-  const addButton = thin ? '' : `<button type="button" class="open-time-add" data-action="open-time"
+  const addButton = thin || viewOnly ? '' : `<button type="button" class="open-time-add" data-action="open-time"
       data-before="${escapeHtml(gap.beforeId)}" data-start="${gap.start}" data-end="${gap.end}"
       tabindex="${selected ? '0' : '-1'}" data-focus-key="open-time-add:${escapeHtml(gap.beforeId)}"
       aria-label="${escapeHtml(`Add time before ${gap.beforeTitle}`)}">${icon('plus')}</button>`;
@@ -121,7 +122,7 @@ export function renderTimeline({ plan, ui }) {
   return `<div class="timeline-grid ${ui.dayOf ? 'is-day-of' : ''}" data-from="${layout.from}" style="height:${layout.height + 48}px">
     <div class="timeline-ruler" aria-hidden="true">${ruler(layout)}${nowLine(layout, nowMinutes)}</div>
     <div class="timeline-plan">
-      ${layout.openTimes.map(gap => openTimeBlock(gap, ui, Boolean(ui.dayOf && !ui.editingOnDay))).join('')}
+      ${layout.openTimes.map(gap => openTimeBlock(gap, ui, isViewOnly(ui))).join('')}
       ${layout.cards.map(card => renderCard(card, { ui, filter: ui.filter, nowMinutes })).join('')}
       ${menuLayer(layout, ui)}
     </div>
@@ -167,7 +168,7 @@ export function renderSummary({ plan }) {
 export function renderHeading({ plan, ui }) {
   // Adding is editing, so on the day this is not offered until Edit has been
   // pressed — the same rule the + on a phone follows.
-  const viewOnly = Boolean(ui?.dayOf && !ui?.editingOnDay);
+  const viewOnly = isViewOnly(ui);
   return `<div>
       <h1>${escapeHtml(plan.title)}</h1>
     </div>

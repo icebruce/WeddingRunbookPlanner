@@ -10,6 +10,8 @@ import plan from '../api/plan.js';
 import versions from '../api/versions.js';
 import exportPlan from '../api/export.js';
 import template from '../api/template.js';
+import share from '../api/share.js';
+import shared from '../api/shared.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -26,7 +28,9 @@ const apiRoutes = new Map([
   ['/api/plan', plan],
   ['/api/versions', versions],
   ['/api/export', exportPlan],
-  ['/api/template', template]
+  ['/api/template', template],
+  ['/api/share', share],
+  ['/api/shared', shared]
 ]);
 
 const mime = new Map([

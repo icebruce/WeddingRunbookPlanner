@@ -1,5 +1,5 @@
 import { test, expect, activity, seedPlan } from './fixtures.mjs';
-import { isPhoneLayout, openActivityEditor, setPicker, signInAndWaitForPlan } from './helpers.mjs';
+import { openActivityEditor, setPicker, signInAndWaitForPlan } from './helpers.mjs';
 
 const T = (h, m = 0) => h * 60 + m;
 
@@ -195,26 +195,8 @@ test.describe('the menu', () => {
     const actions = await page.locator('.menu-popover button:visible')
       .evaluateAll(nodes => nodes.map(node => node.dataset.menuAction));
 
-    // The status row is part of the phone menu only; everything else is the
-    // same list either way.
-    const expected = ['day-of', 'theme', 'print', 'export', 'versions', 'settings', 'logout'];
-    if (isPhoneLayout(page)) expected.splice(2, 0, 'status');
-
-    expect(actions).toEqual(expected);
-
-    if (isPhoneLayout(page)) {
-      await expect(page.locator('[data-menu-action="status"]')).toContainText('Working');
-    }
-  });
-
-  test('D24: the status is in the phone menu and in the wide top bar, never both', async ({ page, server }) => {
-    await server.seed();
-    await signInAndWaitForPlan(page);
-
-    const inTopBar = await page.locator('.status-control').isVisible();
-    await menu(page);
-    const inMenu = await page.locator('[data-menu-action="status"]').isVisible();
-    expect(inTopBar).not.toBe(inMenu);
+    // The same list at every width, now that the status row is gone (D31).
+    expect(actions).toEqual(['day-of', 'theme', 'share', 'print', 'export', 'versions', 'settings', 'logout']);
   });
 
   test('theme lives only in the menu, not in settings too', async ({ page, server }, testInfo) => {

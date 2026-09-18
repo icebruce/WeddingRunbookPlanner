@@ -7,8 +7,11 @@ import { isPhoneLayout, signInAndWaitForPlan } from './helpers.mjs';
  */
 const DATE = '2026-11-21';
 const T = (h, m = 0) => h * 60 + m;
+// A wall-clock time at the venue. November is EST, so the offset is spelled
+// out: the app never assumes a fixed one (it reads the zone name), but a test
+// that left it off would assert whatever zone the runner happened to be in.
 const at = (hours, minutes = 0, day = 21) =>
-  new Date(`2026-11-${String(day).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`);
+  new Date(`2026-11-${String(day).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00-05:00`);
 
 const card = (page, id) => page.locator(`.card[data-activity-id="${id}"]`);
 const strip = page => page.locator('.live-strip');
@@ -41,9 +44,42 @@ test('D1: it turns itself on on the day, and off on any other date', async ({ pa
   await expect(page.locator('.mode-pill--view')).toContainText('View only');
 });
 
-test('D1: setting the status to Final turns it on whatever the date', async ({ page, server }) => {
-  await openAt(page, server, at(13, 0, 15), day({ status: 'Final' }));
-  await expect(strip(page)).toBeVisible();
+test.describe('D31: the date decides, read on the venue clock', () => {
+  test.use({ timezoneId: 'Europe/London' });
+
+  test('a reader five hours ahead still sees the venue\'s day', async ({ page, server }) => {
+    // 10:30 PM in Montreal on the wedding day is 3:30 AM on the 22nd in
+    // London. Read on the device's own clock, the day would already be over.
+    await openAt(page, server, at(22, 30));
+    await expect(strip(page)).toBeVisible();
+
+    // And the strip counts from midnight at the venue, not from the reader's.
+    await expect(strip(page)).toContainText('Day complete');
+  });
+
+  test('and does not see it a day early', async ({ page, server }) => {
+    // 8 PM in London on the 20th is 3 PM in Montreal on the 20th: still the
+    // day before, in both places, for different reasons.
+    await openAt(page, server, at(15, 0, 20));
+    await expect(strip(page)).toHaveCount(0);
+  });
+});
+
+test('view only means no control on a card does anything', async ({ page, server }) => {
+  await openAt(page, server, at(13));
+  await expect(page.locator('.mode-pill--view')).toContainText('View only');
+
+  // Each of these used to be drawn on the day regardless: the stage pill was
+  // built as a button whatever the mode, and an open-time block kept its "+".
+  // Neither could change anything — commit refuses in view only — so they were
+  // controls that looked live, took focus and announced themselves to a screen
+  // reader, and did nothing at all.
+  for (const absent of ['.handle', '.card-controls', '.open-time-add', '.stage-tag--button', '[data-action="add"]']) {
+    await expect(page.locator(absent), absent).toHaveCount(0);
+  }
+
+  // The stage is still shown — it just reads as the label it is.
+  await expect(page.locator('.card[data-activity-id="ready"] .stage-tag')).toBeVisible();
 });
 
 test.describe('D13: what the strip says', () => {

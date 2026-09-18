@@ -222,7 +222,7 @@ White A4/Letter, 44/52 px margins, header rule 1.5 px black; phase group labels 
 
 ## 5. Layout and responsiveness
 
-- **One width breakpoint: 720 px.** ≤720: phone layout (sheets, toolbar, floating add, collapsed-title behaviour). >720: desktop layout (dialogs, inline card controls, header add button, status control). Content max width 1100 px, centered.
+- **One width breakpoint: 720 px.** ≤720: phone layout (sheets, toolbar, floating add, collapsed-title behaviour). >720: desktop layout (dialogs, inline card controls, header add button). Content max width 1100 px, centered.
 - **Input capability decides interaction**, not width: `(hover:hover) and (pointer:fine)` enables hover controls and edge handles on hover; coarse pointers use the selection model at any width (iPad, touch laptops).
 - Card content adapts to the card's own height and width through fitting (drop order + `+N` tags), not through extra breakpoints. A card being resized re-fits as it goes, on every frame its height changes — density is handled by showing less, and a resize is the one gesture where density is visibly changing.
 - Narrow phones (320 px): ruler 48 px, plan starts at 54 px; filter chips scroll; toolbar labels may drop to icons only below 340 px.

@@ -24,7 +24,7 @@ It stays small: one plan, one shared password, no accounts, no guest/vendor/budg
 | User | Needs |
 |---|---|
 | The couple (primary) | Build and change the plan on phone and laptop; run it on the day |
-| Family, MC, photographer, venue staff (given the password) | Read the plan, filter to their part, print it; occasional edits |
+| Family, MC, photographer, venue staff (given the read-only link) | Read the plan, filter to their part, print it; on the day, see what is happening now. They are never given the password and can change nothing (§5.20) |
 
 ### 1.2 Principles (in priority order when they conflict)
 
@@ -55,7 +55,7 @@ Saturday, November 21, 2026 · Ceremony at St. Peter and Paul Orthodox Sobor, 2:
 | **Open time** | Unscheduled time between activities, derived from the gaps in the merged set of occupied minutes. Not stored on any activity. |
 | **Overlap** | Any two activities whose times intersect, locked or not. Both keep their true times, drawn side by side for the overlapping stretch. There is no fixed-vs-overrunning asymmetry. |
 | **Stage** | Category of an activity. 11 stages grouped into 6 phases; the phase sets the colour. |
-| **Plan status** | Draft, Working, Confirming, Final. Final switches on day-of view. |
+| **Time zone** | Where the wedding is (`America/Toronto`). Every “is it the day yet” and “what is happening now” is read on the venue's clock, never the reader's. |
 | **Day-of view** | Read-only running view with a live strip, time line and faded past activities. |
 
 ### 2.1 Scheduling rules
@@ -301,7 +301,9 @@ Sheet (phone) / dialog (desktop):
 - List: **Current plan** first (marked, “Edited 2 min ago on this phone”), then saved versions newest first. Each shows name, date/time, and a summary `12 activities · 11:30 AM – 10:45 PM`.
 - **Restore**: asks for confirmation, then saves the current plan as `Before restore – <time>` automatically, then restores.
 - **Delete**: a delete button on the row; undoable via toast.
-- Automatic versions are labelled “saved automatically”. Up to 40 versions; the oldest automatic ones are removed first.
+- Automatic versions are labelled “saved automatically”.
+- **Automatic backups** are kept without anyone asking: when a save lands and the plan has gone six hours without one, a copy of the plan *as it was before that save* is kept, named “Automatic backup”. A run of edits inside one window produces one backup, not one per edit.
+- Up to 40 versions. Automatic backups are kept at a resolution that drops with age — every one from the past day, then one a day for a week, one a week for two months, one a month before that — so the list spans months rather than the ten days it would hold at full resolution. A version someone named, and the copy kept when a conflict was resolved, are never thinned; past 40 the oldest automatic ones go first.
 
 ### 5.19 Plan settings
 Sheet / dialog, Done applies:
@@ -310,11 +312,21 @@ Sheet / dialog, Done applies:
 - **Timeline view:** Shows from; Shows until (may be after midnight, shown as “next day”). Help: “Only changes what you see. The view always grows to fit every activity.”
 Validation inline. Changing the view range never moves activities. The dark/light appearance switch (§5.22) lives only in the main menu, not duplicated here.
 
-### 5.20 Plan status
-Draft · Working · Confirming · Final. Phone: in the menu. Desktop: control in the top bar. Setting **Final** turns on day-of view on all devices (§6).
+### 5.20 Share read-only link
+Sheet / dialog from the menu:
+- One link, of the form `/share#<token>`. Minted the first time the sheet is opened, so an unshared plan has no link to leak.
+- **Copy** puts it on the clipboard; if the clipboard is refused, the link is selected instead and the toast says so.
+- **Replace link** issues a new one and stops the old one working immediately, everywhere. This is the only way to revoke it.
+- The sheet says plainly what the link allows: read and print, no password, and that it works for anyone it is passed on to.
+
+What the link opens is **not the planner in a different mode** — it is a separate page with no editor on it. No menu, no save state, no version history, no settings, no add button, no handles, no stage control. The person filter and Print or save PDF are offered, because filtering to your own part and printing it is the reason a vendor opens it at all. Dark appearance can be switched, remembered on that device.
+
+The token is held in the URL fragment, which browsers never send to a server, and handed to the API in a header — so it stays out of request logs and out of any `Referer`.
+
+The live strip (§6) appears on the shared page **by date only**, read on the venue's clock: a link opened three weeks early is a plan to read, and the same link on the wedding day opens to what is happening now.
 
 ### 5.21 Menu (phone and desktop)
-Day-of view (switch) · Dark appearance (switch) · Status (phone only) · Print or save PDF · Export backup · Version history · Plan settings · Sign out.
+Day-of view (switch) · Dark appearance (switch) · Share read-only link · Print or save PDF · Export backup · Version history · Plan settings · Sign out.
 
 ### 5.22 Dark appearance
 Manual switch in the menu and in Plan settings. Light is the default; the app does **not** follow the system setting. The choice is remembered on the device.
@@ -333,7 +345,7 @@ The site can be added to the home screen with its own icon and name “Our Weddi
 ## 6. Day-of view
 
 ### 6.1 Turning it on and off
-- Automatically on when the device date is the plan date (from 00:00) and while a plan that runs past midnight is still running; and whenever status is **Final**.
+- Automatically on when the date **at the venue** is the plan date (from 00:00) and while a plan that runs past midnight is still running. The date is the only rule (D31).
 - Manual switch in the menu. If the user switches it off on the day, it stays off on that device for that day.
 - On other dates, the switch lets the user rehearse with the real clock.
 
@@ -377,13 +389,13 @@ The strip updates every 30 seconds. Screen readers announce only when the curren
 | Server error / timeout (15 s) | Header `Not saved`; retry automatically with increasing delay (2 s up to 30 s); one error toast, not repeated. |
 | Invalid data rejected | Header `Not saved`; toast with the reason; no automatic retry; the offending change is highlighted and can be undone. |
 | Session expired | Unsaved changes are kept on the device; sign-in screen appears; after sign-in, changes are saved (or the conflict flow runs if the plan changed meanwhile). |
-| Plan changed on another device | Dialog “Changed on another device” — **Use the other version** / **Keep my changes**. Whichever is not chosen is saved as an automatic version. Never a silent overwrite. |
-| Tab closed or app backgrounded | Pending changes are sent immediately; if that fails, they remain on the device and are sent on next open. |
+| Plan changed on another device | The two plans are merged. Anything only one side changed is taken silently; a toast says changes arrived. Only the same field of the same activity, changed on both sides to different values, asks: dialog “You both changed &lt;activity&gt;” — **Keep mine** / **Use the other version**, with the losing copy saved as an automatic version. Everything already merged stays merged either way. Never a silent overwrite. |
+| Tab closed or app backgrounded | Pending changes are sent immediately; if that fails, they remain on the device and are sent on next open — merged with anything that arrived meanwhile. |
 | Storage not configured / unavailable on load | Full-screen message “Can't load the plan right now” with Retry. Never an empty plan that looks saved. |
 | App opened with no network | Last loaded plan shown read-only with the offline bar, if one is stored on the device. |
 
 ### 7.3 Device copy
-The last loaded plan and any unsaved changes are kept on the device so the plan can be read without signal and edits survive closing the app. Cleared on sign-out and when the session is rejected.
+The last loaded plan and any unsaved changes are kept on the device so the plan can be read without signal and edits survive closing the app. The plan as the server last confirmed it is kept alongside them, so unsent edits can still be merged after the app has been closed and reopened. Cleared on sign-out and when the session is rejected.
 
 ### 7.4 Other devices
 When the app comes back to the foreground (or every 60 s while visible and idle), it checks for a newer plan and loads it if there are no unsaved local changes.
@@ -417,11 +429,11 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 
 **Open time and conflicts:** open time visible and actionable; three actions behave as defined; conflicts shown in columns with correct messages and summary.
 
-**Day-of:** turns on by date and by Final; view only until Edit; strip states correct; current activity and time line correct; returns to view only after Done or 5 min away.
+**Day-of:** turns on by the date at the venue, whatever zone the reader is in; view only until Edit; strip states correct; current activity and time line correct; returns to view only after Done or 5 min away.
 
 **Saving:** offline edits survive reload and save on reconnect with a bounded number of requests; server errors show `Not saved` without request floods; invalid data never blocks later saves; expired session loses nothing; two-device conflict never overwrites silently.
 
-**Security/privacy:** server code and seed data are not downloadable from the site; login attempts are rate-limited.
+**Security/privacy:** server code and seed data are not downloadable from the site; login attempts are rate-limited; a share token can be used to read the plan and nothing else — it grants no session and every write refuses it.
 
 **Other features:** add after selected; duplicate; undo for each listed action; person filter and pinned row; print layout; export; empty state and template; versions with auto-snapshot and delete; settings validation; dark switch persists per device; home-screen install.
 
@@ -437,7 +449,7 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 
 | # | Decision | Replaces |
 |---|---|---|
-| D1 | Day-of view, automatic on the date and when Final; view only until Edit | Final had no behaviour; no day-of support |
+| D1 | Day-of view, automatic on the date; view only until Edit | No day-of support |
 | D2 | Phone selection toolbar instead of per-card inline controls | Grip, stage chip, lock, ⋯ and resize strip on every card |
 | D3 | Solid dark lock for fixed; red only for conflict and delete | Red lock icon |
 | D4 | Stage colours by phase (6), icon identifies the stage | 11 near-duplicate pastels |
@@ -460,9 +472,13 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 | D21 | Dark appearance as an in-app switch, light default, not following the system | — |
 | D22 | Changing the password signs out all devices | Sessions survived password change |
 | D23 | *(superseded)* Reorder on phone required a short hold on the handle | Immediate drag |
-| D24 | Status control in the phone menu; stays in desktop top bar | Header pill on all sizes |
+| D24 | *(superseded by D31)* Status control in the phone menu; stays in desktop top bar | Header pill on all sizes |
 | D25 | People tags: full names then `+N`, never initials | First five names, then initials |
 | D26 | Timeline model rewrite (commit `2939550`): every activity stores its own absolute `start`; nothing propagates or auto-pushes; `locked` only exempts an activity from a deliberate group move | Flexible/Fixed propagation chain with stored `gapBefore` and automatic conflict resolution |
 | D27 | Group move: Ctrl/Cmd-click selects multiple cards, dragging any selected card moves every unlocked one by the same delta | No multi-activity move; reorder moved one activity by list position |
 | D28 | Single date+time picker (flatpickr, vendored) replaces the Flexible/Fixed radio and separate time field in the activity editor | Starts: Flexible \| Fixed radio |
+| D33 | Automatic backups every six hours, of the state each save replaced, thinned at a resolution that drops with age | Automatic versions existed only at the two moments something had already gone wrong — a conflict, or a restore — so version history was empty exactly when it was needed |
+| D32 | A read-only link: one revocable token, opening a separate page that has no editor on it at all. Read-only is the shape of what exists rather than a permission each action has to remember to check | One shared password and one permission level — the photographer and the venue could delete the ceremony |
+| D31 | Plan status removed. Three of its four values had no behaviour at all and the fourth, **Final**, silently forced day-of view onto every device — a mode switch wearing a label's name. Day-of now turns on by date alone, read on the plan's `timezone` (default `America/Toronto`) rather than the reader's device | Draft/Working/Confirming/Final, as a select in the desktop top bar and a row in the phone menu |
+| D30 | Two diverged plans are merged per activity and per field against the version the server last confirmed; only the same field changed twice is a question, and it names the activity | A dialog offering two whole plans, where choosing one discarded every unrelated change the other side had made |
 | D29 | Phone back-button/gesture closes the open sheet, menu, or card selection instead of leaving the app (a dummy history entry pushed while an overlay is open). Scroll restoration is manual: back closes the top thing and the page stays exactly where it is | Back navigated away from the app with an overlay still open; later, back also threw the reader from where they had scrolled to back to the selected card |

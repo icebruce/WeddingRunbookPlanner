@@ -104,6 +104,114 @@ test('hiding the tab mid-edit is not a conflict with yourself', async ({ page, s
   expect(stored.plan.activities[1].title).toBe('A second ordinary edit');
 });
 
+test('two devices editing different activities merge without asking', async ({ page, context, server }) => {
+  await server.seed({ plan: base() });
+  await signInAndWaitForPlan(page);
+
+  const other = await context.newPage();
+  await openPlanner(other);
+  await rename(other, 'ready', 'Their activity');
+  await expect(other.locator('.save-indicator')).toHaveText('Saved');
+
+  // A different card, so nothing either of them did is in dispute. The old
+  // behaviour asked which of two whole days to keep and threw one away.
+  await rename(page, 'travel', 'My activity');
+
+  await expect(page.locator('#conflict-dialog')).toHaveCount(0);
+  await saved(page);
+
+  await expect(card(page, 'ready')).toContainText('Their activity');
+  await expect(card(page, 'travel')).toContainText('My activity');
+
+  const stored = (await server.read()).plan.activities;
+  expect(stored[0].title).toBe('Their activity');
+  expect(stored[2].title).toBe('My activity');
+});
+
+test('different fields of the same activity merge without asking', async ({ page, context, server }) => {
+  await server.seed({ plan: base() });
+  await signInAndWaitForPlan(page);
+
+  const other = await context.newPage();
+  await openPlanner(other);
+  await rename(other, 'ready', 'Renamed by them');
+  await expect(other.locator('.save-indicator')).toHaveText('Saved');
+
+  await openActivityEditor(page, card(page, 'ready'));
+  await page.locator('#activity-dialog input[name="location"]').fill('The church');
+  await page.locator('#activity-dialog button[type="submit"]').click();
+  await expect(page.locator('#activity-dialog')).toHaveCount(0);
+
+  await expect(page.locator('#conflict-dialog')).toHaveCount(0);
+  await saved(page);
+
+  const merged = (await server.read()).plan.activities[0];
+  expect(merged.title).toBe('Renamed by them');
+  expect(merged.location).toBe('The church');
+});
+
+test('a real conflict names the activity rather than offering two whole days', async ({ page, context, server }) => {
+  await server.seed({ plan: base() });
+  await signInAndWaitForPlan(page);
+
+  const other = await context.newPage();
+  await openPlanner(other);
+  await rename(other, 'ready', 'Theirs');
+  await expect(other.locator('.save-indicator')).toHaveText('Saved');
+
+  await rename(page, 'ready', 'Mine');
+
+  await expect(page.locator('#conflict-dialog')).toBeVisible();
+  await expect(page.locator('#conflict-dialog h2')).toContainText('You both changed');
+});
+
+test('an edit made offline survives the tab closing while still offline', async ({ page, context, server }) => {
+  await server.seed({ plan: base() });
+  await signInAndWaitForPlan(page);
+
+  await context.setOffline(true);
+  await rename(page, 'portraits', 'Typed with no signal');
+  await expect(page.locator('.save-indicator')).toHaveText('Offline');
+
+  // The tab goes away while there is still no connection, so the keepalive
+  // send on the way out cannot land either. The device copy is the only place
+  // this edit exists. Reopening with a signal used to drop it without a word.
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+  await context.setOffline(false);
+  await page.reload();
+
+  await expect(card(page, 'portraits')).toContainText('Typed with no signal');
+  await saved(page);
+  expect((await server.read()).plan.activities[1].title).toBe('Typed with no signal');
+});
+
+test('an offline edit still merges when the other device moved on meanwhile', async ({ page, context, server }) => {
+  await server.seed({ plan: base() });
+  await signInAndWaitForPlan(page);
+
+  await context.setOffline(true);
+  await rename(page, 'portraits', 'Typed with no signal');
+  await expect(page.locator('.save-indicator')).toHaveText('Offline');
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+
+  // While this device was away, the other one saved a different activity.
+  await context.setOffline(false);
+  const other = await context.newPage();
+  await openPlanner(other);
+  await rename(other, 'ready', 'Moved on without me');
+  await expect(other.locator('.save-indicator')).toHaveText('Saved');
+
+  await page.reload();
+
+  await expect(card(page, 'portraits')).toContainText('Typed with no signal');
+  await expect(card(page, 'ready')).toContainText('Moved on without me');
+  await saved(page);
+
+  const stored = (await server.read()).plan.activities;
+  expect(stored[0].title).toBe('Moved on without me');
+  expect(stored[1].title).toBe('Typed with no signal');
+});
+
 test('D19: the copy not chosen in a conflict is kept in version history', async ({ page, context, server }) => {
   await server.seed({ plan: base() });
   await signInAndWaitForPlan(page);
@@ -115,7 +223,7 @@ test('D19: the copy not chosen in a conflict is kept in version history', async 
 
   await rename(page, 'ready', 'From this device');
   await expect(page.locator('#conflict-dialog')).toBeVisible();
-  await page.locator('[data-choice="local"]').click();
+  await page.locator('[data-choice="mine"]').click();
 
   await saved(page);
   expect((await server.read()).plan.activities[0].title).toBe('From this device');
@@ -136,7 +244,7 @@ test('choosing the other version keeps mine as a version', async ({ page, contex
 
   await rename(page, 'ready', 'Mine');
   await expect(page.locator('#conflict-dialog')).toBeVisible();
-  await page.locator('[data-choice="remote"]').click();
+  await page.locator('[data-choice="theirs"]').click();
 
   await expect(card(page, 'ready')).toContainText('Theirs');
   const versions = await page.evaluate(async () => (await (await fetch('/api/versions')).json()).versions);
@@ -206,7 +314,9 @@ test.describe('version history', () => {
 
     await page.locator('[data-action="menu"][data-menu="app"]').click();
     await page.locator('[data-menu-action="versions"]').click();
-    await page.locator('.restore-version').click();
+    // Named rather than "the only one": the first save of a plan also keeps an
+    // automatic backup of what it replaced, so there are two rows by now.
+    await page.locator('.version-item', { hasText: 'The good version' }).locator('.restore-version').click();
 
     await expect(card(page, 'ready')).toContainText('Getting Ready');
     const versions = await page.evaluate(async () => (await (await fetch('/api/versions')).json()).versions);
@@ -308,4 +418,36 @@ test('F18: a plan stored in the old shape keeps its versions and its revision', 
   await rename(page, 'ready', 'Still works');
   await saved(page);
   expect((await server.read()).plan.activities[0].title).toBe('Still works');
+});
+
+test('editing a plan leaves an automatic backup of what it replaced', async ({ page, server }) => {
+  await server.seed({ plan: base() });
+  await signInAndWaitForPlan(page);
+
+  await rename(page, 'ready', 'Changed my mind later');
+  await saved(page);
+
+  const versions = await page.evaluate(async () => (await (await fetch('/api/versions')).json()).versions);
+  const backup = versions.find(version => version.name === 'Automatic backup');
+  expect(backup, 'a backup was kept without anyone asking').toBeTruthy();
+  expect(backup.auto).toBe(true);
+
+  // It holds the plan as it was before the edit, which is the point of it.
+  const restored = await page.evaluate(async id =>
+    (await (await fetch(`/api/versions?id=${id}`)).json()).version.plan, backup.id);
+  expect(restored.activities[0].title).toBe('Getting Ready');
+});
+
+test('a run of edits does not fill version history', async ({ page, server }) => {
+  await server.seed({ plan: base() });
+  await signInAndWaitForPlan(page);
+
+  for (const title of ['One', 'Two', 'Three', 'Four']) {
+    await rename(page, 'ready', title);
+    await saved(page);
+  }
+
+  const versions = await page.evaluate(async () => (await (await fetch('/api/versions')).json()).versions);
+  const backups = versions.filter(version => version.name === 'Automatic backup');
+  expect(backups.length, 'four saves inside one window is one backup, not four').toBe(1);
 });

@@ -2,6 +2,7 @@ import { escapeHtml } from '../dom.js';
 import { icon } from '../icons.js';
 import { STAGES, phaseVars } from '../config.js';
 import { buildSchedule, formatDuration, formatTime } from '../schedule.js';
+import { describeConflicts } from '../merge.js';
 
 /**
  * Sheets on a phone, dialogs on a laptop — the same content and the same
@@ -231,15 +232,73 @@ export function stageSheet(item) {
  * automatic version, so the choice is which one to carry on with rather than
  * which one to lose.
  */
-export function conflictSheet(latest) {
+/**
+ * The question, asked only where it is real.
+ *
+ * With a common ancestor to compare against, everything the two of you changed
+ * separately has already been merged by the time this appears, so the dialog
+ * names the one thing left in dispute instead of offering two whole days. The
+ * second form — no ancestor — is the old wholesale question, kept for the one
+ * case where this tab never saw a confirmed version and merging is impossible.
+ */
+export function conflictSheet(latest, conflicts) {
   const when = latest?.updatedAt ? formatVersionDate(latest.updatedAt) : null;
+
+  if (!conflicts?.length) {
+    return `<dialog id="conflict-dialog" class="alert-dialog">
+      <div class="alert">
+        <h2>Changed on another device</h2>
+        <p>This plan was saved somewhere else${when ? ` at ${escapeHtml(when)}` : ''}. Whichever you do not choose is kept in version history.</p>
+        <button type="button" class="button button--primary" data-action="conflict" data-choice="theirs">Use the other version</button>
+        <button type="button" class="button button--quiet" data-action="conflict" data-choice="mine">Keep my changes</button>
+      </div>
+    </dialog>`;
+  }
+
+  const names = describeConflicts(conflicts);
+  const plural = conflicts.length > 1 || new Set(conflicts.map(entry => entry.title)).size > 1;
   return `<dialog id="conflict-dialog" class="alert-dialog">
     <div class="alert">
-      <h2>Changed on another device</h2>
-      <p>This plan was saved somewhere else${when ? ` at ${escapeHtml(when)}` : ''}. Whichever you do not choose is kept in version history.</p>
-      <button type="button" class="button button--primary" data-action="conflict" data-choice="remote">Use the other version</button>
-      <button type="button" class="button button--quiet" data-action="conflict" data-choice="local">Keep my changes</button>
+      <h2>You both changed ${escapeHtml(names)}</h2>
+      <p>Everything else you each changed is already merged. Only ${plural ? 'these' : 'this'} need${plural ? '' : 's'} a decision${when ? `, from a save at ${escapeHtml(when)}` : ''}. The version you do not keep stays in version history.</p>
+      <button type="button" class="button button--primary" data-action="conflict" data-choice="mine">Keep mine</button>
+      <button type="button" class="button button--quiet" data-action="conflict" data-choice="theirs">Use the other version</button>
     </div>
+  </dialog>`;
+}
+
+/**
+ * The read-only link.
+ *
+ * One link, and one button that replaces it. There is no list of links to
+ * curate and no expiry to set, because the plan stops mattering the day after
+ * the wedding and a link nobody can turn off would be worse than one anybody
+ * can replace. What it does and does not allow is said plainly: the people
+ * being sent it are being trusted with the day's locations and everyone's
+ * names, and whoever sends it should know that before they do.
+ */
+export function shareSheet(share, { origin = '' } = {}) {
+  const url = share?.token ? `${origin}/share#${share.token}` : '';
+
+  return `<dialog id="share-dialog" class="sheet-dialog">
+    <section class="sheet" ${SHEET_FOCUS}>
+      <header class="sheet-header">
+        <button class="button button--text sheet-close" type="button">Close</button>
+        <h2>Share read-only link</h2>
+        <span class="sheet-header-spacer"></span>
+      </header>
+      <div class="sheet-body">
+        <p class="sheet-note">Anyone with this link can read the plan and print it. They cannot change anything, and they are never asked for the password. On the wedding day it opens straight to what is happening now.</p>
+
+        <div class="share-link">
+          <input id="share-link-field" type="text" readonly value="${escapeHtml(url)}" aria-label="Read-only link">
+          <button type="button" class="button button--primary" data-action="share-copy">${icon('copy')}<span>Copy</span></button>
+        </div>
+
+        <p class="sheet-note">Keep it to the people who need it — it works for anyone it is passed on to. Replacing it stops the old one working everywhere, straight away.</p>
+        <button type="button" class="button button--quiet" data-action="share-rotate">Replace link</button>
+      </div>
+    </section>
   </dialog>`;
 }
 
@@ -407,7 +466,8 @@ export function renderSheet(ui, plan) {
   if (dialog.type === 'activity') return activitySheet(dialog, plan);
   if (dialog.type === 'open-time') return openTimeSheet(dialog.openTime, plan);
   if (dialog.type === 'stage') return stageSheet(dialog.item);
-  if (dialog.type === 'conflict') return conflictSheet(dialog.latest);
+  if (dialog.type === 'conflict') return conflictSheet(dialog.latest, dialog.conflicts);
+  if (dialog.type === 'share') return shareSheet(dialog.share, { origin: dialog.origin });
   if (dialog.type === 'versions') return versionsSheet(ui.versions, { plan, updatedAt: dialog.updatedAt });
   if (dialog.type === 'settings') return settingsSheet(plan);
   return '';

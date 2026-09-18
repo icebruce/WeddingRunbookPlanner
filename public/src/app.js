@@ -11,17 +11,19 @@
  */
 import './actions.js';
 import { api } from './api.js';
-import { PLAN_STATUSES, STAGES, deviceId } from './config.js';
-import { readDeviceCopy, writeDeviceCopy } from './device.js';
-import { cssEscape, escapeHtml, focusByKey, paint, uid } from './dom.js';
-import { AUTO_VIEW_ONLY_MS, createClock, minutesNow, readOverride, shouldBeOn, stripState, writeOverride } from './dayof.js';
+import { STAGES, deviceId } from './config.js';
+import { readDeviceBase, readDeviceCopy, writeDeviceBase, writeDeviceCopy } from './device.js';
+import { cssEscape, escapeHtml, focusByKey, paint, uid, watchCollapsedTitle } from './dom.js';
+import { AUTO_VIEW_ONLY_MS, createClock, isViewOnly, minutesNow, readOverride, shouldBeOn, stripState, writeOverride } from './dayof.js';
 import { createGestures } from './gestures.js';
 import { bump } from './haptics.js';
 import { bindSheetDrag } from './sheet-drag.js';
 import { PX_PER_MIN } from './layout.js';
 import { icon } from './icons.js';
+import { mergePlans } from './merge.js';
 import { SAVE_STATES, createSavePipeline } from './save.js';
 import { createStore } from './state.js';
+import { paintBrowserChrome, readTheme, writeTheme } from './theme.js';
 import { createAuth } from './auth.js';
 import { createVersions } from './versions.js';
 import { createActivityForm } from './activity-form.js';
@@ -90,33 +92,101 @@ function presentSaveState(next) {
   showSaveState(next);
 }
 
+/**
+ * The plan as the server last confirmed it — the common ancestor a merge
+ * measures both sides against.
+ *
+ * Without it the only question that can be asked about two diverged plans is
+ * "which one?". With it, almost every divergence answers itself: whatever only
+ * one side moved is not in dispute, and there is nothing to ask.
+ *
+ * It is set from whatever the server tells us it is holding — a load, a
+ * refresh, a successful save — and never from the screen.
+ */
+let basePlan = null;
+
+/**
+ * The ancestor moves only when the server says something new, and it is
+ * mirrored to the device so that it outlives the tab. Every assignment goes
+ * through here so the two can never drift apart.
+ */
+function setBase(plan, revision) {
+  basePlan = plan || null;
+  if (plan) writeDeviceBase(plan, revision);
+}
+
 const saver = createSavePipeline({
   save: (plan, revision, device) => api.save(plan, revision, device),
   getPlan: () => store.plan,
   deviceId: DEVICE_ID,
   // The offline bar reads the same state as the header, so both repaint.
   onStateChange: presentSaveState,
-  onSaved: ({ revision, updatedAt }) => {
+  onSaved: ({ revision, updatedAt, plan }) => {
     store.setRevision(revision, updatedAt);
+    if (plan) setBase(plan, revision);
     writeDeviceCopy(store.plan, { revision, dirty: false });
   },
   onError: message => toast(message, { tone: 'error' }),
-  // The local side of a conflict is read when the user chooses, not captured
-  // here, so "Keep my changes" means the plan as it is now (F12).
   onConflict: latest => {
     // A conflict with nothing to compare against. The store was empty when the
     // write landed, so there is no other version — and a dialog asking which
     // of two copies to keep, when one of them does not exist, is two buttons
     // that do nothing. The header's "Not saved" and its retry are the honest
     // offer; the plan on screen is the only copy there is.
-    if (!latest) {
+    if (!latest?.plan) {
       toast('That did not save. Tap "Not saved" to try again.', { tone: 'error' });
       return;
     }
-    store.setUi({ conflict: { latest }, dialog: { type: 'conflict', latest } });
+    reconcile(latest);
   },
   onUnauthorized: () => store.setUi({ authenticated: false })
 });
+
+/**
+ * Someone else saved first. Put the two plans together rather than asking
+ * which day to keep.
+ *
+ * Most of the time this is silent, because most of the time the two of you
+ * were working on different activities and there is nothing to decide. A toast
+ * says what arrived, so the plan changing under you is never a surprise. Only
+ * the same field of the same activity, changed twice to different values, is
+ * a question — and then the dialog names it.
+ */
+function reconcile(latest) {
+  // No ancestor means this tab never saw a confirmed version of the plan, so
+  // there is nothing to measure divergence against. That is the one case where
+  // the old whole-plan question is the honest one.
+  if (!basePlan) {
+    store.setUi({ conflict: { latest }, dialog: { type: 'conflict', latest, conflicts: null } });
+    return;
+  }
+
+  const { plan, conflicts } = mergePlans(basePlan, store.plan, latest.plan);
+
+  if (conflicts.length) {
+    store.setUi({ conflict: { latest }, dialog: { type: 'conflict', latest, conflicts } });
+    return;
+  }
+
+  applyMerge(plan, latest);
+  toast('Merged the changes from the other device.');
+}
+
+/**
+ * Adopt a merged plan and carry on saving it.
+ *
+ * The revision moves to the one the other side landed, because that is the
+ * version this merge is built on; the save that follows is an ordinary save of
+ * an ordinary plan, and if a third change arrives while it is in the air, it
+ * merges too.
+ */
+function applyMerge(plan, latest) {
+  setBase(latest.plan, latest.revision);
+  store.setPlan(plan, { revision: latest.revision, updatedAt: latest.updatedAt });
+  writeDeviceCopy(plan, { revision: latest.revision, dirty: true });
+  saver.setRevision(latest.revision);
+  void saver.resume({ revision: latest.revision });
+}
 
 /**
  * The offline bar. It is not an error: the plan is on screen, the edits are on
@@ -495,6 +565,7 @@ function dialogKey(dialog) {
   if (!dialog) return null;
   if (dialog.type === 'conflict') return `conflict:${dialog.latest?.revision ?? 'unknown'}`;
   if (dialog.type === 'activity') return `activity:${dialog.mode}:${dialog.activity.id}`;
+  if (dialog.type === 'share') return `share:${dialog.share?.token ?? 'none'}`;
   if (dialog.type === 'versions') return `versions:${store.ui.versions.length}:${store.revision}`;
   if (dialog.type === 'open-time') return `open-time:${dialog.openTime.beforeId}:${dialog.openTime.start}`;
   if (dialog.type === 'stage') return `stage:${dialog.item.id}`;
@@ -745,7 +816,7 @@ function commit(action, payload, options = {}) {
   // One gate for every change, whatever raised it — a gesture, a keyboard
   // shortcut, a sheet. Blocking each entry point separately would eventually
   // miss one.
-  if (isViewOnly()) return null;
+  if (isViewOnly(store.ui)) return null;
 
   const result = store.dispatch(action, payload, options);
   if (!result) return null;
@@ -759,13 +830,8 @@ function commit(action, payload, options = {}) {
   return result;
 }
 
-/** On the day, nothing changes until someone has pressed Edit. */
-function isViewOnly() {
-  return Boolean(store.ui.dayOf && !store.ui.editingOnDay);
-}
-
 function undo() {
-  if (isViewOnly()) return;
+  if (isViewOnly(store.ui)) return;
   const result = store.undo({ regions: ['all'] });
   if (!result) return;
   // Undo puts the plan back somewhere it has already been, which is the one
@@ -970,18 +1036,12 @@ const ACTION_HANDLERS = {
       link.remove();
       return;
     }
-    if (action === 'status') {
-      const next = PLAN_STATUSES[(PLAN_STATUSES.indexOf(store.plan.status) + 1) % PLAN_STATUSES.length];
-      store.setUi({ openMenu: null }, { regions: [] });
-      commit('plan.status', { status: next }, { regions: ['header'] });
-      clock.tick();
-      return;
-    }
     if (action === 'theme') {
       setTheme(store.ui.theme === 'dark' ? 'light' : 'dark');
       store.setUi({ openMenu: null });
       return;
     }
+    if (action === 'share') return void openShare();
     if (action === 'versions') return void versions.openVersions();
     if (action === 'settings') {
       rememberOpener('menu-app');
@@ -991,6 +1051,12 @@ const ACTION_HANDLERS = {
   },
   conflict(_, element) {
     void resolveConflict(element.dataset.choice);
+  },
+  'share-copy'() {
+    void copyShareLink();
+  },
+  'share-rotate'() {
+    void rotateShareLink();
   },
   'select-open-time'(_, element) {
     // Never toggles off on a repeat tap — same as a card's own 'select' —
@@ -1080,32 +1146,95 @@ const ACTION_HANDLERS = {
 };
 
 /**
- * Resolving a conflict never throws a copy away. The side that is not chosen
- * is written to version history first, so "Keep my changes" does not mean
- * "lose theirs" and vice versa.
+ * The read-only link.
+ *
+ * Asked for rather than kept: the token is minted the first time anyone opens
+ * this sheet, so a plan nobody has shared has no link to leak.
+ */
+async function openShare() {
+  rememberOpener('menu-app');
+  try {
+    const { share } = await api.share();
+    store.setUi({ openMenu: null, dialog: { type: 'share', share, origin: location.origin } });
+  } catch (error) {
+    toast(error.message || 'Could not open the shared link.', { tone: 'error' });
+  }
+}
+
+async function copyShareLink() {
+  const field = document.getElementById('share-link-field');
+  if (!field) return;
+  try {
+    await navigator.clipboard.writeText(field.value);
+    toast('Link copied');
+  } catch {
+    // No clipboard permission, or an insecure context. Selecting the text is
+    // the fallback every platform still has.
+    field.focus();
+    field.select();
+    toast('Copy the selected link');
+  }
+}
+
+/**
+ * Replacing the link is the only way to revoke it, so it says so first. The
+ * old one stops working the moment this returns — including for anyone
+ * currently reading the plan through it.
+ */
+async function rotateShareLink() {
+  try {
+    const { share } = await api.rotateShare();
+    // The sheet's identity is the token it is showing, so replacing the token
+    // is what rebuilds it — no separate nudge needed.
+    store.setUi({ dialog: { type: 'share', share, origin: location.origin } });
+    toast('New link created. The old one no longer works.');
+  } catch (error) {
+    toast(error.message || 'Could not replace the link.', { tone: 'error' });
+  }
+}
+
+/**
+ * Answering the one question a merge could not answer by itself.
+ *
+ * The choice is which side wins the disputed field — not which day to keep, so
+ * everything already merged stays merged either way. A full copy of the side
+ * that loses goes to version history first: the merge only ever drops a value
+ * somebody deliberately chose against, and even that is recoverable.
  */
 async function resolveConflict(choice) {
   const latest = store.ui.conflict?.latest;
   if (!latest) return;
 
   const mine = structuredClone(store.plan);
+  const merging = Array.isArray(store.ui.dialog?.conflicts) && store.ui.dialog.conflicts.length > 0;
   closeSheet();
   store.setUi({ conflict: null }, { regions: [] });
 
   const stamp = new Date().toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' });
-  const keeping = choice === 'remote' ? mine : latest.plan;
-  const name = choice === 'remote' ? `My unsaved changes – ${stamp}` : `Other device – ${stamp}`;
-  await api.createVersion(name, { auto: true, plan: keeping }).catch(() => {
+  const losing = choice === 'theirs' ? mine : latest.plan;
+  const name = choice === 'theirs' ? `My unsaved changes – ${stamp}` : `Other device – ${stamp}`;
+  await api.createVersion(name, { auto: true, plan: losing }).catch(() => {
     toast('The other copy could not be saved to version history.', { tone: 'error' });
   });
 
-  if (choice === 'remote') {
+  if (merging && basePlan) {
+    // Re-run the same merge with the answer, rather than applying the choice
+    // by a second route that could disagree with the first.
+    const { plan } = mergePlans(basePlan, mine, latest.plan, { prefer: choice });
+    applyMerge(plan, latest);
+    return;
+  }
+
+  // No common ancestor: the wholesale question, answered wholesale.
+  if (choice === 'theirs') {
     saver.markClean(latest.revision);
+    setBase(latest.plan, latest.revision);
     store.setPlan(latest.plan, { revision: latest.revision, updatedAt: latest.updatedAt });
     writeDeviceCopy(latest.plan, { revision: latest.revision, dirty: false });
     return;
   }
 
+  setBase(latest.plan, latest.revision);
   store.setRevision(latest.revision);
   await saver.resume({ revision: latest.revision });
 }
@@ -1242,12 +1371,6 @@ document.addEventListener('submit', event => {
 });
 
 document.addEventListener('change', event => {
-  if (event.target.dataset?.action === 'status') {
-    commit('plan.status', { status: event.target.value }, { regions: ['header'] });
-    // Final is what turns the day-of view on, so the answer is re-read now
-    // rather than up to half a minute later.
-    clock.tick();
-  }
 });
 
 /**
@@ -1350,39 +1473,12 @@ function advanceNow(nowMinutes) {
  * system setting (D21): a plan read in a dark room at a venue and the same
  * plan on a laptop should look like the same plan.
  */
-const THEME_KEY = 'wrp:theme';
-
-/**
- * The colour the browser paints its own chrome with — the bar behind the clock
- * on a phone, the title bar of an installed app. It cannot be a media query,
- * because the app does not follow the system setting (D21): it has to follow
- * the choice made in the app.
- */
-function paintBrowserChrome(theme) {
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (!meta) return;
-  meta.setAttribute('content', theme === 'dark' ? '#111214' : '#F7F7F4');
-}
-
 function setTheme(theme) {
   const next = theme === 'dark' ? 'dark' : 'light';
   document.documentElement.dataset.theme = next;
   paintBrowserChrome(next);
-  try {
-    localStorage.setItem(THEME_KEY, next);
-  } catch {
-    // Without storage the choice lasts as long as the tab, which is better
-    // than refusing to make it.
-  }
+  writeTheme(next);
   store.setUi({ theme: next }, { regions: ['header'] });
-}
-
-function readTheme() {
-  try {
-    return localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light';
-  } catch {
-    return 'light';
-  }
 }
 
 /** Starting from a wedding that already exists, rather than a blank page. */
@@ -1402,47 +1498,7 @@ async function useTemplate() {
   }
 }
 
-/**
- * Once the large title has scrolled past, the top bar takes it over.
- *
- * Watched rather than measured on every scroll event, so it costs nothing
- * while scrolling a long day — and watched *twice*, at two lines ten pixels
- * apart. One boundary means that resting the scroll on the handover, where
- * momentum and sub-pixel rounding leave it wandering back and forth across a
- * single line, flips the title with it. Collapsing at the lower line and
- * coming back only at the higher one gives the decision somewhere to sit.
- */
-const HANDOVER_BAND = 10;
-
-function watchCollapsedTitle() {
-  const observers = [];
-  return () => {
-    for (const observer of observers) observer.disconnect();
-    observers.length = 0;
-
-    const heading = app.querySelector('.planner-heading h1');
-    const topbar = app.querySelector('.topbar');
-    if (!heading || !topbar) return;
-
-    // The margin is the bar's own height, so the title hands over exactly as it
-    // goes under it — 52 px on a phone, 62 px on a desktop.
-    const barHeight = Math.round(topbar.getBoundingClientRect().height);
-    const watch = (inset, collapsedWhenHidden) => {
-      const observer = new IntersectionObserver(([entry]) => {
-        if (entry.isIntersecting === collapsedWhenHidden) return;
-        topbar.classList.toggle('is-collapsed', !entry.isIntersecting);
-      }, { rootMargin: `-${inset}px 0px 0px 0px`, threshold: 0 });
-      observer.observe(heading);
-      observers.push(observer);
-    };
-    // Going under the bar collapses it; coming back out ten pixels below
-    // restores it. Each observer only ever acts in its own direction.
-    watch(barHeight, false);
-    watch(Math.max(0, barHeight - HANDOVER_BAND), true);
-  };
-}
-
-const refreshCollapsedTitle = watchCollapsedTitle();
+const refreshCollapsedTitle = watchCollapsedTitle(app);
 
 watchFit(app);
 // The toolbar drops its button labels under 340 px and the layout changes
@@ -1480,6 +1536,7 @@ async function refreshFromServer() {
     const result = await api.load(store.revision);
     if (result.unchanged) return;
     saver.markClean(result.revision);
+    setBase(result.plan, result.revision);
     store.setPlan(result.plan, { revision: result.revision, updatedAt: result.updatedAt });
     writeDeviceCopy(result.plan, { revision: result.revision, dirty: false });
   } catch {
@@ -1528,21 +1585,74 @@ store.subscribe(change => {
 
 async function loadPlan() {
   store.setUi({ loadError: null }, { regions: [] });
+
+  // Read before the load, not after it.
+  //
+  // This used to write the freshly-loaded plan to the device and then ask the
+  // device whether it was holding unsent work — of the record it had just
+  // overwritten, with `dirty` set to false by the very line above the question.
+  // The answer was always no, so the recovery below could never run, and an
+  // edit made offline and then closed was dropped the moment the app reopened
+  // with a signal. Nothing said so. §7.2 promises the opposite.
+  const pending = readDeviceCopy();
+  const ancestor = readDeviceBase();
+
   try {
     const result = await api.load();
-    saver.markClean(result.revision);
-    store.setUi({ readOnlyCopy: false }, { regions: [] });
-    store.setPlan(result.plan, { revision: result.revision, updatedAt: result.updatedAt });
-    writeDeviceCopy(result.plan, { revision: result.revision, dirty: false });
-    // The clock's first tick happened before there was a plan to read, and
-    // whether the day-of view belongs on is a question about the plan.
-    clock.tick();
+    const unsent = pending?.dirty && pending.plan?.id === result.plan.id ? pending : null;
 
-    // Edits made while the app was last open, still unsent.
-    const copy = readDeviceCopy(result.plan.id);
-    if (copy?.dirty && copy.revision === result.revision) {
-      store.setPlan(copy.plan, { revision: result.revision, updatedAt: result.updatedAt });
+    store.setUi({ readOnlyCopy: false }, { regions: [] });
+    saver.markClean(result.revision);
+    setBase(result.plan, result.revision);
+
+    if (!unsent) {
+      store.setPlan(result.plan, { revision: result.revision, updatedAt: result.updatedAt });
+      writeDeviceCopy(result.plan, { revision: result.revision, dirty: false });
+      // The clock's first tick happened before there was a plan to read, and
+      // whether the day-of view belongs on is a question about the plan.
+      clock.tick();
+      return;
+    }
+
+    // There is unsent work. If the server is still where it was when that work
+    // was made, it is simply pending again. If it has moved on since, this is
+    // the same divergence a save conflict is, arriving through a different
+    // door — so it is answered the same way, by merging rather than by picking
+    // a side.
+    if (Number(unsent.revision) === Number(result.revision)) {
+      store.setPlan(unsent.plan, { revision: result.revision, updatedAt: result.updatedAt });
+      writeDeviceCopy(unsent.plan, { revision: result.revision, dirty: true });
+      clock.tick();
       saver.markDirty();
+      return;
+    }
+
+    const base = ancestor?.plan && Number(ancestor.revision) === Number(unsent.revision)
+      ? ancestor.plan
+      : null;
+
+    if (!base) {
+      // No ancestor for that revision, so there is nothing to measure the two
+      // against. The unsent work goes on screen — it is still "mine", exactly
+      // as it would be had the collision happened during a save — and the
+      // wholesale dialog asks the only question left.
+      store.setPlan(unsent.plan, { revision: result.revision, updatedAt: result.updatedAt });
+      writeDeviceCopy(unsent.plan, { revision: result.revision, dirty: true });
+      clock.tick();
+      saver.markDirty();
+      store.setUi({ conflict: { latest: result }, dialog: { type: 'conflict', latest: result, conflicts: null } });
+      return;
+    }
+
+    const { plan, conflicts } = mergePlans(base, unsent.plan, result.plan);
+    store.setPlan(plan, { revision: result.revision, updatedAt: result.updatedAt });
+    writeDeviceCopy(plan, { revision: result.revision, dirty: true });
+    clock.tick();
+    saver.markDirty();
+    if (conflicts.length) {
+      store.setUi({ conflict: { latest: result }, dialog: { type: 'conflict', latest: result, conflicts } });
+    } else {
+      toast('Your unsent changes were merged with the ones from the other device.');
     }
     return;
   } catch (error) {

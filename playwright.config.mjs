@@ -51,7 +51,11 @@ export default defineConfig({
   use: {
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    video: 'off'
+    video: 'off',
+    // The couple's own devices sit in the same zone as the venue, which is the
+    // case every test but the shared-link ones is about. Pinning it means a
+    // run on a machine set to UTC asserts the same thing as a run in Montreal.
+    timezoneId: 'America/Toronto'
   },
   projects: [
     {

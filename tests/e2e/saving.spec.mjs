@@ -200,7 +200,7 @@ test('F12: "Keep my changes" saves the plan as it is now, not a stale snapshot',
   release();
 
   await expect(page.locator('#conflict-dialog')).toBeVisible();
-  await page.locator('[data-action="conflict"][data-choice="local"]').click();
+  await page.locator('[data-action="conflict"][data-choice="mine"]').click();
 
   await expect(saveState(page)).toHaveText('Saved', { timeout: 10_000 });
   expect((await server.read()).plan.activities[0].title).toBe('Mine, typed while saving');

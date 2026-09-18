@@ -3,6 +3,7 @@ import { icon } from '../icons.js';
 import { STAGES, phaseVars } from '../config.js';
 import { formatDuration, formatTime } from '../schedule.js';
 import { laneStyle } from '../layout.js';
+import { isViewOnly } from '../dayof.js';
 
 const stageMap = new Map(STAGES.map(stage => [stage.id, stage]));
 
@@ -91,7 +92,7 @@ export function renderCard(card, { ui, filter = null, nowMinutes = null }) {
   const live = dayState === 'live';
   const progress = live ? (nowMinutes - item.start) / item.duration : 0;
   // Nothing on a card is a control until Edit has been pressed.
-  const viewOnly = Boolean(ui.dayOf && !ui.editingOnDay);
+  const viewOnly = isViewOnly(ui);
   const draggable = !item.locked && !viewOnly;
 
   const classes = [
@@ -128,7 +129,7 @@ export function renderCard(card, { ui, filter = null, nowMinutes = null }) {
        <div class="card-row card-time" data-drop="4"><span>${escapeHtml(narrow ? formatTime(item.start) : item.rangeLabel)}</span><strong>${escapeHtml(formatDuration(item.duration))}</strong></div>
        ${warning(item)}
        ${live ? `<div class="card-row card-progress" data-drop="3" aria-hidden="true"><i style="width:${Math.round(progress * 100)}%"></i></div>` : ''}
-       ${narrow ? '' : `<div class="card-row card-stage" data-drop="1">${stagePill(stage, { interactive: true, expanded: stageOpen, id: item.id })}</div>`}
+       ${narrow ? '' : `<div class="card-row card-stage" data-drop="1">${stagePill(stage, { interactive: !viewOnly, expanded: stageOpen, id: item.id })}</div>`}
        <div class="card-meta">
          ${item.location ? `<div class="card-row card-location" data-drop="2">${icon('pin')}<span>${escapeHtml(item.location)}</span></div>` : ''}
          ${people ? `<div class="card-row card-people" data-drop="0">${people}</div>` : ''}
