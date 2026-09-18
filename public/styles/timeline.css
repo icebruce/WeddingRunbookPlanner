@@ -75,7 +75,7 @@
    centred on its minute rather than hung below it, so it lines up exactly
    with the drop line that carries on across the plan (below). */
 .tick--snap::after { background: var(--sel); height: 2px; margin-top: -1px; }
-.tick--snap b {
+.tick.tick--snap b {
   color: var(--bg);
   background: var(--sel);
   border-radius: 5px;
