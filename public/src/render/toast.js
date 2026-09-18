@@ -105,9 +105,27 @@ export function createToaster(region, host = () => region) {
    * same rule every other gesture in this app follows, and a movement under
    * the slop is a tap and is left alone, so Undo still works.
    */
+  /** Let go of the gesture in hand and put its toast back where it was. */
+  function abandonSwipe() {
+    if (!swipe) return;
+    const { node, moved } = swipe;
+    swipe = null;
+    node.classList.remove('is-dragging');
+    node.style.removeProperty('--toast-drag');
+    if (moved) hold('swipe', false);
+  }
+
   function bindSwipe(node) {
     node.addEventListener('pointerdown', event => {
-      if (event.button > 0 || swipe) return;
+      // A second finger is refused. A fresh *primary* press is not, and this
+      // used to refuse that too: because the capture is deliberately not taken
+      // until the movement proves itself (below), the release can land
+      // somewhere this never hears about, and the gesture it left behind then
+      // made the toast refuse every press that followed — one swipe that ended
+      // off the toast and it could not be swiped away again at all. A primary
+      // press is a new gesture by definition, so it takes over.
+      if (event.button > 0 || (swipe && !event.isPrimary)) return;
+      abandonSwipe();
       // Deliberately no `setPointerCapture` here. Capturing on the way down
       // retargets the whole gesture at the toast, so the `click` the browser
       // works out from the pointerdown/pointerup pair lands on the toast
@@ -139,19 +157,14 @@ export function createToaster(region, host = () => region) {
   function onSwipeRelease(event) {
     if (!swipe || swipe.id !== event.pointerId) return;
     const { node, dx, moved, at } = swipe;
-    swipe = null;
-    node.classList.remove('is-dragging');
-    node.style.removeProperty('--toast-drag');
-    if (!moved) return;
-
     const velocity = dx / Math.max(1, Date.now() - at);
-    if (dx > SWIPE_DISMISS_PX || velocity > SWIPE_DISMISS_VELOCITY) {
-      node.classList.add('is-swiped-out');
-      tick();
-      dismiss();
-      return;
-    }
-    hold('swipe', false);
+    const dismissing = moved && (dx > SWIPE_DISMISS_PX || velocity > SWIPE_DISMISS_VELOCITY);
+    abandonSwipe();
+    if (!dismissing) return;
+
+    node.classList.add('is-swiped-out');
+    tick();
+    dismiss();
   }
 
   /**
