@@ -5,7 +5,7 @@
  * rest of it together.
  */
 import { test, expect, seedPlan, activity } from './fixtures.mjs';
-import { isPhoneLayout, signInAndWaitForPlan } from './helpers.mjs';
+import { isPhoneLayout, signInAndWaitForPlan, supportsTouchDrag } from './helpers.mjs';
 
 const T = (h, m = 0) => h * 60 + m;
 
@@ -64,8 +64,28 @@ async function restingBox(locator, { tries = 40, gapMs = 50 } = {}) {
   throw new Error('the element never stopped moving');
 }
 
-test('a toast can be swiped away', async ({ page, server }) => {
+/**
+ * The swipe itself, which only Chromium can be made to perform.
+ *
+ * This drives a mouse drag on a touch-emulated device, and horizontal movement
+ * on the toast — which is `touch-action: pan-y` — is exactly where a browser
+ * claims the gesture for itself. On WebKit it does: instrumented, one move of
+ * ten reaches the page, at five pixels against a six-pixel slop, and nothing
+ * follows it. `--toast-drag` then sits at 0 for five seconds while the page
+ * keeps answering, so the browser has stopped dispatching rather than run
+ * late. It read as passing here until the swipe was reworked from downward to
+ * sideways, and as `flaky` after that — a race being won, not a gesture being
+ * tested.
+ *
+ * So it joins every other swipe-based spec in skipping where a real swipe
+ * cannot be driven (`supportsTouchDrag`, and the note above it in helpers).
+ * What the swipe does once it starts is covered on Chromium here, and the
+ * toast's own handling of a gesture it loses is covered on every engine by the
+ * test below, which needs no drag to reach the slop.
+ */
+test('a toast can be swiped away', async ({ page, server, browserName }) => {
   test.skip(!isPhoneLayout(page), 'the selection toolbar is the narrow layout');
+  test.skip(!supportsTouchDrag(browserName), 'a real swipe needs CDP');
   await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
   await signInAndWaitForPlan(page);
   await page.locator('.card').first().click();
