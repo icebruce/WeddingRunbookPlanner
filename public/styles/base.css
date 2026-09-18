@@ -420,7 +420,11 @@ body.is-moving { cursor: grabbing; }
   background: color-mix(in srgb, var(--live-tint) 94%, transparent);
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
-  border-bottom: .5px solid rgba(30, 158, 82, .18);
+  /* A card's own two edges, top and bottom, not just the one shared with the
+     bar above it — the bar's own bottom edge stays transparent in this mode
+     (below) so the strip is the only thing drawing the seam between them. */
+  border-top: .5px solid color-mix(in srgb, var(--live) 45%, transparent);
+  border-bottom: .5px solid color-mix(in srgb, var(--live) 45%, transparent);
 }
 .live-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .live-dot {
