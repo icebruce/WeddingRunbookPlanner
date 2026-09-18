@@ -255,17 +255,32 @@ export function hiddenDetails(card) {
 }
 
 let queued = false;
+let pendingRoot = null;
+const pendingDone = [];
 
-/** Runs the pass once per frame, however many times it is asked for. */
+/**
+ * Runs the pass once per frame, however many times it is asked for.
+ *
+ * A second call inside the same frame used to be dropped outright and its
+ * `done` with it, so a repaint arriving while a fit was already queued left
+ * the toolbar never told what the card had hidden. The measuring still happens
+ * once, against the DOM as it stands when the frame runs, but every caller
+ * waiting on it is answered.
+ */
 export function fitCards(root, done) {
+  pendingRoot = root;
+  if (done) pendingDone.push(done);
   if (queued) return;
   queued = true;
   requestAnimationFrame(() => {
     queued = false;
-    fitAll(root.querySelectorAll('.card'));
+    const target = pendingRoot;
+    const waiting = pendingDone.splice(0);
+    pendingRoot = null;
+    fitAll(target.querySelectorAll('.card'));
     // The toolbar repeats what the selected card dropped, so it can only be
     // drawn once the measuring is finished.
-    done?.();
+    for (const finished of waiting) finished();
   });
 }
 

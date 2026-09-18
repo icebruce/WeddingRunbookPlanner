@@ -375,16 +375,23 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
     handle.addEventListener('pointercancel', cancelGesture, { once: true });
   }
 
+  /**
+   * The time the pointer is asking for at `clientY`, in minutes.
+   *
+   * One pixel of finger is one pixel of card, because the preview is drawn at
+   * the same scale as the timeline.
+   */
+  function resizeValueAt(clientY) {
+    const deltaMinutes = Math.round((clientY - active.originY) / PX_PER_MIN / 5) * 5;
+    return active.edge === 'bottom'
+      ? clampEnd(active.item, deltaMinutes)
+      : clampStart(active.item, deltaMinutes);
+  }
+
   function onResizeMove(event) {
     if (active?.kind !== 'resize' || active.pointerId !== event.pointerId) return;
 
-    // One pixel of finger is one pixel of card, because the preview is drawn at
-    // the same scale as the timeline.
-    const deltaMinutes = Math.round((event.clientY - active.originY) / PX_PER_MIN / 5) * 5;
-    const next = active.edge === 'bottom'
-      ? clampEnd(active.item, deltaMinutes)
-      : clampStart(active.item, deltaMinutes);
-
+    const next = resizeValueAt(event.clientY);
     if (next === active.value) return;
     active.value = next;
     schedulePaint(drawResize);
@@ -421,8 +428,17 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
     markDropLine(active.value, layout.from);
   }
 
-  function onResizeEnd() {
+  function onResizeEnd(event) {
     if (active?.kind !== 'resize') return;
+
+    // Read the release's own position instead of trusting the last
+    // `pointermove` to have arrived. Pointer events are coalesced, and a move
+    // delivered in the same frame as the release can be dropped outright — so
+    // the edge committed to wherever the last move it happened to receive left
+    // it, which is not where the finger let go. It is the arithmetic every
+    // move already does, so a release that adds nothing changes nothing.
+    if (event?.pointerId === active.pointerId) active.value = resizeValueAt(event.clientY);
+
     const { edge, id, value, item } = active;
     const unchanged = edge === 'bottom' ? value === item.end : value === item.start;
     finishGesture();
