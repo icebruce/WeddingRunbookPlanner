@@ -379,6 +379,27 @@ function cardMetrics(page, id) {
   }, id);
 }
 
+/**
+ * A card's rows once they have stopped moving.
+ *
+ * The fit pass runs on a frame, and the frame it runs on is not the frame the
+ * paint happened in — so a fixed wait is a race, and on a loaded runner it is
+ * a race that can be lost. Both snapshots are polled to a standstill instead,
+ * which is the only way the comparison means what it says: two settled cards,
+ * not one settled and one still being fitted.
+ */
+async function restingLayout(page, id, { tries = 40, gapMs = 100 } = {}) {
+  let previous = null;
+  for (let attempt = 0; attempt < tries; attempt += 1) {
+    const layout = await cardLayout(page, id);
+    const serialised = JSON.stringify(layout);
+    if (serialised === previous) return layout;
+    previous = serialised;
+    await page.waitForTimeout(gapMs);
+  }
+  throw new Error(`${id} never stopped being fitted: ${previous}`);
+}
+
 /** The fit pass runs on a frame, so give it one and a margin. */
 async function fitted(page) {
   await page.waitForTimeout(150);
@@ -387,11 +408,11 @@ async function fitted(page) {
 async function expectSelectionMovesNothing(page, ids) {
   for (const id of ids) {
     const card = page.locator(`.card[data-activity-id="${id}"]`);
+    const before = await restingLayout(page, id);
     const was = await cardMetrics(page, id);
-    const before = await cardLayout(page, id);
     await card.click({ position: { x: 20, y: 6 } });
     await expect(card).toHaveClass(/is-selected/);
-    await fitted(page);
+    await restingLayout(page, id);
     const now = await cardMetrics(page, id);
     // The box goes in the message rather than an assertion of its own: a card
     // can settle with a little overflow left (the title and the warning never
