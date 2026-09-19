@@ -397,9 +397,9 @@ test('D34: the title is in the top bar and not on the page', async ({ page, serv
 });
 
 /**
- * The strip is a band of its own tint with its own hairline along the bottom.
- * A second rule between it and the bar put three edges inside sixty pixels and
- * read as the bar having grown one.
+ * The band carries the page's own tint, so the bar above it has nothing to
+ * state: a rule between two areas of the same colour reads as the bar having
+ * grown one. The boundary the plan passes under is the panel's own edge (D13).
  */
 test('D34: the bar does not draw a hairline against the strip', async ({ page, server }) => {
   await openAt(page, server, at(13, 0));
@@ -413,10 +413,14 @@ test('D34: the bar does not draw a hairline against the strip', async ({ page, s
   // Nothing collapses, because there is no large title to collapse.
   await expect(page.locator('.topbar')).not.toHaveClass(/is-collapsed/);
 
-  // The strip keeps its own boundary, so the plan is still shown passing under
-  // something rather than under nothing.
-  const stripBorder = await strip(page).evaluate(node => getComputedStyle(node).borderBottomWidth);
-  expect(Number.parseFloat(stripBorder)).toBeGreaterThan(0);
+  // The panel is a surface of its own against the band, so the plan is still
+  // shown passing under something rather than under nothing.
+  const { band, panel } = await page.evaluate(() => ({
+    band: getComputedStyle(document.querySelector('.live-strip')).backgroundColor,
+    panel: getComputedStyle(document.querySelector('.live-panel')).backgroundColor
+  }));
+  expect(panel).not.toBe(band);
+  expect(panel).not.toMatch(/rgba\(0, 0, 0, 0\)/);
 });
 
 /** The plan needs its own gap from the strip now that nothing else makes one. */

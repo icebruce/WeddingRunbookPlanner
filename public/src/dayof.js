@@ -147,6 +147,13 @@ export function minutesNow(plan, now = new Date()) {
  * has to decide anything itself.
  */
 export function stripState(plan, now = new Date()) {
+  // The panel shows the venue's own clock beside what is happening on it, so
+  // every state carries it rather than each branch remembering to.
+  const state = computeStrip(plan, now);
+  return { ...state, clockLabel: formatTime(state.minute) };
+}
+
+function computeStrip(plan, now) {
   const schedule = buildSchedule(plan);
   const minute = minutesNow(plan, now);
   const { items, openTimes } = schedule;

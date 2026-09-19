@@ -62,15 +62,6 @@ svg.icon { width: 1.05em; height: 1.05em; fill: none; stroke: currentColor; stro
    */
   border-bottom: 1px solid transparent;
   transition: border-color 160ms var(--ease-out);
-  /*
-   * `position: sticky` plus `backdrop-filter` on Chrome for Android repaints a
-   * frame late while the browser's own URL bar collapses or expands during a
-   * scroll-direction change — the bar (and anything stuck under it) visibly
-   * lags the content for an instant. Promoting it to its own compositor layer
-   * keeps it painted independently of that reflow instead of catching up after.
-   */
-  transform: translateZ(0);
-  will-change: transform;
 }
 .topbar.is-collapsed { border-bottom-color: var(--hair); }
 
@@ -419,47 +410,96 @@ body.is-moving { cursor: grabbing; }
 #app:has(.live-strip) .planner { padding-top: 20px; }
 #app:has(.live-strip) .filter-chips { margin-top: 0; }
 
-/* ---- the live strip ------------------------------------------------------ */
+/* ---- the live panel (D13) ------------------------------------------------ */
 
+/*
+ * The wrapper is the band; the panel inside it is the card. The wrapper keeps
+ * the page's own tint so the plan scrolls under something rather than behind
+ * a floating card, which is also why the bar above still draws no rule against
+ * it: the two are the same colour, so there is no seam to state (D34).
+ */
 .live-strip {
   position: sticky;
   top: var(--topbar-height);
   z-index: 35;
-  padding: 8px 18px 10px;
-  background: color-mix(in srgb, var(--live-tint) 94%, transparent);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
-  /* Its own compositor layer for the same reason as the bar above it — see
-     the comment on `.topbar`. */
-  transform: translateZ(0);
-  will-change: transform;
-  /* A card's own two edges, top and bottom, not just the one shared with the
-     bar above it — the bar's own bottom edge stays transparent in this mode
-     (below) so the strip is the only thing drawing the seam between them.
-     Mixed with the tint rather than with transparent: a translucent hairline
-     of the vivid brand green read as too saturated against the pale card —
-     mixing toward the tint (dark in dark mode too) gives the softer, opaque
-     sage-green edge an actual card border reads as, in either theme. */
-  border-top: 1px solid color-mix(in srgb, var(--live) 45%, var(--live-tint));
-  border-bottom: 1px solid color-mix(in srgb, var(--live) 45%, var(--live-tint));
+  padding: 8px 12px 12px;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  -webkit-backdrop-filter: saturate(1.4) blur(20px);
+  backdrop-filter: saturate(1.4) blur(20px);
 }
-.live-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+
+.live-panel {
+  background: var(--live-panel);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .18);
+}
+
+.live-head { display: flex; align-items: center; gap: 8px; padding: 11px 14px 0; }
 .live-dot {
   flex: none;
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  background: var(--live-dot);
+  background: var(--live-accent);
   animation: live-pulse 1.8s ease-out infinite;
 }
-.live-label { flex: none; color: var(--live-text); font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-.live-activity { flex: 1; min-width: 0; font-size: 16px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.live-remaining { flex: none; color: var(--live-text); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.live-second { margin: 2px 0 0 16px; color: var(--soft); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.live-second b { color: var(--ink-2); font-weight: 650; }
-.live-over { color: var(--bad-text); font-weight: 600; }
-.live-progress { margin: 8px -18px -10px; height: 2px; background: color-mix(in srgb, var(--live) 12%, transparent); }
-.live-progress i { display: block; height: 100%; background: var(--live-dot); }
+/* Nothing is running, so nothing pulses: a beating dot on "Day complete"
+   would be saying something untrue. */
+.live-dot.is-still { background: var(--live-on-3); animation: none; }
+.live-label { flex: none; color: var(--live-accent); font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.live-clock { margin-left: auto; color: var(--live-on-3); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.live-activity {
+  padding: 5px 14px 0;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/*
+ * Three tiers, and the colour is the rank: green is what is running, white is
+ * what is coming, and the words between them recede to grey.
+ */
+.live-second {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 14px 11px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.live-now, .live-next { display: flex; align-items: baseline; gap: 5px; min-width: 0; }
+.live-remaining { color: var(--live-accent); font-weight: 680; white-space: nowrap; }
+.live-ends { color: var(--live-on-3); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Before the day starts this is the only thing on the line, and it is what the
+   headline is counting down to — so it reads at the secondary tier, not the
+   tertiary one the trailing "ends 1:55" sits at. */
+.live-opens { color: var(--live-on-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-next { margin-left: auto; }
+/* Tinted rather than full strength, so it reads a tier below the live green
+   beside it instead of claiming to be it. */
+.live-next-label {
+  flex: none;
+  color: var(--live-next);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.live-next b { flex: none; color: var(--live-on); font-weight: 680; }
+.live-next-title { color: rgba(255, 255, 255, .88); font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The one thing on the panel that is not green, because it is the one thing
+   that is not going to plan. */
+.live-over { margin-left: auto; color: var(--live-warn); font-weight: 650; white-space: nowrap; }
+
+.live-progress { height: 4px; background: rgba(255, 255, 255, .15); }
+.live-progress i { display: block; height: 100%; background: var(--live-accent); }
 
 /* The top bar says which mode the day is in. */
 .mode-pill {
@@ -494,11 +534,19 @@ body.is-moving { cursor: grabbing; }
   .live-dot { animation: none; }
 }
 
+/*
+ * One line on a wide screen: there is room for what is now beside what is
+ * next, so the panel lays itself out along a single row and the measure moves
+ * to its bottom edge rather than taking a band of its own.
+ */
 @media (min-width: 721px) {
-  .live-strip { display: flex; align-items: center; gap: 18px; padding: 10px 28px; }
-  .live-line { flex: 1.25; }
-  .live-second { flex: 1; margin: 0; text-align: right; }
-  .live-progress { position: absolute; left: 0; right: 0; bottom: 0; margin: 0; }
+  .live-strip { padding: 8px 28px 12px; }
+  .live-panel { position: relative; display: flex; align-items: center; gap: 18px; padding: 10px 16px 11px; }
+  .live-head { padding: 0; gap: 7px; flex: none; }
+  .live-clock { margin-left: 0; }
+  .live-activity { padding: 0; font-size: 16px; flex: none; max-width: 34%; }
+  .live-second { flex: 1; padding: 0; gap: 18px; }
+  .live-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; }
 }
 
 /* ---- the person filter --------------------------------------------------- */

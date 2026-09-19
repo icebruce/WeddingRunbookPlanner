@@ -461,7 +461,7 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 | D10 | Labels at 15/30/60 only; lines every 5 minutes | Ticks every 15 minutes |
 | D11 | Summary line as plain text with blue/red actionable parts; date and time range only | An activity count in the header |
 | D12 | Person filter fades non-matching activities, pinned row while on, exact match | None |
-| D13 | Live styling in green on a light tint; slim strip | Dark full-height card (rejected) |
+| D13 | Live styling as a graphite card in a tinted band (**reversed**: was green on a light tint, and a dark card was the rejected option). Green on a light band ended up doing six jobs at once — surface, border, progress track, fill, pulse and label — so nothing read as distinct. On a dark panel green means only "live". Not full-height: a card in a band, so the plan still scrolls under something | Green on a light tint (was) · dark *full-height* card (still rejected) |
 | D14 | iOS text sizes on phone: 17 title, 15 detail, 13 label | 12.5 / 9.5 / 8 px |
 | D15 | Add inserts after selection; duplicate after original | Always appended at end |
 | D16 | Timeline view start/end settings; end may be next day | Not available; end ≤ start rejected even across midnight |
@@ -482,4 +482,4 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 | D31 | Plan status removed. Three of its four values had no behaviour at all and the fourth, **Final**, silently forced day-of view onto every device — a mode switch wearing a label's name. Day-of now turns on by date alone, read on the plan's `timezone` (default `America/Toronto`) rather than the reader's device | Draft/Working/Confirming/Final, as a select in the desktop top bar and a row in the phone menu |
 | D30 | Two diverged plans are merged per activity and per field against the version the server last confirmed; only the same field changed twice is a question, and it names the activity | A dialog offering two whole plans, where choosing one discarded every unrelated change the other side had made |
 | D29 | Phone back-button/gesture closes the open sheet, menu, or card selection instead of leaving the app (a dummy history entry pushed while an overlay is open). Scroll restoration is manual: back closes the top thing and the page stays exactly where it is | Back navigated away from the app with an overlay still open; later, back also threw the reader from where they had scrolled to back to the selected card |
-| D34 | Day-of: the title lives in the top bar; no large title, no summary line | Keeping the large title and handing it over behind the strip |
+| D34 | Day-of: the title lives in the top bar; no large title, no summary line. The band carries the page tint, so the bar still draws no rule against it — but the boundary the plan passes under is now the panel's own edge rather than a border on the band (D13) | Keeping the large title and handing it over behind the strip |

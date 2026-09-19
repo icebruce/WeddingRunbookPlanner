@@ -32,6 +32,28 @@
   --live: #1E9E52;
   --live-dot: #34C759;
   --live-tint: #EEF7F1;
+  /*
+   * The day-of panel. It is a dark card in both themes — lighter than the dark
+   * page, darker than the light one — so it reads as raised either way and
+   * needs no second surface. Its own ink is therefore fixed rather than
+   * following the theme: white on graphite in both (D13).
+   */
+  --live-panel: #2E323A;
+  --live-on: rgba(255, 255, 255, .95);
+  --live-on-2: rgba(255, 255, 255, .72);
+  --live-on-3: rgba(255, 255, 255, .55);
+  /* The page green is too dark to read on the panel; this is its on-panel twin. */
+  --live-accent: #3DDC74;
+  /*
+   * "Next" is green, a tier below the live green beside it — but subordinate
+   * by *tint* lands at 3.6:1 on the panel, under the 4.5:1 floor, and a
+   * translucent colour slips past the contrast scan rather than passing it.
+   * This is a solid, desaturated green instead: 5.6:1, and still plainly
+   * quieter than the accent it sits next to.
+   */
+  --live-next: #7FB894;
+  /* Likewise --bad-text, which disappears against graphite. */
+  --live-warn: #FF8A80;
   --fixed: var(--ink);
   --amber: #8A5A00;
   --amber-tint: #FFF1D6;
@@ -116,7 +138,20 @@
   --radius: 12px;
   --radius-lg: 16px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-top: env(safe-area-inset-top, 0px);
+  /*
+   * Zero in a browser tab, whatever the browser reports.
+   *
+   * `viewport-fit=cover` makes the top inset live, and on Android it *changes*
+   * while the browser's own toolbar shows and hides on a scroll-direction
+   * change. The top bar pads this inset, so a changing one moved the bar's
+   * contents toward the screen edge, resized the bar, and left the live strip
+   * stuck to a `--topbar-height` measured before the change until the next
+   * paint snapped it down — the plan visibly sliding behind it in between.
+   * A browser tab's viewport already starts below the status bar, so there is
+   * nothing here to pad: only the home-screen app draws under it, and there
+   * the inset is fixed because there is no browser chrome to come and go.
+   */
+  --safe-top: 0px;
 
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-synthesis: none;
@@ -173,4 +208,14 @@
 
 @media (min-width: 721px) {
   :root { --topbar-min: 62px; --topbar-height: 62px; }
+}
+
+/*
+ * The home-screen app is the one place the page really does draw under the
+ * status bar, so it is the one place the top bar pads for it (DESIGN_GUIDE
+ * 9). `fullscreen` is here because Android grants it to an installed app that
+ * asked for `standalone`.
+ */
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  :root { --safe-top: env(safe-area-inset-top, 0px); }
 }
