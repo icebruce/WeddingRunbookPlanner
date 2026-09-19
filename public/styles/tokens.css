@@ -116,7 +116,20 @@
   --radius: 12px;
   --radius-lg: 16px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-top: env(safe-area-inset-top, 0px);
+  /*
+   * Zero in a browser tab, whatever the browser reports.
+   *
+   * `viewport-fit=cover` makes the top inset live, and on Android it *changes*
+   * while the browser's own toolbar shows and hides on a scroll-direction
+   * change. The top bar pads this inset, so a changing one moved the bar's
+   * contents toward the screen edge, resized the bar, and left the live strip
+   * stuck to a `--topbar-height` measured before the change until the next
+   * paint snapped it down — the plan visibly sliding behind it in between.
+   * A browser tab's viewport already starts below the status bar, so there is
+   * nothing here to pad: only the home-screen app draws under it, and there
+   * the inset is fixed because there is no browser chrome to come and go.
+   */
+  --safe-top: 0px;
 
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-synthesis: none;
@@ -173,4 +186,14 @@
 
 @media (min-width: 721px) {
   :root { --topbar-min: 62px; --topbar-height: 62px; }
+}
+
+/*
+ * The home-screen app is the one place the page really does draw under the
+ * status bar, so it is the one place the top bar pads for it (DESIGN_GUIDE
+ * 9). `fullscreen` is here because Android grants it to an installed app that
+ * asked for `standalone`.
+ */
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  :root { --safe-top: env(safe-area-inset-top, 0px); }
 }
