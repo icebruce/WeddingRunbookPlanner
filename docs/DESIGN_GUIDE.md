@@ -186,10 +186,15 @@ Same resize handles as a card (§4.3: 34×9 hollow `--sel` capsule), astride its
 ### 4.5 Selection toolbar (phone)
 Floating, 12 px from sides, 30 px above the home indicator, 24 px radius, glass white. Context line 13 (`**Title** · time`), optional hidden-details line 13 `--soft` (single line, ellipsis). Five equal buttons 54 px tall: 22 px icon over 12 px label; Delete in `--bad`. Replaces the + button while a card is selected.
 
-### 4.6 Live strip
-Sticky under the top bar, full width, `--live-tint` at 94 % with blur, no radius, no shadow. Card-style border, top and bottom, 2 px: `--live` mixed 45 % into `--live-tint` — an opaque, softened sage green rather than a translucent hairline of the vivid brand green, so the band reads as a tinted card rather than floating text — the top edge is the only seam between it and the bar above, which draws none of its own. It is the day's header: the large title and the summary line are not shown while it is (D34), and the plan starts 20 px below it.
-Phone (≈58 px): line 1 — pulsing dot 8 px, `NOW` (12/700 caps `--live`), activity (16/650, ellipsis), `23 min left` right-aligned (14/600 `--live`); line 2 — indented 16 px, `Next **1:55 PM** Arrival & Buffer` (14 `--soft`). 2 px progress line along the bottom (`--live-dot` on 12 % green).
-Desktop (44 px, one line): dot, `LIVE · 1:32 PM`, activity, `23 min left · ends 1:55 PM`, right-aligned `Next 1:55 PM Arrival & Buffer · location`.
+### 4.6 Live panel
+A graphite card in a band, sticky under the top bar. The **band** (`.live-strip`) carries the page's own tint with blur, full width, 8/12/12 px padding — so the plan scrolls under something rather than behind a floating card, and the bar above draws no rule against it because the two are the same colour (D34). The **panel** (`.live-panel`) is `--live-panel` #2E323A, 16 px radius, `0 8px 22px rgba(0,0,0,.18)`. Same surface in both themes: lighter than the dark page, darker than the light one, so it reads as raised either way (D13).
+
+Green means one thing on the panel — live — after a version where it was simultaneously the surface, the border, the progress track, the fill, the pulse and the label, and nothing read as distinct.
+
+Phone: line 1 — pulsing dot 9 px `--live-accent`, kicker (12/700 caps `--live-accent`: `NOW` / `SOON` / `OPEN`, none once the day is done), venue clock right-aligned (12/600 `--live-on-3`, tabular); line 2 — the headline, 20/650 white, ellipsis; line 3 — three tiers, colour as rank: `25 min left` (`--live-accent` 680) then `· ends 1:55` (`--live-on-3`), and right-aligned `NEXT` (12/700 caps `--live-next`) `2:45` (`--live-on` 680) `Ceremony` (white 88 %). 4 px progress along the bottom edge, `--live-accent` on white 15 %.
+Desktop (one line): the panel lays out along a single row — dot, kicker, clock, activity, then the same third line spread across the rest — and the measure moves to a 3 px rule on the panel's bottom edge.
+
+States: no progress bar before the day starts or after it ends, so the card ends flat; the dot stops pulsing and greys whenever nothing is running, because a beating dot on `Day complete` says something untrue. An overrun replaces what is next with `Also now: …` in `--live-warn` — the one thing on the panel that is not green, because it is the one thing not going to plan.
 Pulse: `box-shadow` ring expanding 0 → 7 px and fading, 1.8 s, infinite; disabled with reduced motion.
 
 ### 4.7 Sheets, dialogs, menus
