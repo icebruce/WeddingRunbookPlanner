@@ -131,10 +131,27 @@ button, [role="button"], summary, .filter-chip, .stage-choice {
   scroll-margin-bottom: calc(var(--bottom-furniture, 58px) + 38px + var(--safe-bottom));
 }
 
-/* Safe areas: a phone in landscape has a notch on one side. */
-.topbar, .live-strip, .pinned-bar {
+/*
+ * Safe areas: a phone in landscape has a notch on one side. Each bar keeps its
+ * own gutter and the inset only ever widens it.
+ *
+ * The top bar's gutter is deliberately uneven: its left edge is text and needs
+ * the full 18 px, while its right edge is a 44 px icon button carrying its own
+ * optical inset. The strip and the pinned bars are plain boxes, and the same
+ * 18/12 left them visibly off-centre — a 382 px panel sitting 18 px from one
+ * screen edge and 12 from the other.
+ */
+.topbar {
   padding-left: max(18px, env(safe-area-inset-left));
   padding-right: max(12px, env(safe-area-inset-right));
+}
+.live-strip {
+  padding-left: max(12px, env(safe-area-inset-left));
+  padding-right: max(12px, env(safe-area-inset-right));
+}
+.pinned-bar {
+  padding-left: max(18px, env(safe-area-inset-left));
+  padding-right: max(18px, env(safe-area-inset-right));
 }
 .planner {
   padding-left: max(18px, env(safe-area-inset-left));

@@ -11,7 +11,7 @@
  * server, so the one credential a vendor is holding stays out of request logs
  * and out of any `Referer` — it is read here and handed over in a header.
  */
-import { escapeHtml, paint, watchCollapsedTitle } from './dom.js';
+import { escapeHtml, measureTopbarHeight, paint, watchCollapsedTitle } from './dom.js';
 import { icon } from './icons.js';
 import { createClock, minutesNow, shouldBeOn, stripState } from './dayof.js';
 import { fitCards, watchFit } from './render/fit.js';
@@ -99,6 +99,9 @@ function repaint(names = Object.keys(REGIONS)) {
   // A card too short for every row drops them by priority, which is measured
   // rather than guessed — the same pass the planner runs, for the same reason.
   fitCards(app);
+  // The strip sticks to the bar's underside on this page as well, and the
+  // token it reads is only a floor — so the bar is measured here too.
+  measureTopbarHeight(app);
   refreshCollapsedTitle();
 }
 
