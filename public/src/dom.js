@@ -68,6 +68,30 @@ export function focusByKey(root, key) {
 }
 
 /**
+ * The top bar's real height, for everything that sticks to its underside.
+ *
+ * The token is a design floor (52 px, 62 px on a desktop) and the bar is often
+ * taller than it — a notch's safe-area inset is part of its padding — which
+ * left the live strip and the pinned bars sticking somewhere inside it. They
+ * can only be right if the number they use is measured.
+ *
+ * Written exactly as measured, fractions and all. Rounding it down reads as
+ * the safe direction — it tucks the strip that fraction *under* the bar rather
+ * than leaving a seam the plan scrolls through — but a sticky element rests at
+ * its natural position until it sticks, and its natural position is the bar's
+ * true height. A bar measuring 53.4 px left the strip resting at 53.4 and
+ * snapping to 53 the instant the page moved: a jump on the first scroll and
+ * only the first, which is what it was reported as. The exact height is flush,
+ * so there is nothing to snap to.
+ */
+export function measureTopbarHeight(root) {
+  const topbar = root.querySelector('.topbar');
+  if (!topbar) return;
+  document.documentElement.style.setProperty(
+    '--topbar-height', `${topbar.getBoundingClientRect().height}px`);
+}
+
+/**
  * Once the large title has scrolled past, the top bar takes it over.
  *
  * Watched rather than measured on every scroll event, so it costs nothing

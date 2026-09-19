@@ -74,6 +74,15 @@ svg.icon { width: 1.05em; height: 1.05em; fill: none; stroke: currentColor; stro
  */
 #app:has(.live-strip) .topbar.is-collapsed { border-bottom-color: transparent; }
 
+/* And the bar takes the band's surface on the day, for the reason given there:
+   the pair of them are the page's own colour, and nothing passing underneath
+   changes it. */
+#app:has(.live-strip) .topbar {
+  background: var(--bg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 .brand { display: inline-flex; align-items: center; gap: 9px; color: var(--ink); text-decoration: none; font-family: ui-serif, Georgia, "Times New Roman", serif; font-size: 18px; letter-spacing: -.015em; }
 
 .brand .icon { width: 21px; height: 21px; color: var(--brand); stroke-width: 1.45; }
@@ -417,22 +426,34 @@ body.is-moving { cursor: grabbing; }
  * the page's own tint so the plan scrolls under something rather than behind
  * a floating card, which is also why the bar above still draws no rule against
  * it: the two are the same colour, so there is no seam to state (D34).
+ *
+ * The page's tint, opaque, rather than the glass the other bars use. Glass
+ * takes its colour from whatever is behind it, and at rest there is nothing
+ * behind the band but the page — so the first scroll was the first time the
+ * effect had anything to work with, and the band and the bar visibly changed
+ * tone as the plan arrived underneath them. On the day the two are the page's
+ * own colour and stay it.
  */
 .live-strip {
   position: sticky;
   top: var(--topbar-height);
   z-index: 35;
   padding: 8px 12px 12px;
-  background: color-mix(in srgb, var(--bg) 92%, transparent);
-  -webkit-backdrop-filter: saturate(1.4) blur(20px);
-  backdrop-filter: saturate(1.4) blur(20px);
+  background: var(--bg);
 }
 
 .live-panel {
   background: var(--live-panel);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, .18);
+  /*
+   * Kept inside the band. A shadow reaches about half its blur beyond the box,
+   * so the old `0 8px 22px` fell 19 px below the panel — seven past the band's
+   * 12 px of padding, onto the plan scrolling underneath, where it read as a
+   * faint smear travelling with the strip. At 4/12 it reaches 10 px, and the
+   * band catches all of it.
+   */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .18);
 }
 
 .live-head { display: flex; align-items: center; gap: 8px; padding: 11px 14px 0; }
