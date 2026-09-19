@@ -427,8 +427,12 @@ body.is-moving { cursor: grabbing; }
      of the vivid brand green read as too saturated against the pale card —
      mixing toward the tint (dark in dark mode too) gives the softer, opaque
      sage-green edge an actual card border reads as, in either theme. */
-  border-top: 1px solid color-mix(in srgb, var(--live) 45%, var(--live-tint));
-  border-bottom: 1px solid color-mix(in srgb, var(--live) 45%, var(--live-tint));
+     2 px rather than a hairline: at 1 px the edge read as faint beside the
+     card it is imitating, and the 2 px progress track sitting just inside the
+     bottom edge gave that side a weight the bare top edge could not match, so
+     the two did not read as the same line. */
+  border-top: 2px solid color-mix(in srgb, var(--live) 45%, var(--live-tint));
+  border-bottom: 2px solid color-mix(in srgb, var(--live) 45%, var(--live-tint));
 }
 .live-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .live-dot {
