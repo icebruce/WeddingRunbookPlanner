@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- The app's own viewport line, so this measures what the app experiences. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Sticky bar diagnostic</title>
+  <link rel="stylesheet" href="/styles/tokens.css">
+  <style>
+    body { margin: 0; font: 13px/1.35 ui-monospace, Menlo, Consolas, monospace; background: #F7F7F4; }
+
+    /* The app's top bar, as it really is. */
+    .topbar {
+      position: sticky; top: 0; z-index: 40;
+      min-height: var(--topbar-min);
+      padding: calc(4px + var(--safe-top)) 16px 4px;
+      display: flex; align-items: center; justify-content: space-between;
+      background: color-mix(in srgb, var(--bg) 92%, transparent);
+      -webkit-backdrop-filter: saturate(1.4) blur(20px);
+      backdrop-filter: saturate(1.4) blur(20px);
+    }
+    .topbar b { font-size: 17px; }
+    .menu { width: 36px; height: 36px; border: 1px solid #ccc; border-radius: 10px; }
+
+    .strip {
+      position: sticky; top: var(--topbar-height); z-index: 35;
+      padding: 8px 18px 10px;
+      background: color-mix(in srgb, var(--live-tint) 94%, transparent);
+      -webkit-backdrop-filter: blur(20px);
+      backdrop-filter: blur(20px);
+      border-top: 2px solid color-mix(in srgb, var(--live) 45%, var(--live-tint));
+      border-bottom: 2px solid color-mix(in srgb, var(--live) 45%, var(--live-tint));
+    }
+
+    /* Raw env() probe, untouched by the token. */
+    #envprobe { padding-top: env(safe-area-inset-top, 0px); height: 0; }
+
+    #out { position: fixed; left: 0; right: 0; bottom: 0; z-index: 99;
+           background: #111; color: #eee; padding: 8px 10px; }
+    #out table { width: 100%; border-collapse: collapse; }
+    #out td { padding: 1px 2px; white-space: nowrap; }
+    #out td:first-child { color: #9aa; }
+    .moved { color: #ff6b6b; font-weight: bold; }
+    .still { color: #51cf66; }
+    .filler { height: 240vh; padding: 20px;
+              background: repeating-linear-gradient(180deg, #eee 0 40px, #e4e4e4 40px 80px); }
+    .hint { padding: 14px 18px; background: #fffbdd; }
+  </style>
+</head>
+<body>
+  <div id="envprobe"></div>
+  <header class="topbar"><b>Wedding Day</b><span class="menu"></span></header>
+  <div class="strip">NOW &middot; diagnostic strip</div>
+  <p class="hint">Scroll up and down a few times (enough for the browser bar to
+     hide and come back), then screenshot this page. Red = that value changed
+     while you scrolled; green = it held still.</p>
+  <div class="filler">scroll me</div>
+  <div id="out"></div>
+  <script src="/diag.js"></script>
+</body>
+</html>
