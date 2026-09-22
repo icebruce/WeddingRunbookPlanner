@@ -7,6 +7,7 @@
  * `hasUnsavedChanges(form)` rather than reaching in for a signature.
  */
 
+import { isViewOnly } from './dayof.js';
 import { checkPlan, normalizeDuration, roundTimeUp, validateActivity } from './validate.js';
 import { formatDuration, formatTime } from './schedule.js';
 import { peopleChips } from './render/sheets.js';
@@ -151,6 +152,17 @@ export function createActivityForm({ store, commit, closeSheet, clock, pickerOpt
 
   // ------------------------------------------------------------------ submit
 
+  /**
+   * The day can go back to view only while a sheet is open — five minutes
+   * away, or midnight on the date — and commit refuses there, so Done used to
+   * close the sheet and drop what was typed. Done on a filled-in sheet is
+   * deliberate, not a stray thumb, so it counts as Edit.
+   */
+  function resumeEditing() {
+    if (!isViewOnly(store.ui) || !store.ui.dayOf) return;
+    store.setUi({ editingOnDay: true }, { regions: ['header', 'heading', 'timeline', 'toolbar'] });
+  }
+
   function submitActivity(event) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -184,6 +196,7 @@ export function createActivityForm({ store, commit, closeSheet, clock, pickerOpt
     // committed until now.
     const openTime = store.ui.dialog.openTime || null;
     baseline = null;
+    resumeEditing();
     closeSheet();
 
     if (creating) {
@@ -236,6 +249,7 @@ export function createActivityForm({ store, commit, closeSheet, clock, pickerOpt
     applied.timelineStart = result.plan.timelineStart ?? null;
     applied.timelineEnd = result.plan.timelineEnd ?? null;
 
+    resumeEditing();
     closeSheet();
     commit('plan.settings', { changes: applied });
     // The date decides whether the day-of view belongs on.

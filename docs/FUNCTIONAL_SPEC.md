@@ -375,6 +375,7 @@ The strip updates every 30 seconds. Screen readers announce only when the curren
 ### 6.4 Editing on the day
 - **Edit** switches to editing: header shows an amber `Editing` label and **Done**. All planning interactions work; the live strip stays.
 - **Done** returns to view only. Leaving the app for more than 5 minutes also returns to view only.
+- If view only returns while a sheet is open, its **Done** switches back to editing and applies the change.
 
 ---
 
