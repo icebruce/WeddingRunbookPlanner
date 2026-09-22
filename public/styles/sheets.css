@@ -411,7 +411,9 @@ dialog.is-leaving { pointer-events: none; }
 .group-row + .group-row { border-top: .5px solid var(--hair); }
 .group-row.is-hidden { display: none; }
 .group-value, .group-note { color: var(--soft); font-variant-numeric: tabular-nums; }
-.group-note { font-size: 15px; }
+/* "1 hr 15 min" broke over two lines beside the stepper and dragged the row
+   taller than the two around it. It is a reading, not a paragraph. */
+.group-note { font-size: 15px; white-space: nowrap; }
 .group-row input[type="time"] { border: 0; background: none; color: var(--ink); font: inherit; text-align: right; font-variant-numeric: tabular-nums; }
 
 .stepper { display: inline-flex; align-items: center; height: 36px; border-radius: 9px; background: var(--fill-strong); }

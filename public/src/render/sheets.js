@@ -122,7 +122,8 @@ function timingBlock(item, plan, start) {
  * The location field.
  *
  * One text field for what the card shows, and one button beside it for the
- * Google Maps link. Plain words stay plain words — a card only offers to open
+ * Google Maps link. The button wears the link glyph rather than a map one:
+ * attaching a link is all it does — it does not search for a place. Plain words stay plain words — a card only offers to open
  * a map when someone has actually supplied one, so a location like
  * "Getting-ready location · TBD" never becomes a link to nowhere.
  */
@@ -135,7 +136,7 @@ function locationField(item, places) {
         autocomplete="off" list="location-suggestions" aria-label="Location">
       <button type="button" class="map-button" id="map-link-toggle" aria-pressed="${linked}"
         aria-expanded="false" aria-controls="map-link-row"
-        aria-label="${linked ? 'Edit the Google Maps link' : 'Add a Google Maps link'}">${icon('map')}</button>
+        aria-label="${linked ? 'Edit the Google Maps link' : 'Add a Google Maps link'}">${icon('link')}</button>
     </div>
     <div class="map-link-row" id="map-link-row" hidden>
       <label class="field-label" for="map-url-field">Google Maps link</label>
