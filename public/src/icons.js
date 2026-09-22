@@ -38,6 +38,9 @@ const paths = {
   logout: '<path d="M10 4H5v16h5M14 8l4 4-4 4M9 12h9"/>',
   warning: '<path d="M12 3 2.5 20h19Z"/><path d="M12 9v4M12 17h.01"/>',
   chevron: '<path d="m8 10 4 4 4-4"/>',
+  left: '<path d="m14 6-6 6 6 6"/>',
+  right: '<path d="m10 6 6 6-6 6"/>',
+  map: '<path d="m9 4.5 6 2 5-2v13l-5 2-6-2-5 2v-13Z"/><path d="M9 4.5v13M15 6.5v13"/>',
   save: '<path d="M5 4h12l2 2v14H5Z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/>',
   pencil: '<path d="M4 20h4L19 9l-4-4L4 16Z"/><path d="m13.5 6.5 4 4"/>'
 };

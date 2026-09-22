@@ -224,18 +224,6 @@ test('activity.resizeTop moves the start, keeps the end, and records a readable 
   assert.equal(noop, null, 'resizing to the same edge is not a change');
 });
 
-test('activity.duplicate copies the activity right after the original', () => {
-  const s = store();
-  const before = s.plan;
-
-  const result = s.dispatch('activity.duplicate', { id: 'a', newId: 'a-copy' });
-
-  assert.deepEqual(s.plan.activities.map(x => x.id), ['a', 'a-copy', 'b', 'c']);
-  assert.equal(s.plan.activities[1].locked, false);
-  assert.equal(result.label, 'Duplicated a');
-  assert.equal(before.activities.length, 3, 'the previous plan is untouched');
-});
-
 test('openTime.buffer turns open time into a real Buffer activity', () => {
   const s = store(activity('a', T(10), { duration: 30 }), activity('fixed', T(12), { duration: 30 }));
   const openTime = { beforeId: 'fixed', start: T(10, 30), end: T(12) };

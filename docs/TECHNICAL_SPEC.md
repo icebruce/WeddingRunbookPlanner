@@ -12,7 +12,7 @@
 ## 1. Constraints
 
 - Stack unchanged: HTML, CSS, vanilla JS (ES modules), Node 20+, Vercel static hosting + Functions, Upstash Redis REST.
-- **One vendored runtime dependency:** flatpickr (`public/vendor/flatpickr/`), loaded by `index.html` for date/time pickers — see §8.5. No other runtime dependencies. Allowed dev-only dependency: `@playwright/test`.
+- **No runtime dependencies.** The date and time picker is the app's own (§8.5); flatpickr, the one exception, is gone (D35). Allowed dev-only dependencies: `@playwright/test`, `eslint`.
 - No framework, bundler or build step. Files are served as written.
 - Browser support: Safari/iOS 16.4+, last two versions of Chrome, Edge, Firefox.
 - Prefer small, explicit modules over abstraction.
@@ -83,7 +83,7 @@ WeddingRunbookPlanner/
 │       ├── save.js           # autosave pipeline, device copy, sync
 │       ├── dayof.js          # clock, day-of state, strip content
 │       ├── api.js  config.js  icons.js  format.js
-│   └── vendor/flatpickr/     # vendored date/time picker (the one runtime dependency)
+│   └── styles/pickers.css    # the date and time picker
 ├── scripts/dev-server.mjs    # serves public/ + api/
 ├── tests/
 │   ├── unit/   schedule  layout  save  validate  storage  auth  ratelimit
@@ -121,6 +121,7 @@ type Activity = {
   duration: number;         // integer, 5..720, multiple of 5
   stage: StageId;           // allowlist
   location: string;         // 0–140
+  mapUrl: string;           // 0–2000, '' or an absolute http(s) URL; nothing else is accepted
   people: string[];         // max 30, each 1–80, unique case-insensitively
   notes: string;            // 0–1000
   start: number;            // minutes from the plan date's midnight; absolute, can exceed 1440 for after-midnight activities
@@ -190,7 +191,7 @@ Operations (pure, each returns a new plan — `operations.js`):
 - `keepAsBuffer(plan, openTime, newId)` — inserts a Buffer activity of exactly that length, spliced before the activity that follows the gap.
 - `extendPrevious(plan, openTime)` — stretches the activity right before the open time so it ends where the gap ends.
 - `addInOpenTime(plan, openTime, activity)` — inserts a new activity starting at the gap, defaulting to the gap's length.
-- `insertAfter(plan, afterId|null, activity)`, `duplicate(plan, id, newId)` (copy starts 1× the original's duration later, unlocked), `remove(plan, id)`, `update(plan, activity)`, `setStage(plan, id, stage)`, `setSettings(plan, changes)`.
+- `insertAfter(plan, afterId|null, activity)`, `remove(plan, id)`, `update(plan, activity)`, `setStage(plan, id, stage)`, `setSettings(plan, changes)`.
 - `normalizeDuration(n)` = clamp(round-to-5(n), 5, 720).
 
 No operation returns a `shifted` count — nothing is shifted as a side effect of another change. `moveGroup` returns `movedCount` (how many of the requested ids actually moved, excluding locked ones), used for its own undo label only.
@@ -242,8 +243,20 @@ Before a region re-renders, remember the focused element's `data-focus-key`; res
 ### 8.4 Print
 `@media print` stylesheet plus `render/print.js`, which builds a hidden list layout from the current schedule and filter before calling `window.print()`.
 
-### 8.5 Date/time pickers (`render/pickers.js`)
-The one vendored runtime dependency (flatpickr, `public/vendor/flatpickr/`), lazy-loaded on first use rather than pulled from a CDN so the app keeps working with no network beyond the page itself. `initPickers(root, {onChange})` wires every `[data-picker]` input under `root`: `time` (5-minute grid), `date` (calendar only), or `datetime` (an activity's absolute start, which can land on the day after the plan date). `onChange` fires on flatpickr's own change event, not every keystroke. If the script fails to load (offline, nothing cached), the plain input underneath still works.
+### 8.5 Date and time picker (`render/pickers.js`)
+The app's own, with no dependency behind it (D35). `initPickers(root, { onChange, overlayRoot, onOverlayChange })` wires every `[data-picker]` trigger under `root`; `pickerField(name, {...})` writes the markup — a hidden input carrying the value the form submits, and a button carrying the reading. A picker field is pressed, never typed into, so it is a button rather than a `readonly` input (which announces as disabled).
+
+Three modes:
+
+| Mode | Shows | Stores |
+|---|---|---|
+| `date` | calendar, plan's own date outlined | `YYYY-MM-DD` |
+| `time` | wheel on the 5-minute grid; `data-optional` adds **Clear** | `HH:MM`, or `''` |
+| `datetime` | wheel only — no calendar; the day follows from the clock (§2.1 of `FUNCTIONAL_SPEC.md`, D36) | absolute minutes from the plan date's midnight |
+
+The picker is a `<dialog>` opened with `showModal()` into `overlayRoot` (the alert root), so it stacks above the sheet in the same top layer and inherits the Escape, scrim and hardware-back handling that root already has. `resolveStart(minutesOfDay)` is the day rule and the only place it is written down. Nothing is committed until **Set**, which reads the wheel columns first — a flick and an immediate Set must commit what is under the band, not the last settled value.
+
+Wheel columns are `role="spinbutton"` with `aria-valuetext`, driven by scroll snapping and the arrow keys. Not `listbox`: the options cannot be seen, only scrolled past.
 
 ### 8.6 Back-button / history guard (`app.js`)
 On a phone, hardware/gesture back goes to browser history, not the app — left alone it would leave a sheet, menu, or card selection open while navigating away from the whole plan. A single dummy `history.pushState` entry is pushed exactly while any such overlay is open; back then lands on that entry (same URL, no navigation) and the resulting `popstate` is read as "close the top thing" instead. Closing the overlay any other way (Cancel, scrim tap, Escape) consumes the same entry via `history.back()` so the back stack never accumulates dead stops. Because `history.back()`'s `popstate` lands on a later tick while `pushState` is synchronous, the push/pop bookkeeping reacts once on a microtask after a synchronous stretch of store updates finishes, so closing one overlay and immediately opening another (e.g. an open-time sheet handing off to the activity editor) nets out correctly instead of racing.

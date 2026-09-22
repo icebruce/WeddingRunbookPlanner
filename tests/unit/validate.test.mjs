@@ -117,7 +117,23 @@ test('F15: unknown fields are dropped instead of stored', () => {
     activities: [activity({ colour: 'red', __proto__hack: 1 })]
   }));
   assert.equal('secret' in result, false);
-  assert.deepEqual(Object.keys(result.activities[0]).sort(), ['duration', 'id', 'location', 'locked', 'notes', 'people', 'stage', 'start', 'title']);
+  assert.deepEqual(Object.keys(result.activities[0]).sort(), ['duration', 'id', 'location', 'locked', 'mapUrl', 'notes', 'people', 'stage', 'start', 'title']);
+});
+
+test('a map link has to be a web address, and a scheme that only runs code is refused', () => {
+  const ok = validatePlan(plan({ activities: [activity({ mapUrl: 'https://maps.app.goo.gl/abc' })] }));
+  assert.equal(ok.activities[0].mapUrl, 'https://maps.app.goo.gl/abc');
+
+  // No link is the ordinary case, and it is not an error.
+  assert.equal(validatePlan(plan({ activities: [activity()] })).activities[0].mapUrl, '');
+  assert.equal(validatePlan(plan({ activities: [activity({ mapUrl: '   ' })] })).activities[0].mapUrl, '');
+
+  // The value lands in an href, so anything that is not http(s) is refused
+  // rather than escaped.
+  rejects(plan({ activities: [activity({ mapUrl: 'javascript:alert(1)' })] }), 'activities[0].mapUrl');
+  rejects(plan({ activities: [activity({ mapUrl: 'data:text/html,<script>' })] }), 'activities[0].mapUrl');
+  rejects(plan({ activities: [activity({ mapUrl: 'not a url at all' })] }), 'activities[0].mapUrl');
+  rejects(plan({ activities: [activity({ mapUrl: `https://maps.google.com/?q=${'x'.repeat(2100)}` })] }), 'activities[0].mapUrl');
 });
 
 test('activity ids follow the documented pattern and stay unique', () => {

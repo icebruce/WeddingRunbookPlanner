@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 import { buildSchedule } from '../../public/src/schedule.js';
 import {
   addInOpenTime,
-  duplicate,
   extendPrevious,
   insertAfter,
   keepAsBuffer,
@@ -139,24 +138,6 @@ test('D15: adding goes after the selected activity, duplicating after the origin
 
   const appended = insertAfter(before, null, activity('last', T(11), 30)).plan;
   assert.deepEqual(appended.activities.map(x => x.id), ['a', 'b', 'last']);
-});
-
-test('D15: a duplicate copies everything, unlocked, right after the original ends', () => {
-  const before = plan([activity('a', T(12), 45, {
-    locked: true, location: 'Church', people: ['Bride'], notes: 'Bring rings', stage: 'ceremony'
-  })]);
-  const { plan: after } = duplicate(before, 'a', 'a-copy');
-  const copy = after.activities[1];
-
-  assert.equal(copy.id, 'a-copy');
-  assert.equal(copy.title, 'a');
-  assert.equal(copy.duration, 45);
-  assert.equal(copy.start, T(12, 45), 'right after the original, not stacked on it');
-  assert.equal(copy.stage, 'ceremony');
-  assert.equal(copy.location, 'Church');
-  assert.deepEqual(copy.people, ['Bride']);
-  assert.equal(copy.notes, 'Bring rings');
-  assert.equal(copy.locked, false, 'a copy is never locked — the original still is');
 });
 
 test('removing leaves the hole, and touches nothing else', () => {

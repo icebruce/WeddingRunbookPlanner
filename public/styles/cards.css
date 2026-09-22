@@ -145,6 +145,24 @@
 .stage-tag--button { cursor: pointer; font-family: inherit; }
 .stage-tag--button .icon:last-child { width: 12px; height: 12px; color: var(--soft); }
 
+/* A location with a map link is the one thing on a card that leaves the app,
+   so it is the one thing on a card that looks like a link. */
+.card-location-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-left: -6px;
+  padding: 2px 7px 2px 6px;
+  border-radius: 8px;
+  color: var(--sel-text);
+  text-decoration: none;
+}
+
+.card-location-link:hover { background: var(--sel-tint); }
+
+.card-location-link .icon { color: currentColor; }
+
 .card-controls { position: absolute; top: 4px; right: 4px; display: flex; align-items: center; gap: 2px; }
 .card-controls .lock-button {
   width: 34px;

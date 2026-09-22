@@ -31,7 +31,7 @@
 | 2 | Foundations | State/actions, region rendering, tokens, focus | F14, F19–F21, F26 |
 | 3 | Time-true timeline | Ruler, exact geometry, card layout and fitting, conflict columns | F4, D8–D10, D25 |
 | 4 | Direct manipulation | Selection model, toolbar, long-press, resize (top/bottom), reorder | F5–F7, D2, D5, D23 |
-| 5 | Editing flows | Edit sheet/dialog, stage, fix/unfix, open time, add/duplicate/delete, undo | D3, D6, D7, D15 |
+| 5 | Editing flows | Edit sheet/dialog, stage, fix/unfix, open time, add/delete, undo | D3, D6, D7, D15 |
 | 6 | Sync and resilience | Device copy, offline, conflict dialog, refresh, versions | F18, D19, D20 |
 | 7 | Day-of | Mode, live strip, time line, view-only editing | D1, D13 |
 | 8 | Remaining features | Summary, filter, sunset, print, export, suggestions, notes glyph, empty/template, settings, menu, PWA | D11, D12, D16–D18, D24 |
@@ -109,7 +109,7 @@ Dependencies: 1 → 2 → 3 → 4 → 5; 6 needs 2 (and 5 for undo interplay); 7
 - Toolbar buttons: Edit, Lock/Unlock, Stage (list sheet / desktop menu), Duplicate, Delete.
 - Fix/unfix semantics and shift toast; solid dark lock.
 - Open-time actions sheet/menu (Keep as buffer → Buffer activity; Extend previous; Add here).
-- Add after selected; duplicate after original.
+- Add after selected.
 - Delete without confirm; Undo toast (6 s) and ⌘/Ctrl+Z for all listed actions; toast policy (only undo, shifts, errors).
 **Tests** unit: every schedule operation. e2e: each action + undo restores exact prior plan; unfix shift toast text; open-time actions produce expected schedule; add after selected; no success toasts appear.
 **Owner check** Delete and undo; turn open time into a buffer; fix and unfix Ceremony.

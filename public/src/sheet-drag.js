@@ -62,7 +62,7 @@ const RESISTANCE = 4;
  * all read a drag as something, and none of them mean "close this".
  */
 function mayDrag(event, sheet) {
-  if (event.target.closest('input, textarea, select, button, [role="button"], .flatpickr-calendar')) return false;
+  if (event.target.closest('input, textarea, select, button, [role="button"]')) return false;
   const body = event.target.closest('.sheet-body');
   if (body && body.scrollTop > 0) return false;
   return sheet.contains(event.target);
