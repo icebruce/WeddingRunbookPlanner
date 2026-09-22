@@ -111,15 +111,26 @@ export function formatDate(value) {
  * form submits; the button is what a person presses, and carries the reading.
  */
 export function pickerField(name, { kind, value, label, placeholder = '', optional = false, glyph = 'clock', planDate = null }) {
+  const reading = display(kind, value, planDate);
   return `<span class="picker-field">
     <input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value ?? '')}">
-    <button type="button" class="picker-trigger" data-picker="${kind}" data-target="${escapeHtml(name)}"
+    <button type="button" class="picker-trigger${reading ? '' : ' is-empty'}" data-picker="${kind}" data-target="${escapeHtml(name)}"
+      ${placeholder ? `data-placeholder="${escapeHtml(placeholder)}"` : ''}
       ${optional ? 'data-optional' : ''} ${planDate ? `data-plan-date="${escapeHtml(planDate)}"` : ''}
       aria-label="${escapeHtml(label)}">
-      ${icon(glyph, 'picker-icon')}<span class="picker-text">${escapeHtml(display(kind, value, planDate) || placeholder)}</span>
+      ${icon(glyph, 'picker-icon')}<span class="picker-text">${escapeHtml(reading || placeholder || EMPTY_READING)}</span>
     </button>
   </span>`;
 }
+
+/*
+ * A field with nothing in it says so, and says it the same way twice: the
+ * field carries its own placeholder in `data-placeholder`, so clearing
+ * "Shows from" puts "Earliest activity" back rather than the generic word.
+ * `is-empty` is what tells them apart on screen — the reading was drawn in
+ * the same weight and colour whether it was a time or the prompt to set one.
+ */
+const EMPTY_READING = 'Not set';
 
 function display(kind, value, planDate) {
   if (value === '' || value === null || value === undefined) return '';
@@ -367,8 +378,10 @@ function open(trigger, { root, onChange, overlayRoot, onOverlayChange }) {
 
   function commit(value) {
     input.value = value;
+    const reading = display(kind, value, planDate);
     trigger.querySelector('.picker-text').textContent =
-      display(kind, value, planDate) || trigger.dataset.placeholder || 'Not set';
+      reading || trigger.dataset.placeholder || EMPTY_READING;
+    trigger.classList.toggle('is-empty', !reading);
     // The form's own "has this changed" check reads the inputs, so the change
     // has to be announced the way a typed one would be.
     input.dispatchEvent(new Event('input', { bubbles: true }));

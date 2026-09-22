@@ -191,18 +191,6 @@ dialog.is-leaving { pointer-events: none; }
 
 .field input[readonly] { background: var(--surface-2); color: var(--soft); }
 
-.stepper { display: grid; grid-template-columns: 38px 1fr 38px; }
-
-.stepper button, .stepper input { min-width: 0; min-height: 42px; border: 1px solid var(--hair); background: var(--surface); text-align: center; }
-
-.stepper button:first-child { border-radius: 10px 0 0 10px; }
-
-.stepper button:last-child { border-radius: 0 10px 10px 0; }
-
-.stepper input { border-left: 0; border-right: 0; border-radius: 0; padding: 4px; }
-
-.stepper input::-webkit-inner-spin-button { appearance: none; }
-
 .switch input { position: absolute; opacity: 0; pointer-events: none; }
 
 .switch span { width: 44px; height: 26px; border-radius: 999px; background: var(--fill-strong); display: block; position: relative; transition: background .18s; }
@@ -422,7 +410,13 @@ dialog.is-leaving { pointer-events: none; }
 .stepper { display: inline-flex; align-items: center; height: 36px; border-radius: 9px; background: var(--fill-strong); }
 .stepper button { width: 44px; height: 36px; display: grid; place-items: center; border: 0; background: none; color: var(--ink); }
 .stepper .icon { width: 16px; height: 16px; }
-.stepper input { width: 58px; border: 0; background: none; color: var(--ink); font: inherit; font-size: 16px; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; }
+/* `align-self: stretch` so the field is exactly the track, not taller than it.
+   An earlier rule gave it `min-height: 42px`, which the 36 px track could not
+   hold: it overflowed 3 px top and bottom, invisible only because the field
+   draws no background of its own. `min-width` stays pinned to 0 — a flex item
+   that is an `<input>` takes its intrinsic size as its minimum otherwise, and
+   that is the `size` attribute's twenty characters, not the 58 px asked for. */
+.stepper input { align-self: stretch; width: 58px; min-width: 0; border: 0; background: none; color: var(--ink); font: inherit; font-size: 16px; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; }
 
 /* The stage picker is a grid of the real tags, so the choice looks like the
    result. */

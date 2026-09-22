@@ -44,8 +44,20 @@
 
 .picker-trigger .picker-icon { width: 16px; height: 16px; color: var(--soft); flex: none; }
 
-/* An optional field with nothing in it says so, and says it quietly. */
-.picker-trigger:not([aria-pressed="true"]) .picker-text:empty::before { content: 'Not set'; color: var(--soft); }
+/*
+ * A field with nothing in it says so, and says it quietly.
+ *
+ * This was `.picker-text:empty::before`, which never fired: the reading is
+ * written into the span by `pickerField`, placeholder and all, so the span is
+ * never empty and every unset field drew its prompt at the same weight and
+ * colour as a real time. The state is marked on the field instead.
+ *
+ * `--ink-2`, not `--soft` or the `--faint` §2 gives placeholders: a picker's
+ * prompt sits on a `--fill-strong` chip rather than on the page, where those
+ * two come to 4.19:1 and 2.62:1 against it. The weight carries the difference
+ * and the colour stays readable.
+ */
+.picker-trigger.is-empty .picker-text { color: var(--ink-2); font-weight: 400; }
 
 /* ---- the picker sheet ---------------------------------------------------- */
 
