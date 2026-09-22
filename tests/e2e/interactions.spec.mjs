@@ -1392,6 +1392,35 @@ test('a sheet leaves on the same curve it arrived on', async ({ page, server }) 
   await expect(page.locator('#activity-dialog')).toHaveCount(0);
 });
 
+test('a sheet rises from the bottom edge instead of being scrolled into place', async ({ page, server }) => {
+  test.skip(!isPhoneLayout(page), 'the phone sheet rises; the desktop dialog centres');
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+  await signInAndWaitForPlan(page);
+
+  await page.locator('.card').first().click({ position: { x: 40, y: 10 } });
+  // Sampled every frame from before the sheet exists. Focusing the sheet on
+  // open scrolls whatever can be scrolled to bring it into view, and a dialog
+  // that scrolls cancels the rise it is animating: the sheet jumps into place
+  // and the transform plays out as the scroll unwinds.
+  await page.evaluate(() => {
+    window.__rise = [];
+    const tick = () => {
+      const dialog = document.querySelector('#activity-dialog');
+      if (dialog) window.__rise.push({ scroll: dialog.scrollTop, top: dialog.querySelector('.sheet').getBoundingClientRect().top });
+      if (window.__rise.length < 30) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  await page.locator('.toolbar [data-action="edit"]').click();
+  await sheetAtRest(page);
+  await page.waitForFunction(() => window.__rise.length >= 30);
+
+  const frames = await page.evaluate(() => window.__rise);
+  expect(Math.max(...frames.map(frame => frame.scroll))).toBe(0);
+  const rest = frames.at(-1).top;
+  expect(frames[0].top, 'the first frame is below where it comes to rest').toBeGreaterThan(rest + 100);
+});
+
 test('a resize lands where the release is, even if the last move never arrives', async ({ page, server }) => {
   test.skip(isPhoneLayout(page), 'a pointer drag of the bottom edge');
   await server.seed({ plan: seedPlan({ activities: [
