@@ -453,6 +453,98 @@ test('a keyboard that shrinks the layout viewport is not counted twice', async (
   await page.setViewportSize(size);
 });
 
+/**
+ * The editor sheet, scrolled out from under its own header by a stage chip.
+ *
+ * The sheet is `overflow: hidden`, which stops a *finger* scrolling it and
+ * stops nothing else: it is still a scroll container, and the browser scrolls
+ * one to reveal whatever has just taken focus. A hidden control positioned
+ * against the sheet rather than against its own row therefore drags the whole
+ * form up, taking Cancel and Done off the top with it — and leaving no gesture
+ * that can bring them back, because the one surface that could scroll is the
+ * one nobody can touch.
+ *
+ * Short on purpose. The sheet has to be shorter than the form for a hidden
+ * control to fall outside it, and the phone this suite emulates is tall enough
+ * that it never did — 412x915 gives this exactly zero overflow, so the whole
+ * class of defect was invisible here while it was plain on a real phone.
+ */
+async function shortPhone(page) {
+  const size = page.viewportSize();
+  await page.setViewportSize({ width: size.width, height: 700 });
+  return () => page.setViewportSize(size);
+}
+
+/** Every control the reader cannot see, and so cannot scroll back to. */
+const HIDDEN_CONTROLS = '.stage-choice input, .switch input';
+
+const sheetScroll = page => page.evaluate(() => {
+  const sheet = document.querySelector('.sheet');
+  const done = document.querySelector('.button--done').getBoundingClientRect();
+  const body = document.querySelector('.sheet-body').getBoundingClientRect();
+  const box = sheet.getBoundingClientRect();
+  return {
+    scrollTop: Math.round(sheet.scrollTop),
+    // What the sheet could be scrolled to, whoever does the scrolling.
+    overflow: sheet.scrollHeight - sheet.clientHeight,
+    doneVisible: done.top >= box.top - 1,
+    // The strip of bare surface a scrolled sheet leaves under its own body.
+    gapBelowBody: Math.round(box.bottom - body.bottom)
+  };
+});
+
+test('choosing a stage does not take Cancel and Done off the top', async ({ page, server }) => {
+  test.skip(!isPhoneLayout(page), 'the bottom sheet is the narrow layout');
+  const restore = await shortPhone(page);
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(17, 30), 85, { title: 'Dinner', location: 'Le Richmond · Griffintown' })] }) });
+  await signInAndWaitForPlan(page);
+  await page.locator('.card').first().click();
+  await page.locator('.toolbar [data-action="edit"]').click();
+  await expect(page.locator('#activity-dialog')).toBeVisible();
+  await sheetAtRest(page);
+
+  // The last chip in the grid: the one furthest from the top of the form, and
+  // so the one whose hidden radio falls furthest outside a short sheet.
+  const last = page.locator('.stage-choice').last();
+  const value = await last.locator('input').inputValue();
+  await last.scrollIntoViewIfNeeded();
+  await page.tap(`.stage-choice:has(input[value="${value}"])`);
+  await expect(page.locator(`#activity-form input[name="stage"][value="${value}"]`)).toBeChecked();
+
+  expect(await sheetScroll(page)).toMatchObject({ scrollTop: 0, doneVisible: true, gapBelowBody: 0 });
+  await restore();
+});
+
+/**
+ * And the rule behind it, which is cheaper to hold than to rediscover: the
+ * sheet has no scroll of its own for anything to be trapped in. Asserted
+ * against every hidden control rather than the stage grid alone — the Lock
+ * switch had the same defect and only escaped it by sitting high enough in the
+ * form to stay inside a short sheet, which is luck, not design.
+ */
+test('the sheet has no scroll of its own, whatever takes focus', async ({ page, server }) => {
+  test.skip(!isPhoneLayout(page), 'the bottom sheet is the narrow layout');
+  const restore = await shortPhone(page);
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(17, 30), 85, { title: 'Dinner', location: 'Le Richmond · Griffintown' })] }) });
+  await signInAndWaitForPlan(page);
+  await page.locator('.card').first().click();
+  await page.locator('.toolbar [data-action="edit"]').click();
+  await expect(page.locator('#activity-dialog')).toBeVisible();
+  await sheetAtRest(page);
+
+  expect(await sheetScroll(page)).toMatchObject({ overflow: 0 });
+
+  const count = await page.locator(HIDDEN_CONTROLS).count();
+  expect(count).toBeGreaterThan(1);
+  for (let index = 0; index < count; index++) {
+    const name = await page.locator(HIDDEN_CONTROLS).nth(index).evaluate(node => `${node.name}:${node.value}`);
+    await page.locator(HIDDEN_CONTROLS).nth(index).evaluate(node => node.focus());
+    expect(await sheetScroll(page), `focusing ${name} scrolled the sheet`)
+      .toMatchObject({ scrollTop: 0, doneVisible: true });
+  }
+  await restore();
+});
+
 test('a fast load shows nothing at all, and a slow one shows a skeleton', async ({ page, server }) => {
   await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
 
