@@ -163,6 +163,12 @@ spec doc and the implementation disagree, fix the doc, not the tests.**
 - **`iphone-13` / `pixel-7`** run specs that are genuinely
   viewport/touch-dependent: responsive layout, day-of mode, touch gestures,
   phone-only UI variants.
+- **Both phone projects are tall** (915 px and 844 px). A defect that only
+  shows when the sheet is shorter than the form it holds is invisible at those
+  heights and plain on a real phone with browser chrome showing — that is how
+  the stage-chip sheet scroll shipped four times. A test for one shrinks the
+  viewport height itself (`interactions.spec.mjs`'s `shortPhone`) rather than
+  trusting the project's default.
 - **WebKit** is installed for real in CI (`playwright install --with-deps
   chromium webkit`) — the config's fallback to Chromium-with-device-emulation
   only applies to local sandboxes that can't download WebKit. Don't assume
