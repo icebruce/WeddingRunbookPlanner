@@ -12,6 +12,13 @@
  * A picker field is a value you press, not a box you type in. It was a text
  * input with a `readonly` attribute, which reads as a disabled field to
  * everyone and to every screen reader — the one thing it is not.
+ *
+ * Its fill is `--fill-strong`, not `--fill`. Every picker in the app sits in a
+ * grouped block, and `--fill` on `--surface-2` is a lightness difference of
+ * under one L* step: on a phone, where there is no hover to reveal it, the
+ * value looked like the calculated `Ends` reading beside it rather than
+ * something you could press. `--fill-strong` is what the stepper in the same
+ * block already uses, so the two controls in the Timing group now read alike.
  */
 .picker-field { display: inline-flex; }
 
@@ -23,7 +30,7 @@
   padding: 6px 10px;
   border: 0;
   border-radius: 9px;
-  background: var(--fill);
+  background: var(--fill-strong);
   color: var(--ink);
   font: inherit;
   font-size: 15px;
@@ -33,12 +40,24 @@
   cursor: pointer;
 }
 
-.picker-trigger:hover { background: var(--fill-strong); }
+.picker-trigger:hover { background: color-mix(in srgb, var(--ink) 6%, var(--fill-strong)); }
 
 .picker-trigger .picker-icon { width: 16px; height: 16px; color: var(--soft); flex: none; }
 
-/* An optional field with nothing in it says so, and says it quietly. */
-.picker-trigger:not([aria-pressed="true"]) .picker-text:empty::before { content: 'Not set'; color: var(--soft); }
+/*
+ * A field with nothing in it says so, and says it quietly.
+ *
+ * This was `.picker-text:empty::before`, which never fired: the reading is
+ * written into the span by `pickerField`, placeholder and all, so the span is
+ * never empty and every unset field drew its prompt at the same weight and
+ * colour as a real time. The state is marked on the field instead.
+ *
+ * `--ink-2`, not `--soft` or the `--faint` §2 gives placeholders: a picker's
+ * prompt sits on a `--fill-strong` chip rather than on the page, where those
+ * two come to 4.19:1 and 2.62:1 against it. The weight carries the difference
+ * and the colour stays readable.
+ */
+.picker-trigger.is-empty .picker-text { color: var(--ink-2); font-weight: 400; }
 
 /* ---- the picker sheet ---------------------------------------------------- */
 
