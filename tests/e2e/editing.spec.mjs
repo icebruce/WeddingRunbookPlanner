@@ -68,7 +68,7 @@ test('the timing block works out the end as you change the duration', async ({ p
   await expect(editor(page).locator('[data-ends]')).toHaveText('12:40 PM');
 });
 
-test('duration shows the hours-and-minutes reading beside the minute count', async ({ page, server }) => {
+test('duration shows the hours-and-minutes reading under the label', async ({ page, server }) => {
   await server.seed({ plan: base() });
   await signInAndWaitForPlan(page);
   await openActivityEditor(page, card(page, 'cocktail'));
@@ -77,6 +77,41 @@ test('duration shows the hours-and-minutes reading beside the minute count', asy
   await editor(page).locator('input[name="duration"]').fill('80');
   await editor(page).locator('input[name="duration"]').dispatchEvent('input');
   await expect(editor(page).locator('[data-duration-human]')).toHaveText('1 hr 20 min');
+});
+
+/**
+ * The reading used to share the Duration row, which made the row as wide as
+ * its own text: a `<fieldset>` will not shrink below its widest row, so the
+ * timing block grew past the sheet on a narrow phone and carried the Starts
+ * chip and Ends out to the right with it, by a different amount for every
+ * duration.
+ */
+test('the timing block keeps the same geometry whatever the duration reads', async ({ page, server }) => {
+  await page.setViewportSize({ width: 360, height: 700 });
+  await server.seed({ plan: base() });
+  await signInAndWaitForPlan(page);
+  await openActivityEditor(page, card(page, 'cocktail'));
+
+  const geometry = () => editor(page).evaluate(dialog => {
+    const right = selector => Math.round(dialog.querySelector(selector).getBoundingClientRect().right);
+    const body = dialog.querySelector('.sheet-body');
+    return {
+      overflow: body.scrollWidth - body.clientWidth,
+      timing: right('.timing'),
+      stepper: right('.stepper'),
+      start: right('[data-target="start"]')
+    };
+  });
+
+  const field = editor(page).locator('input[name="duration"]');
+  const first = await geometry();
+  expect(first.overflow).toBe(0);
+
+  for (const minutes of ['30', '130', '765']) {
+    await field.fill(minutes);
+    await field.dispatchEvent('input');
+    expect(await geometry()).toEqual(first);
+  }
 });
 
 test('the editor opens on the start an activity already has, and a new one can be set', async ({ page, server }) => {
