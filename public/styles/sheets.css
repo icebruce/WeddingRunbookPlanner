@@ -32,6 +32,15 @@
    for engines without `clip`. */
 .sheet-dialog { width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; overflow: hidden; overflow: clip; }
 
+/* The UA stylesheet gives every `<dialog>` `color: CanvasText`, which cuts the
+   inheritance from `body` — so anything inside one that takes its colour by
+   inheritance was drawing in pure black or pure white rather than `--ink`. The
+   dialogs join the token chain here, once, rather than every heading and quiet
+   button inside them naming `--ink` for itself. */
+.sheet-dialog,
+.action-sheet-dialog,
+.alert-dialog { color: var(--ink); }
+
 /*
  * Every dialog arrives and leaves the same way.
  *
