@@ -442,3 +442,68 @@ test('D34: the plan clears the strip', async ({ page, server }) => {
   });
   expect(gap).toBeGreaterThanOrEqual(8);
 });
+
+/**
+ * A sticky element rests at its natural position until it sticks, and its
+ * natural position is the bar's true height. Rounding the offset the strip
+ * sticks to therefore buys a jump on the first scroll — reported as the strip
+ * moving slightly the first time the page is touched, and only then.
+ */
+test('the strip does not move when it starts sticking', async ({ page, server }) => {
+  await openAt(page, server, at(13, 0));
+  await expect(strip(page)).toBeVisible();
+
+  // The bar is a whole number of pixels on most screens, which hides the bug
+  // entirely; a fractional one is what a notch, a font scale or a non-integer
+  // device pixel ratio produces on a real phone.
+  await page.addStyleTag({ content: '.topbar { padding-top: 4.4px; }' });
+  // The bar is measured on a paint and on a resize, so the change has to be
+  // followed by one; polled rather than read once, because the measurement
+  // lands a frame or two later.
+  await page.setViewportSize({ ...page.viewportSize(), height: page.viewportSize().height - 1 });
+  await expect.poll(() => page.evaluate(() => {
+    const bar = document.querySelector('.topbar').getBoundingClientRect().height;
+    const stuck = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--topbar-height'));
+    return Math.abs(bar - stuck);
+  }), { timeout: 2000 }).toBeLessThan(0.05);
+
+  const top = () => page.locator('.live-strip').evaluate(node => node.getBoundingClientRect().top);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const atRest = await top();
+
+  await page.evaluate(() => window.scrollTo(0, 200));
+  expect(await top()).toBeCloseTo(atRest, 1);
+});
+
+/** The band's own gutter, which a safe-area rule used to override unevenly. */
+test('the panel sits in the middle of the band', async ({ page, server }) => {
+  await openAt(page, server, at(13, 0));
+  await expect(strip(page)).toBeVisible();
+
+  const { left, right } = await page.evaluate(() => {
+    const band = document.querySelector('.live-strip').getBoundingClientRect();
+    const panel = document.querySelector('.live-panel').getBoundingClientRect();
+    return { left: panel.left - band.left, right: band.right - panel.right };
+  });
+  expect(left).toBeCloseTo(right, 1);
+});
+
+/**
+ * The shadow has to land on the band. Past its edge it falls on the plan
+ * scrolling underneath, where it reads as a smear travelling with the strip.
+ */
+test('the panel shadow stays inside the band', async ({ page, server }) => {
+  await openAt(page, server, at(13, 0));
+  await expect(strip(page)).toBeVisible();
+
+  const { reach, padding } = await page.evaluate(() => {
+    const panel = document.querySelector('.live-panel');
+    const [, x, y, blur] = getComputedStyle(panel).boxShadow.match(/(-?[\d.]+)px (-?[\d.]+)px ([\d.]+)px/);
+    void x;
+    const band = getComputedStyle(document.querySelector('.live-strip'));
+    // A shadow fades over its blur radius, centred on the edge: half of it
+    // falls outside the box.
+    return { reach: Number(y) + Number(blur) / 2, padding: parseFloat(band.paddingBottom) };
+  });
+  expect(reach).toBeLessThanOrEqual(padding);
+});

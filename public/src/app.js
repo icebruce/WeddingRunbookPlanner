@@ -13,7 +13,7 @@ import './actions.js';
 import { api } from './api.js';
 import { STAGES, deviceId } from './config.js';
 import { readDeviceBase, readDeviceCopy, writeDeviceBase, writeDeviceCopy } from './device.js';
-import { cssEscape, escapeHtml, focusByKey, paint, uid, watchCollapsedTitle } from './dom.js';
+import { cssEscape, escapeHtml, focusByKey, measureTopbarHeight, paint, uid, watchCollapsedTitle } from './dom.js';
 import { AUTO_VIEW_ONLY_MS, createClock, isViewOnly, minutesNow, readOverride, shouldBeOn, stripState, writeOverride } from './dayof.js';
 import { createGestures } from './gestures.js';
 import { bump } from './haptics.js';
@@ -445,23 +445,7 @@ function measureStickyInset() {
   }
   document.documentElement.style.setProperty('--sticky-inset', `${Math.round(total)}px`);
 
-  // The bar's real height, for the bars that stick to its underside. The token
-  // is a design floor (52 px, 62 px on a desktop) and the bar is often taller
-  // than it — a notch's safe-area inset is part of its padding — which left the
-  // live strip and the pinned bars sticking somewhere inside it. They can only
-  // be right if the number they use is measured.
-  //
-  // Floored rather than rounded. The bar is often a fractional number of
-  // pixels — a safe-area inset, browser zoom, a non-integer device pixel ratio
-  // — and rounding up parks the strip a fraction of a pixel below the bar,
-  // leaving a seam the plan scrolls through and making the bar's own hairline
-  // look doubled. Flooring tucks the strip that fraction *under* the bar
-  // instead, where nothing can see it: it sits below the bar in the stack.
-  const topbar = app.querySelector('.topbar');
-  if (topbar) {
-    document.documentElement.style.setProperty(
-      '--topbar-height', `${Math.floor(topbar.getBoundingClientRect().height)}px`);
-  }
+  measureTopbarHeight(app);
 }
 
 /**
