@@ -790,9 +790,11 @@ dialog.is-leaving { pointer-events: none; }
  * the day, and says what it does rather than only what it is called. It was a
  * bare checkbox at the very bottom of the sheet, after Notes.
  */
-.lock-row .lock-label { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.lock-row .lock-label { min-width: 0; }
 
-.lock-row .lock-label > .icon { width: 18px; height: 18px; color: var(--soft); flex: none; }
+.lock-row .lock-title { display: flex; align-items: center; gap: 6px; }
+
+.lock-row .lock-label .icon { width: 18px; height: 18px; color: var(--soft); flex: none; }
 
 .lock-row .lock-label small { display: block; color: var(--soft); font-size: 13px; }
 

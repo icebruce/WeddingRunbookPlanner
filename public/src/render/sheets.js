@@ -113,7 +113,7 @@ function timingBlock(item, plan, start) {
     </div>
 
     <label class="group-row lock-row">
-      <span class="lock-label">${icon('lock')}<span>Lock<small>Stays put in a group move</small></span></span>
+      <span class="lock-label"><span class="lock-title">Lock${icon('lock')}</span><small>Stays put in a group move</small></span>
       <span class="switch"><input name="locked" type="checkbox" ${item.locked ? 'checked' : ''}><span></span></span>
     </label>
   </fieldset>`;
