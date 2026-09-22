@@ -1,5 +1,5 @@
 import { test, expect, activity, seedPlan } from './fixtures.mjs';
-import { isPhoneLayout, signInAndWaitForPlan } from './helpers.mjs';
+import { isPhoneLayout, setPicker, signInAndWaitForPlan } from './helpers.mjs';
 
 /**
  * The clock is frozen before the page loads, so every one of these is a fixed
@@ -349,6 +349,29 @@ test('it can be switched off on the day, and stays off', async ({ page, server }
   await page.reload();
   await expect(strip(page)).toHaveCount(0);
   await expect(page.locator('.save-indicator'), 'and the planning controls are back').toBeVisible();
+});
+
+test('plan settings is not offered in view only, and a date changed after Edit is saved', async ({ page, server }) => {
+  // Its Done used to close the sheet and drop the change in view only: commit
+  // refuses there, and nothing said so.
+  await openAt(page, server, at(13, 0, 15));
+  await page.locator('[data-action="menu"][data-menu="app"]').click();
+  await page.locator('[data-menu-action="day-of"]').click();
+  await expect(page.locator('.mode-pill--view')).toBeVisible();
+
+  await page.locator('[data-action="menu"][data-menu="app"]').click();
+  await expect(page.locator('[data-menu-action="day-of"]')).toBeVisible();
+  await expect(page.locator('[data-menu-action="settings"]')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  await page.locator('[data-action="day-of-edit"]').first().click();
+  await page.locator('[data-action="menu"][data-menu="app"]').click();
+  await page.locator('[data-menu-action="settings"]').click();
+  await setPicker(page, 'date', '2026-11-28');
+  await page.locator('#settings-form button[type="submit"]').click();
+
+  await expect(page.locator('.save-indicator')).toHaveText('Saved');
+  expect((await server.read()).plan.date).toBe('2026-11-28');
 });
 
 test('reduced motion stops the pulse', async ({ page, server }) => {

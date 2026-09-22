@@ -329,6 +329,7 @@ The live strip (§6) appears on the shared page **by date only**, read on the ve
 
 ### 5.21 Menu (phone and desktop)
 Day-of view (switch) · Dark appearance (switch) · Share read-only link · Print or save PDF · Export backup · Version history · Plan settings · Sign out.
+While day-of view is view only (§6.2), Plan settings is hidden until **Edit**.
 
 ### 5.22 Dark appearance
 Manual switch in the menu and in Plan settings. Light is the default; the app does **not** follow the system setting. The choice is remembered on the device.
