@@ -494,96 +494,97 @@ function watchChipOverflow() {
 /**
  * The on-screen keyboard.
  *
- * It does not move the layout viewport on iOS, so a sheet anchored to the
- * bottom of the page is anchored behind the keyboard, and the field being
- * typed into can sit under it with no way back but a manual scroll. The
- * visual viewport is the only thing that knows the keyboard is there.
+ * A sheet is pinned to the bottom of the layout viewport, and the keyboard
+ * does not always move that viewport: on iOS it never does, and on Android it
+ * depends on the browser. Where it does not, the bottom of the sheet — and
+ * the field being typed into — is anchored behind the keyboard with no way
+ * back but a manual scroll. `--keyboard-inset` lifts the sheet clear of it.
  *
- * How much of the screen it covers is measured against the viewport's own
- * resting height, learned by watching, rather than against `innerHeight`.
- * Those two are not the same box on every engine: WebKit reports them against
- * different things, and `visualViewport.height` is not meaningful at all until
- * the page has laid out. Subtracting one from the other gave a resting inset
- * of nearly the whole screen on iOS, which took `max-height` below zero and
- * collapsed the editor sheet to nothing — the pull gesture then dismissed on
- * any movement, because every distance is past 40 % of no height.
+ * It is measured, not inferred. The layout viewport is the box a fixed sheet
+ * is pinned to, and `document.documentElement.clientHeight` is that box on
+ * every engine — unlike `innerHeight`, which WebKit reports against a
+ * different one. The visual viewport is what is actually on screen, and
+ * `height + offsetTop` is where its bottom edge falls inside the layout
+ * viewport. The difference between the two is exactly how much of a
+ * bottom-pinned sheet is hidden, which is the number wanted, and it is
+ * correct without knowing which of the two behaviours the browser has: where
+ * the keyboard shrinks the layout viewport as well, both edges move together
+ * and the answer is zero, which is right, because the sheet is already above
+ * the keyboard.
  *
- * Against its own resting height the answer is exactly zero when there is no
- * keyboard, whatever the engine thinks `innerHeight` means.
- *
- * Two things other than a keyboard shrink that measurement, and both used to
- * be read as one.
- *
- * A pinch or a double-tap zoom shrinks `visualViewport.height` exactly as a
- * keyboard does — at scale 2.2 this measured a 180 px keyboard that was not
- * there and cut the editor sheet from 607 px to 427 — so a zoomed reading is
- * not a reading at all and is dropped.
- *
- * And the resting height itself was only ever allowed to grow, so one tall
- * measurement — a browser toolbar auto-hiding, a zoom out — biased every
- * reading after it and left the sheet sitting above a keyboard-shaped gap for
- * the rest of the session. Nothing but a text field opens a keyboard, so when
- * none has focus there is no keyboard: whatever the viewport measures then is
- * the resting height, and the inset is zero. That is self-correcting, and it
- * is also what makes a tap on a stage chip put a shortened sheet back — the
- * radio takes focus, the inset clears with it.
+ * This replaced a resting height learned by watching. That carried state
+ * between readings, so a single bad measurement biased every one after it —
+ * and the correction for that was worse than the fault. It cleared the inset
+ * the moment focus left a text field, on the reasoning that nothing but a
+ * text field opens a keyboard. True, but a keyboard outlives the focus that
+ * opened it by the length of its own dismissal: tapping a stage chip with the
+ * keyboard up cleared the inset on `focusin`, which grew the sheet by three
+ * hundred pixels *during the tap*. The chip moved out from under the finger
+ * before the click landed, so the stage was never chosen, and the sheet was
+ * left at full height with its lower half behind a keyboard that was still on
+ * screen. Nothing is held between readings here, and nothing but the viewport
+ * is read, so the sheet changes size when the keyboard actually moves and not
+ * a moment before.
  */
-/** What a keyboard opens for. Everything else takes focus without one. */
-const KEYBOARDLESS_INPUT = new Set([
-  'button', 'checkbox', 'color', 'file', 'hidden', 'image', 'radio', 'range', 'reset', 'submit'
-]);
-
-function opensKeyboard(node) {
-  if (!node || node.disabled || node.readOnly) return false;
-  if (node.isContentEditable) return true;
-  if (node.tagName === 'TEXTAREA') return true;
-  return node.tagName === 'INPUT' && !KEYBOARDLESS_INPUT.has(node.type);
-}
+/* Rounding, a horizontal scrollbar and sub-pixel device ratios all leave a
+   few pixels between the two boxes with no keyboard anywhere. A keyboard is
+   never this short, so anything under it is noise. */
+const KEYBOARD_FLOOR = 48;
 
 function trackKeyboardInset() {
   const viewport = window.visualViewport;
   if (!viewport) return;
 
-  let restingExtent = 0;
-
   const update = () => {
-    // Zoomed in or out, the visual viewport is not measuring the keyboard.
-    if (Math.abs(viewport.scale - 1) > 0.01) return;
-
-    const extent = viewport.height + viewport.offsetTop;
-    // Nothing useful to read yet. Writing a number now is how the sheet ends
-    // up with no height at all.
-    if (!(extent > 0)) return;
-
-    const focused = document.activeElement;
-    if (!opensKeyboard(focused)) {
-      restingExtent = extent;
+    // A pinch or a double-tap zoom shrinks the visual viewport exactly as a
+    // keyboard does — at scale 2.2 this read as a 180 px keyboard that was not
+    // there and cut the editor sheet from 607 px to 427. A zoomed reading is
+    // not a reading; the sheet keeps its whole height until the zoom is over.
+    if (Math.abs(viewport.scale - 1) > 0.01) {
       document.documentElement.style.setProperty('--keyboard-inset', '0px');
       return;
     }
 
-    restingExtent = Math.max(restingExtent, extent);
-    const inset = Math.round(Math.max(0, restingExtent - extent));
+    const layout = document.documentElement.clientHeight;
+    const extent = viewport.height + viewport.offsetTop;
+    // Nothing useful to read yet. Writing a number now is how the sheet ends
+    // up with no height at all.
+    if (!(layout > 0 && extent > 0)) return;
+
+    const covered = Math.round(layout - extent);
+    const inset = covered >= KEYBOARD_FLOOR ? covered : 0;
     document.documentElement.style.setProperty('--keyboard-inset', `${inset}px`);
 
     // The sheet has just been resized under the field; put it back in view.
-    if (inset > 0 && focused?.closest?.('.sheet-body')) {
-      focused.scrollIntoView({ block: 'nearest' });
-    }
+    const focused = document.activeElement;
+    const body = inset > 0 ? focused?.closest?.('.sheet-body') : null;
+    if (body) keepInView(body, focused);
   };
 
   viewport.addEventListener('resize', update);
   viewport.addEventListener('scroll', update);
-  // Focus is the other half of the measurement, so it is read when focus
-  // moves and not only when the viewport does — a keyboard dismissed by a tap
-  // elsewhere does not always resize anything.
-  document.addEventListener('focusin', update);
-  document.addEventListener('focusout', () => setTimeout(update, 0));
-  window.addEventListener('resize', () => {
-    restingExtent = 0;
-    update();
-  });
+  window.addEventListener('resize', update);
   update();
+}
+
+/**
+ * Scroll a sheet's body by the least it takes to show one of its rows.
+ *
+ * Deliberately not `scrollIntoView`. That walks every scrollable ancestor,
+ * and a `<dialog>` is one — the UA stylesheet gives it `overflow: auto` — so
+ * it scrolled the sheet body by half a screen *and* shifted the dialog
+ * underneath it, which is what made the editor feel like it had seized. Here
+ * nothing moves unless the row is genuinely outside the body, and then only
+ * the body moves, by the least it can.
+ */
+function keepInView(body, node) {
+  const view = body.getBoundingClientRect();
+  const box = node.getBoundingClientRect();
+  const MARGIN = 12;
+  const below = box.bottom - (view.bottom - MARGIN);
+  const above = (view.top + MARGIN) - box.top;
+  const delta = below > 0 ? below : above > 0 ? -above : 0;
+  if (delta) body.scrollBy({ top: delta, behavior: 'smooth' });
 }
 
 /**
@@ -928,25 +929,10 @@ function bindSheet(dialog) {
   // keyboard automatically. Without this the row a phone just interacted
   // with can sit under the keyboard, or off the bottom of a short sheet,
   // with no way back to it but a manual scroll.
-  //
-  // This is deliberately not `scrollIntoView`. That walks every scrollable
-  // ancestor, and a `<dialog>` is one — the UA stylesheet gives it
-  // `overflow: auto` — so tapping a stage chip scrolled the sheet body by
-  // half a screen *and* shifted the dialog underneath it, which is what made
-  // the editor feel like it had seized. Here nothing moves unless the row is
-  // genuinely outside the body, and then only the body moves, by the least
-  // it can.
   const sheetBody = dialog.querySelector('.sheet-body');
   sheetBody?.addEventListener('focusin', event => {
     const row = event.target.closest('.field, .group-row, .stage-choice');
-    if (!row) return;
-    const view = sheetBody.getBoundingClientRect();
-    const box = row.getBoundingClientRect();
-    const MARGIN = 12;
-    const below = box.bottom - (view.bottom - MARGIN);
-    const above = (view.top + MARGIN) - box.top;
-    const delta = below > 0 ? below : above > 0 ? -above : 0;
-    if (delta) sheetBody.scrollBy({ top: delta, behavior: 'smooth' });
+    if (row) keepInView(sheetBody, row);
   });
 
   if (dialog.id === 'activity-dialog') {
