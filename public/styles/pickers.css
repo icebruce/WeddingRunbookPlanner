@@ -12,6 +12,13 @@
  * A picker field is a value you press, not a box you type in. It was a text
  * input with a `readonly` attribute, which reads as a disabled field to
  * everyone and to every screen reader — the one thing it is not.
+ *
+ * Its fill is `--fill-strong`, not `--fill`. Every picker in the app sits in a
+ * grouped block, and `--fill` on `--surface-2` is a lightness difference of
+ * under one L* step: on a phone, where there is no hover to reveal it, the
+ * value looked like the calculated `Ends` reading beside it rather than
+ * something you could press. `--fill-strong` is what the stepper in the same
+ * block already uses, so the two controls in the Timing group now read alike.
  */
 .picker-field { display: inline-flex; }
 
@@ -23,7 +30,7 @@
   padding: 6px 10px;
   border: 0;
   border-radius: 9px;
-  background: var(--fill);
+  background: var(--fill-strong);
   color: var(--ink);
   font: inherit;
   font-size: 15px;
@@ -33,7 +40,7 @@
   cursor: pointer;
 }
 
-.picker-trigger:hover { background: var(--fill-strong); }
+.picker-trigger:hover { background: color-mix(in srgb, var(--ink) 6%, var(--fill-strong)); }
 
 .picker-trigger .picker-icon { width: 16px; height: 16px; color: var(--soft); flex: none; }
 
