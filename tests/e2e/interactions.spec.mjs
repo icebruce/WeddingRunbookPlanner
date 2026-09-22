@@ -368,12 +368,17 @@ test('zooming in is not read as a keyboard', async ({ page, server, browserName 
 });
 
 /**
- * And whatever put a phantom inset there — a browser bar that hid and came
- * back, a zoom on an engine that reports it differently — the next thing to
- * take focus that is not a text field says there is no keyboard, because
- * nothing else opens one. Tapping a stage chip put the sheet back.
+ * The bug this exists for.
+ *
+ * The inset used to be cleared the moment focus left a text field, on the
+ * reasoning that nothing but a text field opens a keyboard. A keyboard
+ * outlives that focus by the length of its own dismissal, so tapping a stage
+ * chip with the keyboard up grew the sheet by three hundred pixels *during
+ * the tap*: the chip moved out from under the finger before the click landed,
+ * the stage was never chosen, and the sheet was left at full height with its
+ * lower half behind a keyboard still on screen, unreachable and unscrollable.
  */
-test('a sheet shortened for a keyboard that is not there comes back', async ({ page, server }) => {
+test('a stage chip can be tapped with the keyboard up', async ({ page, server }) => {
   test.skip(!isPhoneLayout(page), 'the bottom sheet is the narrow layout');
   await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
   await signInAndWaitForPlan(page);
@@ -382,17 +387,70 @@ test('a sheet shortened for a keyboard that is not there comes back', async ({ p
   await expect(page.locator('#activity-dialog')).toBeVisible();
   await sheetAtRest(page);
 
-  const height = () => page.locator('.sheet').evaluate(n => Math.round(n.getBoundingClientRect().height));
-  const whole = await height();
+  // The keyboard, raised the only way a test can: the field focused the way a
+  // tap focuses it, and the visual viewport shrunk the way the browser
+  // answers. It stays shrunk across the tap, because a real one does.
+  await page.locator('#activity-form textarea[name="notes"]').focus();
+  await page.evaluate(() => {
+    const vv = window.visualViewport;
+    Object.defineProperty(vv, 'height', { configurable: true, get: () => window.innerHeight - 340 });
+    vv.dispatchEvent(new Event('resize'));
+  });
+  await page.waitForTimeout(150);
 
-  await page.evaluate(() => document.documentElement.style.setProperty('--keyboard-inset', '292px'));
-  expect(await height()).toBeLessThan(whole);
-
-  await page.locator('.stage-choice:has(input[value="ceremony"])').click();
-  await expect(page.locator('#activity-form input[name="stage"][value="ceremony"], #activity-form input[value="ceremony"]')).toBeChecked();
+  const lifted = await page.locator('.sheet').evaluate(n => Math.round(n.getBoundingClientRect().height));
   expect(await page.evaluate(() =>
-    Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--keyboard-inset')))).toBe(0);
-  expect(await height()).toBe(whole);
+    Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--keyboard-inset')))).toBe(340);
+
+  await page.tap('.stage-choice:has(input[value="ceremony"])');
+  await expect(page.locator('#activity-form input[name="stage"][value="ceremony"]')).toBeChecked();
+
+  // And the sheet did not move under the finger to do it: the keyboard is
+  // still there, so the sheet is still above it.
+  expect(await page.evaluate(() =>
+    Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--keyboard-inset')))).toBe(340);
+  expect(await page.locator('.sheet').evaluate(n => Math.round(n.getBoundingClientRect().height))).toBe(lifted);
+});
+
+/**
+ * Some browsers answer the keyboard by shrinking the layout viewport itself,
+ * which already lifts a bottom-pinned sheet clear of it. Lifting it a second
+ * time would put the sheet a keyboard's height above the keyboard, with the
+ * rest of the form behind an edge that no longer scrolls. Measured against
+ * the layout viewport rather than a learned resting height, the answer there
+ * is zero without having to know which behaviour the browser has.
+ */
+test('a keyboard that shrinks the layout viewport is not counted twice', async ({ page, server }) => {
+  test.skip(!isPhoneLayout(page), 'the bottom sheet is the narrow layout');
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+  await signInAndWaitForPlan(page);
+  await page.locator('.card').first().click();
+  await page.locator('.toolbar [data-action="edit"]').click();
+  await expect(page.locator('#activity-dialog')).toBeVisible();
+  await sheetAtRest(page);
+
+  await page.locator('#activity-form textarea[name="notes"]').focus();
+  // Shrinking the window is what that behaviour is: the layout viewport, the
+  // visual viewport and `dvh` all move together, and `window.resize` fires.
+  // Done this way rather than through CDP's device metrics, which only
+  // Chromium has — on WebKit that threw, and the projects that fall back to
+  // Chromium hid it.
+  const size = page.viewportSize();
+  await page.setViewportSize({ width: size.width, height: size.height - 320 });
+  await page.waitForTimeout(200);
+
+  const after = await page.evaluate(() => ({
+    inset: Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--keyboard-inset')),
+    bottom: Math.round(document.querySelector('.sheet').getBoundingClientRect().bottom),
+    viewport: document.documentElement.clientHeight
+  }));
+  expect(after.inset).toBe(0);
+  // The sheet still reaches the bottom of what is left of the screen. Within
+  // a pixel of it: the dialog's box is a fraction on a non-integer device
+  // ratio, and the contract is that nothing is lifted, not the rounding.
+  expect(Math.abs(after.bottom - after.viewport)).toBeLessThanOrEqual(1);
+
+  await page.setViewportSize(size);
 });
 
 test('a fast load shows nothing at all, and a slow one shows a skeleton', async ({ page, server }) => {
