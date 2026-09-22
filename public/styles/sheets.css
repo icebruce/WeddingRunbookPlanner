@@ -171,7 +171,14 @@ dialog.is-leaving { pointer-events: none; }
   background: var(--fill-strong);
 }
 
-.sheet-body { overflow-y: auto; overscroll-behavior: contain; padding: 20px 16px 26px; }
+/* `manipulation` is the sheet's controls saying they are controls: it takes
+   away double-tap-to-zoom and leaves panning and pinch alone. A sheet is a
+   grid of small targets — eight stage chips, a stepper, the people chips —
+   and two taps in a row on them is how you choose a stage, not how you ask to
+   zoom. A zoom shrinks the visual viewport, which app.js has to tell from a
+   keyboard, and the reader is left holding a zoomed page they did not ask
+   for. Pinch still works, so nothing is taken from anyone who wants it. */
+.sheet-body { overflow-y: auto; overscroll-behavior: contain; touch-action: manipulation; padding: 20px 16px 26px; }
 
 .form-stack { display: flex; flex-direction: column; gap: 16px; }
 
@@ -409,7 +416,12 @@ dialog.is-leaving { pointer-events: none; }
  * timing block uses them so "Starts", "Duration" and "Ends" read as one
  * answer to one question rather than three unrelated fields.
  */
-.field-group { margin: 0; padding: 0; border: 0; }
+/* `min-width` is load-bearing. A `<fieldset>` carries `min-inline-size:
+   min-content` from the UA stylesheet, so it will not shrink below its widest
+   row: on a 360 px phone the timing block grew past the sheet's own width and
+   carried every right-aligned value in it — the Starts chip, Ends — out to the
+   right with it, by an amount that changed with the text in the row. */
+.field-group { min-width: 0; margin: 0; padding: 0; border: 0; }
 .field-group .field-label { margin-bottom: 8px; }
 .timing { border-radius: var(--radius); background: var(--surface-2); overflow: hidden; }
 .group-row {
@@ -424,12 +436,16 @@ dialog.is-leaving { pointer-events: none; }
 .group-row + .group-row { border-top: .5px solid var(--hair); }
 .group-row.is-hidden { display: none; }
 .group-value, .group-note { color: var(--soft); font-variant-numeric: tabular-nums; }
-/* "1 hr 15 min" broke over two lines beside the stepper and dragged the row
-   taller than the two around it. It is a reading, not a paragraph. */
-.group-note { font-size: 15px; white-space: nowrap; }
+/* The duration reading, under its label rather than beside the stepper — the
+   Lock row's own two-line label one row down. Beside the stepper it was as
+   wide as its own text ("2 hr 10 min" is 30 px wider than "30 min"), which
+   moved the +/− buttons under the finger between taps and, through the
+   fieldset's min-content floor above, the whole block with them. */
+.duration-label { min-width: 0; }
+.group-note { display: block; font-size: 13px; }
 .group-row input[type="time"] { border: 0; background: none; color: var(--ink); font: inherit; text-align: right; font-variant-numeric: tabular-nums; }
 
-.stepper { display: inline-flex; align-items: center; height: 36px; border-radius: 9px; background: var(--fill-strong); }
+.stepper { flex: none; display: inline-flex; align-items: center; height: 36px; border-radius: 9px; background: var(--fill-strong); }
 .stepper button { width: 44px; height: 36px; display: grid; place-items: center; border: 0; background: none; color: var(--ink); }
 .stepper .icon { width: 16px; height: 16px; }
 /* `align-self: stretch` so the field is exactly the track, not taller than it.

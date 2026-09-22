@@ -74,9 +74,11 @@ function stageGrid(current) {
  * activity in a wedding plan starts either on the plan's own date or in the
  * small hours after it, and which of the two is worked out from the clock
  * rather than asked (FUNCTIONAL_SPEC §5.2). Duration is entered in minutes —
- * the grid this app schedules on — with the hours-and-minutes reading beside
- * it, because "80 min" and "1 hr 20 min" are the same number and only one of
- * them is easy to picture.
+ * the grid this app schedules on — with the hours-and-minutes reading under
+ * the label, because "80 min" and "1 hr 20 min" are the same number and only
+ * one of them is easy to picture. Under the label rather than beside the
+ * stepper: a reading that shares the row is as wide as its own text, and the
+ * row grew and shrank with it.
  *
  * Lock sits here, with the other two things that decide where this activity
  * sits in the day, and says what it actually does: it never moves anything,
@@ -96,14 +98,13 @@ function timingBlock(item, plan, start) {
     </div>
 
     <div class="group-row">
-      <span>Duration</span>
+      <span class="duration-label">Duration<small class="group-note" data-duration-human>${escapeHtml(formatDuration(Number(item.duration) || 30))}</small></span>
       <span class="stepper">
         <button type="button" data-duration-step="-5" aria-label="Five minutes shorter">${icon('minus')}</button>
         <input name="duration" type="text" inputmode="numeric" value="${Number(item.duration) || 30}" aria-label="Duration in minutes">
         <span class="stepper-unit">min</span>
         <button type="button" data-duration-step="5" aria-label="Five minutes longer">${icon('plus')}</button>
       </span>
-      <span class="group-note" data-duration-human>${escapeHtml(formatDuration(Number(item.duration) || 30))}</span>
     </div>
 
     <div class="group-row">
