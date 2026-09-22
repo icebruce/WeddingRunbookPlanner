@@ -307,8 +307,10 @@ test('the sheet lifts above the on-screen keyboard', async ({ page, server }) =>
   await sheetAtRest(page);
   const restingBottom = await page.locator('.sheet').evaluate(n => n.getBoundingClientRect().bottom);
 
-  // Playwright cannot raise a real keyboard, so the visual viewport is shrunk
-  // the way one does and the resize event is fired by hand.
+  // Playwright cannot raise a real keyboard, so the field is focused the way
+  // one raises it, the visual viewport is shrunk the way it answers, and the
+  // resize is fired by hand.
+  await page.locator('#activity-form input[name="title"]').focus();
   await page.evaluate(() => {
     const vv = window.visualViewport;
     Object.defineProperty(vv, 'height', { configurable: true, get: () => window.innerHeight - 300 });
@@ -332,6 +334,65 @@ test('the sheet lifts above the on-screen keyboard', async ({ page, server }) =>
   expect(after.bottom, `sheet ${JSON.stringify(after)} against a keyboard topped at ${keyboardTop}`)
     .toBeLessThanOrEqual(keyboardTop + 2);
   expect(after.bottom).toBeLessThan(restingBottom);
+});
+
+/**
+ * A pinch or a double-tap zoom shrinks the visual viewport exactly as a
+ * keyboard does. Read as one, it took the editor from 607 px to 427 on a
+ * 660 px screen with nothing typed into — half a screen gone, and no way back
+ * to the bottom of the form.
+ */
+test('zooming in is not read as a keyboard', async ({ page, server, browserName }) => {
+  test.skip(browserName !== 'chromium', 'only Chromium can be made to pinch');
+  test.skip(!isPhoneLayout(page), 'the bottom sheet is the narrow layout');
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+  await signInAndWaitForPlan(page);
+  await page.locator('.card').first().click();
+  await page.locator('.toolbar [data-action="edit"]').click();
+  await expect(page.locator('#activity-dialog')).toBeVisible();
+  await sheetAtRest(page);
+
+  const before = await page.locator('.sheet').evaluate(n => Math.round(n.getBoundingClientRect().height));
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.synthesizePinchGesture', {
+    x: Math.round(page.viewportSize().width / 2),
+    y: Math.round(page.viewportSize().height / 2),
+    scaleFactor: 2.2
+  });
+  await page.waitForTimeout(400);
+
+  expect(await page.evaluate(() => Number(window.visualViewport.scale.toFixed(1)))).toBeGreaterThan(1);
+  expect(await page.evaluate(() =>
+    Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--keyboard-inset')))).toBe(0);
+  expect(await page.locator('.sheet').evaluate(n => Math.round(n.getBoundingClientRect().height))).toBe(before);
+});
+
+/**
+ * And whatever put a phantom inset there — a browser bar that hid and came
+ * back, a zoom on an engine that reports it differently — the next thing to
+ * take focus that is not a text field says there is no keyboard, because
+ * nothing else opens one. Tapping a stage chip put the sheet back.
+ */
+test('a sheet shortened for a keyboard that is not there comes back', async ({ page, server }) => {
+  test.skip(!isPhoneLayout(page), 'the bottom sheet is the narrow layout');
+  await server.seed({ plan: seedPlan({ activities: [activity('a', T(10), 60, { title: 'Portraits' })] }) });
+  await signInAndWaitForPlan(page);
+  await page.locator('.card').first().click();
+  await page.locator('.toolbar [data-action="edit"]').click();
+  await expect(page.locator('#activity-dialog')).toBeVisible();
+  await sheetAtRest(page);
+
+  const height = () => page.locator('.sheet').evaluate(n => Math.round(n.getBoundingClientRect().height));
+  const whole = await height();
+
+  await page.evaluate(() => document.documentElement.style.setProperty('--keyboard-inset', '292px'));
+  expect(await height()).toBeLessThan(whole);
+
+  await page.locator('.stage-choice:has(input[value="ceremony"])').click();
+  await expect(page.locator('#activity-form input[name="stage"][value="ceremony"], #activity-form input[value="ceremony"]')).toBeChecked();
+  expect(await page.evaluate(() =>
+    Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--keyboard-inset')))).toBe(0);
+  expect(await height()).toBe(whole);
 });
 
 test('a fast load shows nothing at all, and a slow one shows a skeleton', async ({ page, server }) => {

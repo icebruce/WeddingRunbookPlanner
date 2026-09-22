@@ -509,11 +509,37 @@ function watchChipOverflow() {
  * any movement, because every distance is past 40 % of no height.
  *
  * Against its own resting height the answer is exactly zero when there is no
- * keyboard, whatever the engine thinks `innerHeight` means. The baseline is
- * relearned on a window resize, which is a rotation or a window being dragged
- * — never a keyboard, because a keyboard that moved the layout viewport would
- * not need any of this.
+ * keyboard, whatever the engine thinks `innerHeight` means.
+ *
+ * Two things other than a keyboard shrink that measurement, and both used to
+ * be read as one.
+ *
+ * A pinch or a double-tap zoom shrinks `visualViewport.height` exactly as a
+ * keyboard does — at scale 2.2 this measured a 180 px keyboard that was not
+ * there and cut the editor sheet from 607 px to 427 — so a zoomed reading is
+ * not a reading at all and is dropped.
+ *
+ * And the resting height itself was only ever allowed to grow, so one tall
+ * measurement — a browser toolbar auto-hiding, a zoom out — biased every
+ * reading after it and left the sheet sitting above a keyboard-shaped gap for
+ * the rest of the session. Nothing but a text field opens a keyboard, so when
+ * none has focus there is no keyboard: whatever the viewport measures then is
+ * the resting height, and the inset is zero. That is self-correcting, and it
+ * is also what makes a tap on a stage chip put a shortened sheet back — the
+ * radio takes focus, the inset clears with it.
  */
+/** What a keyboard opens for. Everything else takes focus without one. */
+const KEYBOARDLESS_INPUT = new Set([
+  'button', 'checkbox', 'color', 'file', 'hidden', 'image', 'radio', 'range', 'reset', 'submit'
+]);
+
+function opensKeyboard(node) {
+  if (!node || node.disabled || node.readOnly) return false;
+  if (node.isContentEditable) return true;
+  if (node.tagName === 'TEXTAREA') return true;
+  return node.tagName === 'INPUT' && !KEYBOARDLESS_INPUT.has(node.type);
+}
+
 function trackKeyboardInset() {
   const viewport = window.visualViewport;
   if (!viewport) return;
@@ -521,17 +547,26 @@ function trackKeyboardInset() {
   let restingExtent = 0;
 
   const update = () => {
+    // Zoomed in or out, the visual viewport is not measuring the keyboard.
+    if (Math.abs(viewport.scale - 1) > 0.01) return;
+
     const extent = viewport.height + viewport.offsetTop;
     // Nothing useful to read yet. Writing a number now is how the sheet ends
     // up with no height at all.
     if (!(extent > 0)) return;
+
+    const focused = document.activeElement;
+    if (!opensKeyboard(focused)) {
+      restingExtent = extent;
+      document.documentElement.style.setProperty('--keyboard-inset', '0px');
+      return;
+    }
 
     restingExtent = Math.max(restingExtent, extent);
     const inset = Math.round(Math.max(0, restingExtent - extent));
     document.documentElement.style.setProperty('--keyboard-inset', `${inset}px`);
 
     // The sheet has just been resized under the field; put it back in view.
-    const focused = document.activeElement;
     if (inset > 0 && focused?.closest?.('.sheet-body')) {
       focused.scrollIntoView({ block: 'nearest' });
     }
@@ -539,6 +574,11 @@ function trackKeyboardInset() {
 
   viewport.addEventListener('resize', update);
   viewport.addEventListener('scroll', update);
+  // Focus is the other half of the measurement, so it is read when focus
+  // moves and not only when the viewport does — a keyboard dismissed by a tap
+  // elsewhere does not always resize anything.
+  document.addEventListener('focusin', update);
+  document.addEventListener('focusout', () => setTimeout(update, 0));
   window.addEventListener('resize', () => {
     restingExtent = 0;
     update();

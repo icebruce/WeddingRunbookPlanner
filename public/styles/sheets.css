@@ -171,7 +171,14 @@ dialog.is-leaving { pointer-events: none; }
   background: var(--fill-strong);
 }
 
-.sheet-body { overflow-y: auto; overscroll-behavior: contain; padding: 20px 16px 26px; }
+/* `manipulation` is the sheet's controls saying they are controls: it takes
+   away double-tap-to-zoom and leaves panning and pinch alone. A sheet is a
+   grid of small targets — eight stage chips, a stepper, the people chips —
+   and two taps in a row on them is how you choose a stage, not how you ask to
+   zoom. A zoom shrinks the visual viewport, which app.js has to tell from a
+   keyboard, and the reader is left holding a zoomed page they did not ask
+   for. Pinch still works, so nothing is taken from anyone who wants it. */
+.sheet-body { overflow-y: auto; overscroll-behavior: contain; touch-action: manipulation; padding: 20px 16px 26px; }
 
 .form-stack { display: flex; flex-direction: column; gap: 16px; }
 
