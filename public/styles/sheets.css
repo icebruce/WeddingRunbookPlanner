@@ -204,6 +204,15 @@ dialog.is-leaving { pointer-events: none; }
 
 .field input[readonly] { background: var(--surface-2); color: var(--soft); }
 
+/*
+ * Positioned, so that the checkbox below resolves against this row.
+ *
+ * Same defect as `.stage-choice` further down, and the same one line fixes
+ * it. The Lock row has only ever escaped the symptom by sitting high enough
+ * in the form to stay inside a short sheet, which is luck rather than design.
+ */
+.switch { position: relative; }
+
 .switch input { position: absolute; opacity: 0; pointer-events: none; }
 
 /*
@@ -482,10 +491,35 @@ dialog.is-leaving { pointer-events: none; }
   font-weight: 550;
   white-space: nowrap;
   cursor: pointer;
+  /* Positioned, so that the radio below is positioned against the chip. The
+     one line this whole block turns on — see the note on the input. */
+  position: relative;
 }
 .stage-choice .icon { width: 14px; height: 14px; color: var(--phase); flex: none; }
 :root[data-theme="dark"] .stage-choice { background: color-mix(in srgb, var(--phase) 22%, var(--surface)); }
 :root[data-theme="dark"] .stage-choice .icon { color: color-mix(in srgb, var(--phase) 70%, #fff); }
+/*
+ * The radio is taken out of flow so the chip lays out as a chip, and the chip
+ * is positioned so the radio stays inside it.
+ *
+ * Without `position: relative` on the label, the nearest positioned ancestor
+ * is `.sheet`. Three things followed from that, and together they are what
+ * made choosing a stage break the editor on a phone:
+ *
+ * - The radio stopped scrolling with the form. Its containing block is
+ *   outside the scrolling body, so it stayed where the *un-scrolled* layout
+ *   put it while its chip moved — measured at 736 px and 388 px apart.
+ * - Those resting places are below the sheet's own bottom edge for the last
+ *   rows of the grid, which gave `.sheet` scrollable overflow that exists for
+ *   nothing anyone can see.
+ * - Taking focus then made the browser scroll `.sheet` to reveal the radio.
+ *   `overflow: hidden` does not prevent that — it is still a scroll
+ *   container, and hidden only removes the finger that could scroll back.
+ *
+ * The form slid up inside its own box: Cancel and Done off the top, a strip
+ * of bare surface under the body, and no gesture that undid it short of
+ * closing the sheet.
+ */
 .stage-choice input { position: absolute; opacity: 0; pointer-events: none; }
 /* Which chip reads as selected follows the radio's own checked state, not
    the class the sheet was built with — the sheet is built once and never
