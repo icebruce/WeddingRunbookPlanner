@@ -528,7 +528,11 @@ dialog.is-leaving { pointer-events: none; }
    different chip was picked, alongside the newly-checked one. */
 .stage-choice:has(input:checked) { box-shadow: inset 0 0 0 1.5px var(--phase); font-weight: 650; }
 .stage-choice:hover:not(:has(input:checked)) { box-shadow: inset 0 0 0 1px var(--phase); }
-.stage-choice:focus-within { outline: 2px solid var(--sel); outline-offset: 2px; }
+/* The ring follows `:focus-visible`, not `:focus-within`, like every other
+   control: tapping a chip focuses its hidden radio, so a focus-within ring
+   drew a second border around every chip that had just been picked. Keyboard
+   focus still rings (DESIGN_GUIDE §8). */
+.stage-choice:has(input:focus-visible) { outline: 2px solid var(--sel); outline-offset: 2px; }
 
 /* ---- action sheets ------------------------------------------------------- */
 
