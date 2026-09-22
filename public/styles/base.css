@@ -517,11 +517,8 @@ body.is-moving { cursor: grabbing; }
 .mode-pill--editing { background: var(--amber-tint); color: var(--amber); }
 .mode-pill--editing i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 
-.menu-switch { margin-left: auto; width: 40px; height: 24px; border-radius: 12px; background: var(--live-dot); position: relative; flex: none; }
-/* White in both themes, for the same reason as .switch. */
-.menu-switch::after { content: ''; position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
-.menu-switch.is-off { background: var(--fill-strong); }
-.menu-switch.is-off::after { right: auto; left: 2px; }
+/* The switch is one control and lives in one place — sheets.css, beside the
+   `.menu-popover` rules it is used in. */
 
 /* One line on a wide screen: there is room for what is next beside what is now. */
 /*

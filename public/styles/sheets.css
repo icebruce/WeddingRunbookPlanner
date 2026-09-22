@@ -193,18 +193,40 @@ dialog.is-leaving { pointer-events: none; }
 
 .switch input { position: absolute; opacity: 0; pointer-events: none; }
 
-.switch span { width: 44px; height: 26px; border-radius: 999px; background: var(--fill-strong); display: block; position: relative; transition: background .18s; }
+/*
+ * The switch — one control, in a sheet (`.switch`) and in the menu
+ * (`.menu-switch`), which were two rules at two sizes until they were read
+ * side by side. The menu's was 40×24 on a 20 px knob and the sheet's 44×26 on
+ * 22, which is the pair the mockups draw.
+ *
+ * Off carries a `--soft` ring. The track alone is `--fill-strong`, and the Lock
+ * row it sits on is `--surface-2`: 1.10:1, so the capsule vanished and an off
+ * switch read as a white dot loose in the row rather than a control with a
+ * knob at one end. Filling the track darker would have fixed the edge and lost
+ * the meaning — off would have outweighed a green on at 2.01:1 — so the fill
+ * stays quiet and a ring at 4.63:1 draws the boundary. It is the map button's
+ * bargain one field below (§4.7): outlined while empty, filled once set, the
+ * ring folding into the fill when it is.
+ */
+.switch span, .menu-switch {
+  width: 44px; height: 26px; border-radius: 999px;
+  background: var(--fill-strong);
+  box-shadow: inset 0 0 0 1px var(--soft);
+  display: block; position: relative;
+  transition: background .18s, box-shadow .18s;
+}
+
+.menu-switch { margin-left: auto; flex: none; }
 
 /* The knob stays white in both themes: it rides on the track colour, not on
    the page. */
-.switch span::after { content: ''; position: absolute; width: 22px; height: 22px; left: 2px; top: 2px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.2); transition: transform .18s; }
+.switch span::after, .menu-switch::after { content: ''; position: absolute; width: 22px; height: 22px; left: 2px; top: 2px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.2); transition: transform .18s; }
 
-/* `--live-dot`, the same green as `.menu-switch`, not `--live`: the app has one
-   switch, and `--live` is the day-of token (§2 of DESIGN_GUIDE.md), which a
-   control in a sheet has no business borrowing. */
-.switch input:checked + span { background: var(--live-dot); }
+/* `--live-dot`, not `--live`: `--live` is the day-of token (§2 of
+   DESIGN_GUIDE.md), which a control in a sheet has no business borrowing. */
+.switch input:checked + span, .menu-switch:not(.is-off) { background: var(--live-dot); box-shadow: none; }
 
-.switch input:checked + span::after { transform: translateX(18px); }
+.switch input:checked + span::after, .menu-switch:not(.is-off)::after { transform: translateX(18px); }
 
 /*
  * The People field.
@@ -617,8 +639,6 @@ dialog.is-leaving { pointer-events: none; }
   .menu-popover button .icon { width: 17px; height: 17px; }
   .menu-popover button small { font-size: 13px; }
 }
-.menu-popover button .menu-switch { margin-left: auto; }
-
 .settings-group { margin-bottom: 22px; border-radius: var(--radius); background: var(--surface-2); overflow: hidden; }
 .settings-group > .field-label { padding: 12px 14px 6px; margin: 0; }
 .settings-group .group-row input[type="time"],
