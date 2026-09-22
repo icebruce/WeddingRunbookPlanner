@@ -1206,8 +1206,10 @@ test('a resize lands where the release is, even if the last move never arrives',
   await page.mouse.move(x, y);
   await page.mouse.down();
   await page.mouse.move(x, y - 420, { steps: 8 });
-  await page.waitForTimeout(120);
-  expect(await height(), 'the edge followed the pointer up').not.toBe(before);
+  // Polled, not slept-then-read-once: the edge follows the pointer in a frame
+  // of its own, and 120 ms is a guess a loaded runner can outlast. It did, and
+  // the single read caught the height still at its starting value.
+  await expect.poll(height, { message: 'the edge followed the pointer up' }).not.toBe(before);
 
   // Back at the original edge, released without the move that would have
   // reported it: pointer events are coalesced, and the last one before a
@@ -1240,17 +1242,19 @@ test('a row that comes back during a resize is faded in, not popped', async ({ p
   const x = box.x + box.width / 2;
   const y = box.y + box.height / 2;
 
-  await page.mouse.move(x, y);
-  await page.mouse.down();
-  // Down to a quarter of an hour: rows go as the card shrinks under the finger.
-  await page.mouse.move(x, y - 420, { steps: 12 });
-  // Polled rather than a fixed sleep: the fit pass this is waiting for runs in
-  // its own frame, and a busy CI runner can take longer than any one guess.
-  await expect.poll(hidden, { message: 'the card re-fits while it is being resized' }).toBeGreaterThan(0);
-
   // Each row comes back at its own point in the drag and its fade is over in
   // 140 ms, so asking what is running at the end catches nothing. Count them
   // as they start instead.
+  //
+  // The counter goes in before the gesture rather than between the two halves
+  // of it. `fitAll` only animates a row it saw hidden at the top of the same
+  // pass, so a count taken from the middle of the drag is only right while the
+  // rows happen to still be away when it lands — and on a loaded runner a fit
+  // pass can restore them in the gap, leaving every later pass with nothing to
+  // animate and the count at 0 for a card that behaved correctly. Counting the
+  // whole gesture costs nothing: a shrink only takes rows away, so it fades
+  // none. Measured on this test — 0 fades after the shrink, 2 after the
+  // restore.
   await page.evaluate(() => {
     const original = Element.prototype.animate;
     window.__rowFades = 0;
@@ -1259,6 +1263,14 @@ test('a row that comes back during a resize is faded in, not popped', async ({ p
       return original.apply(this, args);
     };
   });
+
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  // Down to a quarter of an hour: rows go as the card shrinks under the finger.
+  await page.mouse.move(x, y - 420, { steps: 12 });
+  // Polled rather than a fixed sleep: the fit pass this is waiting for runs in
+  // its own frame, and a busy CI runner can take longer than any one guess.
+  await expect.poll(hidden, { message: 'the card re-fits while it is being resized' }).toBeGreaterThan(0);
 
   // And back. A row that returns appeared out of nothing, so it fades in —
   // the half of the change the card's own moving edge does not cover.
