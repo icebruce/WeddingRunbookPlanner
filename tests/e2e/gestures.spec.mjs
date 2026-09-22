@@ -134,6 +134,11 @@ test('D2, F6: the toolbar replaces the + and says what the card hid', async ({ p
   // The card could not show its people; the toolbar does.
   await expect(page.locator('.toolbar-hidden')).toContainText('Bride');
   await expect(page.locator('.toolbar-buttons button')).toHaveCount(4);
+
+  // Read right to left, most-pressed to least — and Delete in the first slot
+  // is why every delete asks first (§4.1, §5.8).
+  const buttons = await page.locator('.toolbar-buttons button').allTextContents();
+  expect(buttons.map(text => text.trim())).toEqual(['Delete', 'Stage', 'Lock', 'Edit']);
 });
 
 test.describe('long press', () => {

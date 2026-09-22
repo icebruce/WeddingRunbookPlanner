@@ -126,6 +126,12 @@ svg.icon { width: 1.05em; height: 1.05em; fill: none; stroke: currentColor; stro
 
 .button--quiet { background: var(--surface-2); border-color: transparent; }
 
+/* The answer that throws something away, in the colour everything destructive
+   already uses. */
+.button--danger { background: var(--bad-tint); border-color: transparent; color: var(--bad-text); }
+
+.button--danger:hover { background: color-mix(in srgb, var(--bad) 16%, var(--bad-tint)); }
+
 .button--text { border: 0; background: transparent; color: var(--sel-text); padding: 0 8px; box-shadow: none; }
 
 .button--wide { width: 100%; }
@@ -312,7 +318,7 @@ body.is-reordering { user-select: none; cursor: grabbing; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.toolbar-buttons { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; }
+.toolbar-buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; }
 /* One button, one column. */
 .toolbar--view-only .toolbar-buttons { grid-template-columns: 1fr; }
 .toolbar-button {

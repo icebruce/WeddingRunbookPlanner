@@ -11,11 +11,14 @@ import { icon } from '../icons.js';
 import { buildSchedule } from '../schedule.js';
 import { isViewOnly } from '../dayof.js';
 
+// Delete first and Edit last: the row is read right to left, from the thing
+// pressed most often to the one pressed least. Delete asks before it deletes
+// (D7), so the first slot is not a slip.
 const BUTTONS = [
-  { action: 'edit', label: 'Edit', glyph: 'settings' },
-  { action: 'lock', label: null, glyph: null },
+  { action: 'delete', label: 'Delete', glyph: 'trash', danger: true },
   { action: 'menu', label: 'Stage', glyph: 'swatch' },
-  { action: 'delete', label: 'Delete', glyph: 'trash', danger: true }
+  { action: 'lock', label: null, glyph: null },
+  { action: 'edit', label: 'Edit', glyph: 'settings' }
 ];
 
 const addButton = `<button class="mobile-add" type="button" data-action="add" data-focus-key="add-mobile" aria-label="Add activity">${icon('plus')}</button>`;

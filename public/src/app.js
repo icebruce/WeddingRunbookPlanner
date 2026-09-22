@@ -28,7 +28,7 @@ import { createAuth } from './auth.js';
 import { createVersions } from './versions.js';
 import { createActivityForm } from './activity-form.js';
 import { renderHeader } from './render/header.js';
-import { discardSheet, emptyState, renderSheet } from './render/sheets.js';
+import { deleteSheet, discardSheet, emptyState, renderSheet } from './render/sheets.js';
 import { buildSchedule, formatTime } from './schedule.js';
 import { renderFilterBar, renderFilters } from './render/filters.js';
 import { renderPrint } from './render/print.js';
@@ -716,8 +716,16 @@ function requestCloseEditor() {
 }
 
 function showDiscardAlert() {
+  showAlert(discardSheet(), closeSheet);
+}
+
+/**
+ * A question asked on top of whatever is already open. Escape, the scrim and
+ * hardware back all take the answer as "no", so only the one button goes ahead.
+ */
+function showAlert(html, onConfirm) {
   clearLeaving(alertRoot);
-  alertRoot.insertAdjacentHTML('beforeend', discardSheet());
+  alertRoot.insertAdjacentHTML('beforeend', html);
   const alert = alertRoot.lastElementChild;
 
   const dismiss = () => {
@@ -728,13 +736,29 @@ function showDiscardAlert() {
     event.preventDefault();
     dismiss();
   });
-  alert.querySelector('[data-action="discard-confirm"]').addEventListener('click', () => {
+  alert.querySelector('.alert-confirm').addEventListener('click', () => {
     dismiss();
-    closeSheet();
+    onConfirm();
   });
   alert.querySelector('.sheet-close').addEventListener('click', dismiss);
   alert.showModal();
   syncOverlayHistory();
+}
+
+/**
+ * Every delete goes through here, wherever it was pressed, so there is one
+ * answer to "does deleting ask first". It does — and the six seconds of undo
+ * (D7) still follow, because a confirmed delete can still be the wrong one.
+ * `before` is what the caller must do while its own sheet is still open.
+ */
+function confirmDelete(id, before) {
+  const activity = store.plan.activities.find(item => item.id === id);
+  if (!activity) return;
+  showAlert(deleteSheet(activity.title), () => {
+    before?.();
+    commit('activity.remove', { id });
+    store.setUi({ selectedId: null, openMenu: null }, { regions: ['timeline', 'toolbar'] });
+  });
 }
 
 // -------------------------------------------------------------- back button
@@ -1023,9 +1047,7 @@ const ACTION_HANDLERS = {
   },
   add: addActivity,
   delete(_, element) {
-    const id = element.dataset.id;
-    commit('activity.remove', { id });
-    store.setUi({ selectedId: null, openMenu: null }, { regions: ['timeline', 'toolbar'] });
+    confirmDelete(element.dataset.id);
   },
   lock(_, element) {
     const id = element.dataset.id;
@@ -1478,6 +1500,7 @@ const activityForm = createActivityForm({
   store,
   commit,
   closeSheet,
+  confirmDelete,
   clock,
   // A picker opens on top of the sheet that owns the field. It goes in the
   // alert root for the same reason the discard question does: that root is

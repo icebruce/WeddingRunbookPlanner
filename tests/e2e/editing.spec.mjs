@@ -27,6 +27,7 @@ async function act(page, id, action) {
   if (isPhoneLayout(page)) {
     await select(page, id);
     await page.locator(`.toolbar [data-action="${action}"]`).click();
+    if (action === 'delete') await confirmDelete(page);
     return;
   }
   // The wide layout keeps lock on the card itself; edit and delete live
@@ -37,7 +38,16 @@ async function act(page, id, action) {
     return;
   }
   await openActivityEditor(page, card(page, id));
-  if (action === 'delete') return page.locator('#delete-activity').click();
+  if (action === 'delete') {
+    await page.locator('#delete-activity').click();
+    await confirmDelete(page);
+  }
+}
+
+/** Delete asks first from every control that offers it (§5.8). */
+async function confirmDelete(page) {
+  await expect(page.locator('#delete-dialog')).toBeVisible();
+  await page.locator('[data-action="delete-confirm"]').click();
 }
 
 test('the editor asks for things in the order the spec gives', async ({ page, server }) => {
@@ -243,7 +253,7 @@ test('Cancel asks before throwing away typing, and only then', async ({ page, se
   expect((await server.read()).plan.activities[1].title).toBe('Getting-ready Portraits');
 });
 
-test('D7: deleting does not ask, and offers Undo instead', async ({ page, server }) => {
+test('D7: deleting asks once, and still offers Undo afterwards', async ({ page, server }) => {
   await server.seed({ plan: base() });
   await signInAndWaitForPlan(page);
 
@@ -258,6 +268,29 @@ test('D7: deleting does not ask, and offers Undo instead', async ({ page, server
   await expect(card(page, 'travel')).toHaveCount(1);
   expect((await server.read()).plan.activities.map(a => a.id)).toEqual(
     ['ready', 'portraits', 'travel', 'ceremony', 'cocktail']);
+});
+
+test('D7: the delete question can be answered no, and nothing goes', async ({ page, server }) => {
+  await server.seed({ plan: base() });
+  await signInAndWaitForPlan(page);
+
+  if (isPhoneLayout(page)) {
+    await select(page, 'travel');
+    await page.locator('.toolbar [data-action="delete"]').click();
+  } else {
+    await openActivityEditor(page, card(page, 'travel'));
+    await page.locator('#delete-activity').click();
+  }
+
+  await expect(page.locator('#delete-dialog')).toBeVisible();
+  await expect(page.locator('#delete-dialog')).toContainText('Travel to Church');
+  await page.locator('#delete-dialog .sheet-close').click();
+
+  // The card is still there, and on desktop the editor it was asked from is
+  // still open behind the question.
+  await expect(card(page, 'travel')).toHaveCount(1);
+  if (!isPhoneLayout(page)) await expect(editor(page)).toBeVisible();
+  expect((await server.read()).plan.activities.map(a => a.id)).toContain('travel');
 });
 
 test('locking and unlocking toggles in place, with nothing else moving', async ({ page, server }) => {

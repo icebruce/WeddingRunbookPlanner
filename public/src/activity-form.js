@@ -12,7 +12,7 @@ import { formatDuration, formatTime } from './schedule.js';
 import { peopleChips } from './render/sheets.js';
 import { initPickers } from './render/pickers.js';
 
-export function createActivityForm({ store, commit, closeSheet, clock, pickerOptions = {} }) {
+export function createActivityForm({ store, commit, closeSheet, confirmDelete, clock, pickerOptions = {} }) {
   /** The form's contents when it opened, so Cancel knows whether to ask. */
   let baseline = null;
 
@@ -282,14 +282,14 @@ export function createActivityForm({ store, commit, closeSheet, clock, pickerOpt
     const form = dialog.querySelector('#activity-form');
     form.addEventListener('submit', submitActivity);
 
-    // Deleting from inside the editor is the same delete as anywhere else: no
-    // confirmation, and six seconds to undo.
+    // Deleting from inside the editor is the same delete as anywhere else: it
+    // asks first, and there are six seconds to undo. The question is asked on
+    // top of the editor, so "Keep it" comes back to the form still filled in.
     dialog.querySelector('#delete-activity')?.addEventListener('click', () => {
-      const id = store.ui.dialog.activity.id;
-      baseline = null;
-      closeSheet();
-      commit('activity.remove', { id });
-      store.setUi({ selectedId: null }, { regions: ['timeline', 'toolbar'] });
+      confirmDelete(store.ui.dialog.activity.id, () => {
+        baseline = null;
+        closeSheet();
+      });
     });
 
     for (const button of dialog.querySelectorAll('[data-duration-step]')) {
