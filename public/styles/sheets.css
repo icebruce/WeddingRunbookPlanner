@@ -23,8 +23,14 @@
    it — measured at `scrollTop: 184` immediately after opening on a phone, which
    carried the header with Cancel and Done off the top of the screen with no
    scrollable surface left to bring it back. The sheet body is the only thing
-   here that scrolls. */
-.sheet-dialog { width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; overflow: hidden; }
+   here that scrolls.
+   `clip` finishes the job `hidden` started: a hidden box still scrolls when
+   something inside it takes focus. The sheet takes focus on open while it is
+   still a full sheet-height below the edge, so the dialog scrolled up by
+   exactly that much and the rise played out as the scroll unwound — the sheet
+   jumped up and dropped back instead of rising. `hidden` stays as the fallback
+   for engines without `clip`. */
+.sheet-dialog { width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; overflow: hidden; overflow: clip; }
 
 /*
  * Every dialog arrives and leaves the same way.
