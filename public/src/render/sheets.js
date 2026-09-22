@@ -2,6 +2,7 @@ import { escapeHtml } from '../dom.js';
 import { icon } from '../icons.js';
 import { STAGES, phaseVars } from '../config.js';
 import { buildSchedule, formatDuration, formatTime } from '../schedule.js';
+import { pickerField } from './pickers.js';
 import { describeConflicts } from '../merge.js';
 
 /**
@@ -69,28 +70,30 @@ function stageGrid(current) {
 /**
  * The timing block.
  *
- * One field decides when an activity happens: a date and time together, so an
- * activity that runs past midnight is simply set to a time on the next
- * calendar day rather than needing a switch of its own. Duration is entered
- * in minutes — the grid this app schedules on — with the hours-and-minutes
- * reading shown beside it, because "80 min" and "1 hr 20 min" are the same
- * number and only one of them is easy to picture.
+ * One field decides when an activity happens. There is no calendar on it: an
+ * activity in a wedding plan starts either on the plan's own date or in the
+ * small hours after it, and which of the two is worked out from the clock
+ * rather than asked (FUNCTIONAL_SPEC §5.2). Duration is entered in minutes —
+ * the grid this app schedules on — with the hours-and-minutes reading beside
+ * it, because "80 min" and "1 hr 20 min" are the same number and only one of
+ * them is easy to picture.
+ *
+ * Lock sits here, with the other two things that decide where this activity
+ * sits in the day, and says what it actually does: it never moves anything,
+ * it only exempts this activity from a group move (§5.3).
  */
 function timingBlock(item, plan, start) {
-  const startDate = new Date(`${plan.date}T00:00:00`);
-  startDate.setMinutes(startDate.getMinutes() + (Number.isFinite(start) ? start : 0));
-  const end = (Number.isFinite(start) ? start : 0) + (Number(item.duration) || 30);
+  const minutes = Number.isFinite(start) ? start : 0;
+  const end = minutes + (Number(item.duration) || 30);
 
-  return `<fieldset class="field-group timing">
-    <legend class="field-label">Timing</legend>
+  return `<span class="field-label">Timing</span>
+  <fieldset class="field-group timing">
+    <legend class="sr-only">Timing</legend>
 
-    <label class="group-row">
+    <div class="group-row">
       <span>Starts</span>
-      <span class="picker-field">
-        <input name="start" data-picker="datetime" type="text" value="${escapeHtml(formatDateTimeLocal(startDate))}" readonly>
-        ${icon('clock', 'picker-icon')}
-      </span>
-    </label>
+      ${pickerField('start', { kind: 'datetime', value: String(minutes), label: 'Starts', planDate: plan.date })}
+    </div>
 
     <div class="group-row">
       <span>Duration</span>
@@ -107,13 +110,42 @@ function timingBlock(item, plan, start) {
       <span>Ends</span>
       <span class="group-value" data-ends>${escapeHtml(formatTime(end))}</span>
     </div>
+
+    <label class="group-row lock-row">
+      <span class="lock-label">${icon('lock')}<span>Lock<small>Stays put in a group move</small></span></span>
+      <span class="switch"><input name="locked" type="checkbox" ${item.locked ? 'checked' : ''}><span></span></span>
+    </label>
   </fieldset>`;
 }
 
-/** "2026-11-21T14:45" — flatpickr's own datetime format, seconds dropped. */
-function formatDateTimeLocal(date) {
-  const pad = n => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+/**
+ * The location field.
+ *
+ * One text field for what the card shows, and one button beside it for the
+ * Google Maps link. The button wears the link glyph rather than a map one:
+ * attaching a link is all it does — it does not search for a place. Plain words stay plain words — a card only offers to open
+ * a map when someone has actually supplied one, so a location like
+ * "Getting-ready location · TBD" never becomes a link to nowhere.
+ */
+function locationField(item, places) {
+  const linked = Boolean(item.mapUrl);
+  return `<div class="field">
+    <span class="field-label">Location</span>
+    <div class="location-row">
+      <input name="location" maxlength="140" value="${escapeHtml(item.location || '')}" placeholder="Add a location"
+        autocomplete="off" list="location-suggestions" aria-label="Location">
+      <button type="button" class="map-button" id="map-link-toggle" aria-pressed="${linked}"
+        aria-expanded="false" aria-controls="map-link-row"
+        aria-label="${linked ? 'Edit the Google Maps link' : 'Add a Google Maps link'}">${icon('link')}</button>
+    </div>
+    <div class="map-link-row" id="map-link-row" hidden>
+      <label class="field-label" for="map-url-field">Google Maps link</label>
+      <input id="map-url-field" name="mapUrl" type="url" maxlength="2000" value="${escapeHtml(item.mapUrl || '')}"
+        placeholder="Paste a link from Google Maps" autocomplete="off" spellcheck="false" inputmode="url">
+      <p class="map-link-help">Paste a link and the card's location opens it. Leave it empty and the location stays plain text.</p>
+    </div>
+    <datalist id="location-suggestions">${places.map(place => `<option value="${escapeHtml(place)}"></option>`).join('')}</datalist>
+  </div>`;
 }
 
 export function activitySheet(payload, plan) {
@@ -138,12 +170,7 @@ export function activitySheet(payload, plan) {
 
         ${timingBlock(item, plan, Number(item.start) || 0)}
 
-        <label class="field">
-          <span class="field-label">Location</span>
-          <input name="location" maxlength="140" value="${escapeHtml(item.location || '')}" placeholder="Add a location"
-            autocomplete="off" list="location-suggestions">
-          <datalist id="location-suggestions">${suggestions.locations.map(place => `<option value="${escapeHtml(place)}"></option>`).join('')}</datalist>
-        </label>
+        ${locationField(item, suggestions.locations)}
 
         <div class="field">
           <span class="field-label">Stage</span>
@@ -160,15 +187,7 @@ export function activitySheet(payload, plan) {
           <textarea name="notes" maxlength="1000" rows="4" placeholder="Optional planning notes">${escapeHtml(item.notes || '')}</textarea>
         </label>
 
-        <label class="group-row">
-          <span>Lock against group moves</span>
-          <input name="locked" type="checkbox" ${item.locked ? 'checked' : ''}>
-        </label>
-
-        <div class="sheet-actions">
-          ${creating ? '' : `<button id="duplicate-activity" class="button button--quiet" type="button">${icon('copy')}<span>Duplicate</span></button>`}
-          ${creating ? '' : `<button id="delete-activity" class="danger-action" type="button">${icon('trash')}<span>Delete activity</span></button>`}
-        </div>
+        ${creating ? '' : `<button id="delete-activity" class="danger-action" type="button">${icon('trash')}<span>Delete activity</span></button>`}
       </div>
     </form>
   </dialog>`;
@@ -410,23 +429,23 @@ export function settingsSheet(plan) {
           <legend class="field-label">Plan</legend>
           <label class="group-row"><span>Planner name</span><input name="coupleLabel" maxlength="60" value="${escapeHtml(plan.coupleLabel || 'Our Wedding')}"></label>
           <label class="group-row"><span>Day title</span><input name="title" maxlength="80" value="${escapeHtml(plan.title)}"></label>
-          <label class="group-row"><span>Date</span>
-            <span class="picker-field"><input name="date" data-picker="date" type="text" value="${escapeHtml(plan.date)}" readonly>${icon('clock', 'picker-icon')}</span>
-          </label>
-          <label class="group-row"><span>Sunset marker</span>
-            <span class="picker-field"><input name="sunset" data-picker="time" type="text" value="${escapeHtml(plan.sunset ?? '')}" placeholder="Not set" readonly>${icon('clock', 'picker-icon')}</span>
-          </label>
+          <div class="group-row"><span>Date</span>
+            ${pickerField('date', { kind: 'date', value: plan.date, label: 'Date', planDate: plan.date, glyph: 'rings' })}
+          </div>
+          <div class="group-row"><span>Sunset marker</span>
+            ${pickerField('sunset', { kind: 'time', value: plan.sunset ?? '', label: 'Sunset marker', placeholder: 'Not set', optional: true, glyph: 'sun' })}
+          </div>
         </fieldset>
 
         <fieldset class="field-group settings-group">
           <legend class="field-label">Timeline</legend>
-          <label class="group-row"><span>Shows from</span>
-            <span class="picker-field"><input name="timelineStart" data-picker="time" type="text" value="${escapeHtml(plan.timelineStart ?? '')}" placeholder="Earliest activity" readonly>${icon('clock', 'picker-icon')}</span>
-          </label>
-          <label class="group-row"><span>Shows until</span>
-            <span class="picker-field"><input name="timelineEnd" data-picker="time" type="text" value="${escapeHtml(plan.timelineEnd ?? '')}" placeholder="Latest activity" readonly>${icon('clock', 'picker-icon')}</span>
+          <div class="group-row"><span>Shows from</span>
+            ${pickerField('timelineStart', { kind: 'time', value: plan.timelineStart ?? '', label: 'Shows from', placeholder: 'Earliest activity', optional: true })}
+          </div>
+          <div class="group-row"><span>Shows until</span>
+            ${pickerField('timelineEnd', { kind: 'time', value: plan.timelineEnd ?? '', label: 'Shows until', placeholder: 'Latest activity', optional: true })}
             ${nextDayNote(plan)}
-          </label>
+          </div>
           <p class="group-help">Only changes what you see. The view always grows to fit every activity.</p>
         </fieldset>
       </div>

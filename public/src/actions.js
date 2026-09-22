@@ -11,7 +11,6 @@ import { normalizeDuration } from './validate.js';
 import { buildSchedule, formatTime } from './schedule.js';
 import {
   addInOpenTime,
-  duplicate,
   extendPrevious,
   insertAfter,
   keepAsBuffer,
@@ -102,11 +101,6 @@ defineAction('activity.moveGroup', (plan, { ids, deltaMinutes }) => {
 defineAction('activity.toggleLock', fromOperation(
   (plan, { id }) => toggleLock(plan, id),
   activity => (activity?.locked ? `Unlocked ${activity.title}` : `Locked ${activity.title}`)
-));
-
-defineAction('activity.duplicate', fromOperation(
-  (plan, { id, newId }) => duplicate(plan, id, newId),
-  activity => `Duplicated ${activity.title}`
 ));
 
 defineAction('openTime.buffer', fromOperation(

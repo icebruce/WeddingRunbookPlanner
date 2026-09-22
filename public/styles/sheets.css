@@ -18,7 +18,13 @@
 
 .menu-popover button:hover { background: var(--surface-2); }
 
-.sheet-dialog { width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; }
+/* `overflow: hidden` is load-bearing. The UA stylesheet gives every `<dialog>`
+   `overflow: auto`, so this one could scroll independently of the sheet inside
+   it — measured at `scrollTop: 184` immediately after opening on a phone, which
+   carried the header with Cancel and Done off the top of the screen with no
+   scrollable surface left to bring it back. The sheet body is the only thing
+   here that scrolls. */
+.sheet-dialog { width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; overflow: hidden; }
 
 /*
  * Every dialog arrives and leaves the same way.
@@ -379,7 +385,9 @@ dialog.is-leaving { pointer-events: none; }
 
 .sheet-body > .field + .field,
 .sheet-body > .field + .field-group,
-.sheet-body > .field-group + .field { margin-top: 22px; }
+.sheet-body > .field-group + .field,
+.sheet-body > .field-group + .field-label,
+.sheet-body > .field + .field-label { margin-top: 22px; }
 
 .field-label { display: block; margin-bottom: 8px; color: var(--soft); font-size: 13px; font-weight: 600; }
 
@@ -391,7 +399,6 @@ dialog.is-leaving { pointer-events: none; }
 .field-group { margin: 0; padding: 0; border: 0; }
 .field-group .field-label { margin-bottom: 8px; }
 .timing { border-radius: var(--radius); background: var(--surface-2); overflow: hidden; }
-.timing > .field-label { padding: 0 14px; margin: 12px 0 6px; }
 .group-row {
   display: flex;
   align-items: center;
@@ -404,7 +411,9 @@ dialog.is-leaving { pointer-events: none; }
 .group-row + .group-row { border-top: .5px solid var(--hair); }
 .group-row.is-hidden { display: none; }
 .group-value, .group-note { color: var(--soft); font-variant-numeric: tabular-nums; }
-.group-note { font-size: 15px; }
+/* "1 hr 15 min" broke over two lines beside the stepper and dragged the row
+   taller than the two around it. It is a reading, not a paragraph. */
+.group-note { font-size: 15px; white-space: nowrap; }
 .group-row input[type="time"] { border: 0; background: none; color: var(--ink); font: inherit; text-align: right; font-variant-numeric: tabular-nums; }
 
 .stepper { display: inline-flex; align-items: center; height: 36px; border-radius: 9px; background: var(--fill-strong); }
@@ -414,21 +423,26 @@ dialog.is-leaving { pointer-events: none; }
 
 /* The stage picker is a grid of the real tags, so the choice looks like the
    result. */
-.stage-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Exactly the `.stage-tag` a card draws — 26 px over 13 px text on a 13 px
+   radius (cards.css). The editor is showing you the result, so it cannot be a
+   size the result never is. */
+.stage-grid { display: flex; flex-wrap: wrap; gap: 7px; }
 .stage-choice {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 12px;
-  border-radius: 17px;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 13px;
   background: var(--phase-tint);
   color: var(--ink-2);
-  font-size: 14px;
+  font-size: 13px;
+  line-height: 1;
   font-weight: 550;
+  white-space: nowrap;
   cursor: pointer;
 }
-.stage-choice .icon { width: 16px; height: 16px; color: var(--phase); }
+.stage-choice .icon { width: 14px; height: 14px; color: var(--phase); flex: none; }
 :root[data-theme="dark"] .stage-choice { background: color-mix(in srgb, var(--phase) 22%, var(--surface)); }
 :root[data-theme="dark"] .stage-choice .icon { color: color-mix(in srgb, var(--phase) 70%, #fff); }
 .stage-choice input { position: absolute; opacity: 0; pointer-events: none; }
@@ -642,3 +656,71 @@ dialog.is-leaving { pointer-events: none; }
 .empty-plan h2 { margin: 6px 0 0; font-size: 20px; font-weight: 650; }
 .empty-plan p { margin: 0 0 8px; max-width: 34ch; color: var(--soft); font-size: 15px; line-height: 1.45; }
 .empty-plan .button { width: min(280px, 100%); min-height: 50px; }
+
+/* ---- the location field -------------------------------------------------- */
+
+/*
+ * One text field for what the card shows, and one button for the Google Maps
+ * link. The button is the state: filled once a link is attached, outlined
+ * while there is none, so "does this place open a map?" is answered before
+ * anything is pressed.
+ */
+.location-row { display: flex; align-items: stretch; gap: 8px; }
+
+.location-row input { flex: 1; min-width: 0; }
+
+.map-button {
+  width: 46px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--soft);
+  cursor: pointer;
+}
+
+.map-button .icon { width: 19px; height: 19px; }
+
+.map-button[aria-pressed="true"] { border-color: var(--sel); background: var(--sel); color: #fff; }
+
+.map-button:focus-visible { outline: 2px solid var(--sel); outline-offset: 2px; }
+
+.map-link-row { margin-top: 10px; padding: 12px 12px 10px; border-radius: var(--radius); background: var(--surface-2); }
+
+.map-link-row[hidden] { display: none; }
+
+.map-link-row .field-label { margin-bottom: 6px; }
+
+.map-link-row input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 10px 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 15px;
+  outline: 0;
+}
+
+.map-link-row input:focus { border-color: var(--sel); box-shadow: 0 0 0 3px var(--sel-tint); }
+
+.map-link-help { margin: 8px 0 0; color: var(--soft); font-size: 13px; line-height: 1.4; }
+
+/* ---- the lock row -------------------------------------------------------- */
+
+/*
+ * Lock lives with the other two things that decide where an activity sits in
+ * the day, and says what it does rather than only what it is called. It was a
+ * bare checkbox at the very bottom of the sheet, after Notes.
+ */
+.lock-row .lock-label { display: flex; align-items: center; gap: 10px; min-width: 0; }
+
+.lock-row .lock-label > .icon { width: 18px; height: 18px; color: var(--soft); flex: none; }
+
+.lock-row .lock-label small { display: block; color: var(--soft); font-size: 13px; }
+
+.lock-row .switch { flex: none; }

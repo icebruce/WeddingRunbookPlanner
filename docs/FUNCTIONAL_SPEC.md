@@ -63,7 +63,7 @@ Saturday, November 21, 2026 · Ceremony at St. Peter and Paul Orthodox Sobor, 2:
 - Activities each carry their own absolute start; nothing here is a chain. Moving, resizing or deleting one activity never moves another.
 - Duration: 5 to 720 minutes, always a multiple of 5. Typed values round to the nearest 5. No browser validation messages.
 - All typed clock times round to the nearest 5 minutes.
-- Times after midnight belong to the next day when they follow a late activity (e.g. 1:15 AM after an 11 PM activity) — a plan's day can run past 1440 minutes.
+- Times after midnight belong to the next day when they follow a late activity (e.g. 1:15 AM after an 11 PM activity) — a plan's day can run past 1440 minutes. The start picker decides which day from the clock alone: **a time before 4:00 AM is the day after the plan's date, 4:00 AM and later is the plan's own date** (D36). The one start this cannot express — before 4:00 AM on the plan's own date — is set by dragging the card.
 - Growing, shrinking or moving an activity never moves any other activity. Two activities are allowed to occupy the same minutes; that is drawn as an overlap (§3.5), not resolved or hidden.
 - The one deliberate way several activities move together is a **group move** (§5.6): select two or more, drag any of them, and every unlocked activity in the selection shifts by the same amount. A locked activity in the selection stays put.
 - Open time is never stored on an activity — it is always derived fresh from the current gaps between activities (§5.9).
@@ -126,7 +126,9 @@ At the approved scale this gives:
 
 **Stage colour:** a vertical bar on the card's left in the stage's phase colour, inset top and bottom, scaling with the card.
 
-**Desktop card:** one row with bar, time and duration, stage tag, title with glyphs, and the lock button; second row with location left and people right. There is no drag handle and no pencil: the body is the drag surface and a double-click opens the editor. Cards under 30 minutes hide people and show the dots. There is no ⋯ menu on the card face — Duplicate and Delete live in the activity editor (§5.2).
+**Desktop card:** one row with bar, time and duration, stage tag, title with glyphs, and the lock button; second row with location left and people right. There is no drag handle and no pencil: the body is the drag surface and a double-click opens the editor. Cards under 30 minutes hide people and show the dots. There is no ⋯ menu on the card face — Delete lives in the activity editor (§5.2).
+
+**Location row:** plain text unless the activity carries a map link, in which case the whole row is a link that opens it in a new tab. It stays a link in day-of view, where it is the one thing on a card that still does something.
 
 ### 3.4 Open time block
 
@@ -198,7 +200,7 @@ The summary line shows `20 min conflict ›`.
 ## 5. Features
 
 ### 5.1 Add activity
-- New activity: 30 min, Preparation, flexible, no location/people/notes.
+- New activity: 30 min, Preparation, flexible, no location/map link/people/notes.
 - Inserted **after the selected card**, or at the end if nothing is selected. It is selected after creation and the edit sheet opens with the name field focused.
 - From open time: “Add activity here” creates a flexible activity filling the open time, placed before the activity that follows.
 
@@ -207,12 +209,12 @@ Phone: bottom sheet (Cancel · Edit activity · Done). Desktop: centered dialog,
 
 Fields in order:
 1. **Name** — required, trimmed, 1–120 characters.
-2. **Timing** block — a single date+time field (picker, §8.5 of `TECHNICAL_SPEC.md`) sets the activity's absolute start directly; there is no separate Flexible/Fixed choice. Duration stepper (−/+ 5 min, typed value rounds to nearest 5). Ends (calculated). A **Locked** checkbox/toggle sets whether this activity is exempt from a group move (§5.6) — it does not change where the activity starts.
-3. **Location** — up to 140 characters, with suggestions from locations already used.
+2. **Timing** block — **Starts** (picker, §8.5 of `TECHNICAL_SPEC.md`) sets the absolute start; there is no separate Flexible/Fixed choice and no calendar, because the day follows from the clock (§2.1). Duration stepper (−/+ 5 min, typed value rounds to nearest 5). Ends (calculated). **Lock**, a toggle, sets whether this activity is exempt from a group move (§5.6) — it does not change where the activity starts, and it says so on the row.
+3. **Location** — up to 140 characters, with suggestions from locations already used, and one button beside it for an optional **Google Maps link** (up to 2000 characters, `http` or `https` only). The link row opens on the button and is open already when a link exists. A location with no link stays plain text everywhere — nothing is ever guessed from the words.
 4. **Stage** — chip grid, current one outlined.
 5. **People** — removable chips, `+ Add` field with suggestions from names already used, Enter adds, duplicates (case-insensitive) ignored, max 30 entries of 80 characters. **Text typed but not yet added is added on Done.**
 6. **Notes** — up to 1000 characters.
-7. **Delete activity** (existing activities only).
+7. **Delete activity** (existing activities only). There is no Duplicate, here or anywhere (D37).
 
 Done validates and applies; errors appear inline under the field and keep the sheet open. Cancel discards. Swiping the sheet down equals Cancel; if there are unsaved changes, ask “Discard changes?”.
 
@@ -265,7 +267,7 @@ Opened by a tall block's + button, or by a long press (touch) / double-click (mo
 Nothing changes until one is chosen. Each choice can be undone.
 
 ### 5.10 Undo
-- Single step. Covers add, duplicate, delete, reorder, resize, stage, fix/unfix, edit-sheet save, open-time actions.
+- Single step. Covers add, delete, reorder, resize, stage, fix/unfix, edit-sheet save, open-time actions.
 - Shown as a toast `<what happened> · Undo` for 6 seconds; also ⌘/Ctrl+Z on desktop.
 - Toasts appear only for: undoable changes and errors. No “Saved” or “Stage updated” toast, and no “N activities shifted” toast — locking, unlocking, resizing and moving one activity never shift another.
 - The six seconds are unattended time. The countdown stops while a pointer is over the toast or focus is inside it, and starts again on the way out; a toast can also be swiped right to dismiss (down is nearly free at the bottom of a screen, and dismissed it by accident). Undo is the only way back from a delete, so it does not expire while it is being read. A toast is chrome, not “outside”: pressing its Undo never also clears the selection.
@@ -435,13 +437,13 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 
 **Security/privacy:** server code and seed data are not downloadable from the site; login attempts are rate-limited; a share token can be used to read the plan and nothing else — it grants no session and every write refuses it.
 
-**Other features:** add after selected; duplicate; undo for each listed action; person filter and pinned row; print layout; export; empty state and template; versions with auto-snapshot and delete; settings validation; dark switch persists per device; home-screen install.
+**Other features:** add after selected; undo for each listed action; person filter and pinned row; print layout; export; empty state and template; versions with auto-snapshot and delete; settings validation; dark switch persists per device; home-screen install.
 
 ---
 
 ## 10. QA scenarios (minimum)
 
-1. Plan with no overlaps · 2. Activity with open time before it · 3. Two activities overlapping · 4. Three-way overlap · 5. Shrink an activity so it no longer overlaps · 6. Grow an activity into a following one (creates an overlap, nothing is pushed) · 7. 5-, 10-, 15-, 25-, 30-minute and 3-hour cards · 8. Top resize, bottom resize, both in sequence · 9. Resize one activity with an overlapping neighbour unaffected · 10. Drag a card to an earlier time, a later time, onto another activity's time (the overlap previews before the drop), cancel · 10a. Group-select two+ cards (one locked), drag: locked one stays, others move by the same delta; cancel restores all · 11. Scroll starting on every part of a card (phone) · 12. Hold to lift, hold cancelled by movement, double-tap to edit · 13. Stage change, lock/unlock with no shift · 14. Many people, long location, long title · 15. Plan crossing midnight, view range ending after midnight · 16. Activity outside the configured view range · 17. Offline edit → reload → reconnect · 18. Server 500 and 400 on save · 19. Session expiry mid-edit · 20. Two devices editing · 21. Version save/restore/delete · 22. Day-of before/during/open/conflict/after · 23. Edit on the day and auto-return · 24. Person filter + print · 25. Empty plan + template · 26. Dark appearance on all screens · 27. Keyboard-only desktop pass · 28. Screen reader pass on phone · 29. 320 px, 390 px, 430 px, 740 px, 1024 px, 1440 px widths, phone landscape · 30. iPad with touch (no hover) · 31. Phone hardware/gesture back closes an open sheet, menu, or card selection instead of leaving the app.
+1. Plan with no overlaps · 2. Activity with open time before it · 3. Two activities overlapping · 4. Three-way overlap · 5. Shrink an activity so it no longer overlaps · 6. Grow an activity into a following one (creates an overlap, nothing is pushed) · 7. 5-, 10-, 15-, 25-, 30-minute and 3-hour cards · 8. Top resize, bottom resize, both in sequence · 9. Resize one activity with an overlapping neighbour unaffected · 10. Drag a card to an earlier time, a later time, onto another activity's time (the overlap previews before the drop), cancel · 10a. Group-select two+ cards (one locked), drag: locked one stays, others move by the same delta; cancel restores all · 11. Scroll starting on every part of a card (phone) · 12. Hold to lift, hold cancelled by movement, double-tap to edit · 13. Stage change, lock/unlock with no shift · 14. Many people, long location, long title · 15. Plan crossing midnight, view range ending after midnight; the start picker puts a time before 4 AM on the next day and 4 AM onward on the plan's date · 16. Activity outside the configured view range · 17. Offline edit → reload → reconnect · 18. Server 500 and 400 on save · 19. Session expiry mid-edit · 20. Two devices editing · 21. Version save/restore/delete · 22. Day-of before/during/open/conflict/after · 23. Edit on the day and auto-return · 24. Person filter + print · 25. Empty plan + template · 26. Dark appearance on all screens · 27. Keyboard-only desktop pass · 28. Screen reader pass on phone · 29. 320 px, 390 px, 430 px, 740 px, 1024 px, 1440 px widths, phone landscape · 30. iPad with touch (no hover) · 31. Phone hardware/gesture back closes an open sheet, menu, or card selection instead of leaving the app · 32. Every picker mode: a start on the wheel, the plan date on the calendar, sunset and both view-range times set and cleared; Escape, the scrim and hardware back each close the picker and leave the sheet open · 33. A location with a map link and one without, on a card, in the shared view and in print.
 
 ---
 
@@ -463,7 +465,7 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 | D12 | Person filter fades non-matching activities, pinned row while on, exact match | None |
 | D13 | Live styling as a graphite card in a tinted band (**reversed**: was green on a light tint, and a dark card was the rejected option). Green on a light band ended up doing six jobs at once — surface, border, progress track, fill, pulse and label — so nothing read as distinct. On a dark panel green means only "live". Not full-height: a card in a band, so the plan still scrolls under something | Green on a light tint (was) · dark *full-height* card (still rejected) |
 | D14 | iOS text sizes on phone: 17 title, 15 detail, 13 label | 12.5 / 9.5 / 8 px |
-| D15 | Add inserts after selection; duplicate after original | Always appended at end |
+| D15 | Add inserts after selection | Always appended at end |
 | D16 | Timeline view start/end settings; end may be next day | Not available; end ≤ start rejected even across midnight |
 | D17 | Sunset marker (default 4:19 PM) | None |
 | D18 | Print layout, export backup, notes glyph, suggestions, empty state with template, home-screen app | None |
@@ -476,10 +478,14 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 | D25 | People tags: full names then `+N`, never initials | First five names, then initials |
 | D26 | Timeline model rewrite (commit `2939550`): every activity stores its own absolute `start`; nothing propagates or auto-pushes; `locked` only exempts an activity from a deliberate group move | Flexible/Fixed propagation chain with stored `gapBefore` and automatic conflict resolution |
 | D27 | Group move: Ctrl/Cmd-click selects multiple cards, dragging any selected card moves every unlocked one by the same delta | No multi-activity move; reorder moved one activity by list position |
-| D28 | Single date+time picker (flatpickr, vendored) replaces the Flexible/Fixed radio and separate time field in the activity editor | Starts: Flexible \| Fixed radio |
+| D28 | *(picker superseded by D35)* A single start field replaces the Flexible/Fixed radio and separate time field in the activity editor | Starts: Flexible \| Fixed radio |
 | D33 | Automatic backups every six hours, of the state each save replaced, thinned at a resolution that drops with age | Automatic versions existed only at the two moments something had already gone wrong — a conflict, or a restore — so version history was empty exactly when it was needed |
 | D32 | A read-only link: one revocable token, opening a separate page that has no editor on it at all. Read-only is the shape of what exists rather than a permission each action has to remember to check | One shared password and one permission level — the photographer and the venue could delete the ceremony |
 | D31 | Plan status removed. Three of its four values had no behaviour at all and the fourth, **Final**, silently forced day-of view onto every device — a mode switch wearing a label's name. Day-of now turns on by date alone, read on the plan's `timezone` (default `America/Toronto`) rather than the reader's device | Draft/Working/Confirming/Final, as a select in the desktop top bar and a row in the phone menu |
 | D30 | Two diverged plans are merged per activity and per field against the version the server last confirmed; only the same field changed twice is a question, and it names the activity | A dialog offering two whole plans, where choosing one discarded every unrelated change the other side had made |
 | D29 | Phone back-button/gesture closes the open sheet, menu, or card selection instead of leaving the app (a dummy history entry pushed while an overlay is open). Scroll restoration is manual: back closes the top thing and the page stays exactly where it is | Back navigated away from the app with an overlay still open; later, back also threw the reader from where they had scrolled to back to the selected card |
 | D34 | Day-of: the title lives in the top bar; no large title, no summary line. The band carries the page tint, so the bar still draws no rule against it — but the boundary the plan passes under is now the panel's own edge rather than a border on the band (D13) | Keeping the large title and handing it over behind the strip |
+| D35 | The app's own picker, in three modes (`date`, `time`, `datetime`), replaces flatpickr — which hung its calendar off `document.body` and so opened *underneath* the `<dialog>` every field of its lives in, invisible on every platform. The app is back to zero runtime dependencies | flatpickr, vendored (was D28) |
+| D36 | The start picker has no calendar: a time before 4:00 AM is the day after the plan's date, 4:00 AM and later is the plan's own date | A day chooser on every edit, for a case that arises once in a plan |
+| D37 | No Duplicate — not in the editor, not in the selection toolbar, not as an operation | Duplicate in both places |
+| D38 | A location links only where someone pasted a link. Plain text is never turned into a map search | Auto-linking every location, which would send "Bridal suite, 3rd floor" to a map of nothing |

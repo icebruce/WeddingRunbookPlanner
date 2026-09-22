@@ -157,7 +157,7 @@ Pinned filter row: 44 px, `--sel-tint` glass, `Showing **Photographer** · 2 of 
 - Tags: 26 px tall, 13 px radius, 13/550; stage tag uses phase tint with phase-coloured icon; people tags use `--fill`; `+N` uses `--fill-strong` and 650.
 - No drag handle. The card body is the drag surface; where there is a mouse, the grab cursor is the whole affordance. The stage bar therefore sits at its specced 10 px from the left, and the body starts at 26 px.
 
-**Desktop card:** columns `bar | time 132 | stage 138 | title & meta (1fr) | lock`. Row 1: time range (13 `--soft`) over duration (14/600), stage tag, title (16/600) with glyphs, lock (34 px button, `#9A9CA3`, locked `--fixed`). There is no pencil and no ⋯ button on the card face — a double-click opens the editor, and Duplicate and Delete live in it. Row 2: location left, people right. Under 30 min: padding 7, people hidden, dots shown.
+**Desktop card:** columns `bar | time 132 | stage 138 | title & meta (1fr) | lock`. Row 1: time range (13 `--soft`) over duration (14/600), stage tag, title (16/600) with glyphs, lock (34 px button, `#9A9CA3`, locked `--fixed`). There is no pencil and no ⋯ button on the card face — a double-click opens the editor, and Delete lives in it. Row 2: location left, people right. Under 30 min: padding 7, people hidden, dots shown.
 
 **States**
 
@@ -206,6 +206,12 @@ Pulse: `box-shadow` ring expanding 0 → 7 px and fading, 1.8 s, infinite; disab
 - **Inputs:** 46 px (40 desktop), `--surface-2`, 12 px radius, 17 px text (15 desktop); focus 2 px `--sel` ring on `--surface`; error 1.5 px `--bad` ring plus message below (15 `--bad` with warning icon).
 - **Segmented control:** `--fill-strong` track 9 px radius, 30 px segments, selected white with small shadow.
 - **Stepper:** 36 px track, 44 px buttons, value 16/600.
+- **Picker field:** a value you press, not a box you type in — 36 px tall, `--fill`, 9 px radius, 15/550 tabular, with a 16 px glyph before the reading. Never a `readonly` input: that announces as disabled, which is the one thing it is not.
+- **Picker:** a sheet like any other, so it rises from the bottom edge on a phone and centres at 380 px on a laptop, and it always confirms with `Set` rather than applying live. Header is the sheet header at 52 px (`Cancel` · title · `Set`); under the body a reading line (13 `--soft`, tabular) says what `Set` will commit; an optional field adds a full-width `Clear` at the foot.
+  - **Wheel:** three columns over one fixed centre band — `--fill`, 44 px tall, 11 px radius, inset 14 px. Rows 44 px at 22/500 `--faint`, the centred row 22/650 `--ink`; the column is masked to transparent at both ends so values fade rather than stop. Columns 74 px (AM/PM 64 px at 18 px).
+  - **Calendar:** 7-column grid, 40 px squares on a 10 px radius, weekday heads 11/600 `--soft`, month name 16/650 with 40 px arrows either side. The selected day is `--sel` filled; the plan's own date carries a `--hair` inset outline so it is never a hunt.
+- **Stage chips in the editor:** the card's own `.stage-tag` exactly — 26 px, 13 px radius, 13/550, phase tint with a phase-coloured 14 px icon — raised to the 44 px touch floor like every other control. The editor shows the result; it cannot be a size the result never is.
+- **Location:** one text field with a 46 px map button beside it, outlined while there is no link and filled `--sel` once there is. The link itself lives in a `--surface-2` row that opens beneath, monospace at 15 px, with its own label. On a card, a location with a link is the whole row in `--sel-text` with the pin in the same colour; without one it is `--soft` text and not pressable.
 - **Action sheet (phone):** two grouped cards (14 px radius); header 14/600 + 13 `--soft`; options 62 px min, centered, 18 px `--sel` title + 13 `--soft` description; separate Cancel 58 px 18/650.
 - **Menu:** 250 px, 14 px radius, rows 46 px, icon 19 px + 17 px text; value or switch right-aligned; 6 px separators between groups. Desktop menus 15 px text, 40 px rows.
 - **Alert:** 36 px side margins, 18 px radius, icon well 44 px, title 17/650, body 14, stacked 46 px buttons (primary filled `--sel`), footnote 13.

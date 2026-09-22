@@ -289,7 +289,7 @@ test.describe('view only', () => {
 
     await page.locator('.toolbar-buttons button').click();
     await expect(page.locator('.mode-pill--editing')).toBeVisible();
-    await expect(page.locator('.toolbar-buttons button')).toHaveCount(5);
+    await expect(page.locator('.toolbar-buttons button')).toHaveCount(4);
   });
 
   test('the live strip stays under the top bar when the day is scrolled', async ({ page, server }) => {

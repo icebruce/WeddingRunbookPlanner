@@ -888,10 +888,25 @@ function bindSheet(dialog) {
   // keyboard automatically. Without this the row a phone just interacted
   // with can sit under the keyboard, or off the bottom of a short sheet,
   // with no way back to it but a manual scroll.
+  //
+  // This is deliberately not `scrollIntoView`. That walks every scrollable
+  // ancestor, and a `<dialog>` is one — the UA stylesheet gives it
+  // `overflow: auto` — so tapping a stage chip scrolled the sheet body by
+  // half a screen *and* shifted the dialog underneath it, which is what made
+  // the editor feel like it had seized. Here nothing moves unless the row is
+  // genuinely outside the body, and then only the body moves, by the least
+  // it can.
   const sheetBody = dialog.querySelector('.sheet-body');
   sheetBody?.addEventListener('focusin', event => {
     const row = event.target.closest('.field, .group-row, .stage-choice');
-    row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (!row) return;
+    const view = sheetBody.getBoundingClientRect();
+    const box = row.getBoundingClientRect();
+    const MARGIN = 12;
+    const below = box.bottom - (view.bottom - MARGIN);
+    const above = (view.top + MARGIN) - box.top;
+    const delta = below > 0 ? below : above > 0 ? -above : 0;
+    if (delta) sheetBody.scrollBy({ top: delta, behavior: 'smooth' });
   });
 
   if (dialog.id === 'activity-dialog') {
@@ -976,10 +991,6 @@ function addActivity() {
 const ACTION_HANDLERS = {
   select(_, element) {
     store.setUi({ selectedId: element.dataset.id, openMenu: null }, { regions: ['timeline', 'toolbar'] });
-  },
-  duplicate(_, element) {
-    const result = commit('activity.duplicate', { id: element.dataset.id, newId: uid() });
-    if (result) store.setUi({ openMenu: null }, { regions: ['timeline', 'toolbar'] });
   },
   edit(_, element) {
     openEditor(element.dataset.id);
@@ -1437,7 +1448,17 @@ const versions = createVersions({
   resetDialogKey: () => { currentDialogKey = null; },
   clock
 });
-const activityForm = createActivityForm({ store, commit, closeSheet, clock });
+const activityForm = createActivityForm({
+  store,
+  commit,
+  closeSheet,
+  clock,
+  // A picker opens on top of the sheet that owns the field. It goes in the
+  // alert root for the same reason the discard question does: that root is
+  // already what Escape, the scrim and hardware back look at first, so a
+  // picker needs no plumbing of its own to close correctly.
+  pickerOptions: { overlayRoot: alertRoot, onOverlayChange: syncOverlayHistory }
+});
 
 /**
  * Editing on the day is deliberate, and it lapses. Leaving the app for five

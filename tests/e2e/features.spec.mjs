@@ -112,7 +112,7 @@ test.describe('plan settings', () => {
 
     await menu(page);
     await page.locator('[data-menu-action="settings"]').click();
-    await setPicker(page, page.locator('input[name="sunset"]'), '17:05');
+    await setPicker(page, 'sunset', '17:05');
     await page.locator('#settings-form button[type="submit"]').click();
 
     await expect(page.locator('.sunset-pill')).toContainText('5:05');
@@ -128,8 +128,8 @@ test.describe('plan settings', () => {
 
     await menu(page);
     await page.locator('[data-menu-action="settings"]').click();
-    await setPicker(page, page.locator('input[name="timelineStart"]'), '09:00');
-    await setPicker(page, page.locator('input[name="timelineEnd"]'), '01:00');
+    await setPicker(page, 'timelineStart', '09:00');
+    await setPicker(page, 'timelineEnd', '01:00');
     await page.locator('#settings-form button[type="submit"]').click();
     await expect(page.locator('#settings-dialog')).toHaveCount(0);
 
@@ -149,7 +149,7 @@ test.describe('plan settings', () => {
 
     await menu(page);
     await page.locator('[data-menu-action="settings"]').click();
-    await setPicker(page, page.locator('input[name="timelineStart"]'), '09:00');
+    await setPicker(page, 'timelineStart', '09:00');
     await page.locator('#settings-form button[type="submit"]').click();
     await expect(page.locator('.save-indicator')).toHaveText('Saved');
 
@@ -438,7 +438,7 @@ test('a sunset marker that is cleared stays cleared', async ({ page, server }, t
 
   await menu(page);
   await page.locator('[data-menu-action="settings"]').click();
-  await setPicker(page, page.locator('input[name="sunset"]'), '');
+  await setPicker(page, 'sunset', null);
   await page.locator('#settings-dialog .button--done').click();
   await expect(page.locator('.save-indicator')).toHaveText('Saved');
   await expect(page.locator('.sunset-line')).toHaveCount(0);

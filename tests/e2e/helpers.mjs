@@ -301,17 +301,57 @@ export async function setClock(page, isoTime) {
 }
 
 /**
- * Sets a flatpickr field directly through the widget's own API rather than
- * typing into it — the field is `readonly` by design (picking a time is
- * meant to go through the calendar and the clock, not a keyboard), so a plain
- * `.fill()` cannot reach it. flatpickr keeps a reference to its instance on
- * the input element itself.
+ * Sets a picker field the way a person does: open it, turn the wheels or press
+ * a day, then Set. The value lives in a hidden input because a picker field is
+ * a value you press rather than a box you type in, so there is nothing for
+ * `.fill()` to reach.
+ *
+ * `value` is what the field stores — absolute minutes for a `datetime` field,
+ * "HH:MM" for a time, "YYYY-MM-DD" for a date. `null` clears an optional one.
  */
-export async function setPicker(page, locator, value) {
-  await locator.evaluate((node, isoOrString) => {
-    const instance = node._flatpickr;
-    if (!instance) throw new Error('flatpickr has not attached to this input yet');
-    if (!isoOrString) instance.clear(true);
-    else instance.setDate(isoOrString, true);
+export async function setPicker(page, name, value) {
+  await page.locator(`[data-picker][data-target="${name}"]`).click();
+  const picker = page.locator('.picker-dialog');
+  await expect(picker).toBeVisible();
+
+  if (value === null) {
+    await picker.locator('[data-pick-clear]').click();
+    await expect(picker).toHaveCount(0);
+    return;
+  }
+
+  const kind = await page.locator(`[data-picker][data-target="${name}"]`).getAttribute('data-picker');
+
+  if (kind === 'date') {
+    await picker.locator(`[data-iso="${value}"]`).click();
+  } else {
+    // A wheel column lands on whichever row is under the centre band, so the
+    // way to set one is to scroll it there — the same thing a finger does.
+    const minutes = kind === 'datetime' ? Number(value) % (24 * 60) : toMinutes(value);
+    const hours24 = Math.floor(minutes / 60);
+    const hour = hours24 % 12 === 0 ? 12 : hours24 % 12;
+    await scrollWheel(picker, 'hour', String(hour).padStart(2, '0'));
+    await scrollWheel(picker, 'minute', String(minutes % 60).padStart(2, '0'));
+    await scrollWheel(picker, 'ampm', hours24 < 12 ? 'AM' : 'PM');
+  }
+
+  await picker.locator('[data-pick-set]').click();
+  await expect(picker).toHaveCount(0);
+}
+
+function toMinutes(value) {
+  const [hours, minutes] = String(value).split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+async function scrollWheel(picker, unit, value) {
+  const column = picker.locator(`.wheel-col[data-unit="${unit}"]`);
+  await column.evaluate((node, wanted) => {
+    const index = [...node.children].findIndex(child => child.dataset.value === wanted);
+    if (index < 0) throw new Error(`No ${wanted} on this wheel`);
+    node.scrollTop = index * 44;
+    node.dispatchEvent(new Event('scroll'));
   }, value);
+  // The column reads its value once it has been still for a moment.
+  await expect(column).toHaveAttribute('aria-valuetext', value);
 }

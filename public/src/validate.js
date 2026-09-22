@@ -33,6 +33,7 @@ export const LIMITS = {
   activityId: 64,
   activityTitle: 120,
   location: 140,
+  mapUrl: 2000,
   notes: 1000,
   people: 30,
   personName: 80,
@@ -115,6 +116,32 @@ function activityStart(value, { field }) {
   return Math.round(number / 5) * 5;
 }
 
+/**
+ * The optional map link on an activity.
+ *
+ * Only `http` and `https` are accepted, and that is the whole point of
+ * validating it: the value ends up in an `href`, and a `javascript:` URL there
+ * would run whatever the person who typed it wanted. Which map service it
+ * points at is not this module's business — short links, regional Google
+ * domains and Apple Maps all read the same from here.
+ */
+function optionalUrl(value, { field }) {
+  if (value === undefined || value === null || value === '') return '';
+  const raw = String(value).trim();
+  if (!raw) return '';
+  if (raw.length > LIMITS.mapUrl) fail('too_long', `A map link can be at most ${LIMITS.mapUrl} characters.`, field);
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    fail('invalid_url', 'A map link must be a full web address, starting with https://.', field);
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    fail('invalid_url', 'A map link must be a full web address, starting with https://.', field);
+  }
+  return raw;
+}
+
 /** A calendar date that actually exists — "2026-02-31" is rejected. */
 function isRealDate(value) {
   if (!DATE_PATTERN.test(value)) return false;
@@ -145,6 +172,7 @@ export function validateActivity(input, { field = 'activity', seenIds } = {}) {
   if (!STAGE_IDS.includes(stage)) fail('invalid_stage', 'That stage is not one of the available stages.', `${field}.stage`);
 
   const location = text(input.location, { field: `${field}.location`, max: LIMITS.location, label: 'Location' });
+  const mapUrl = optionalUrl(input.mapUrl, { field: `${field}.mapUrl` });
   const notes = text(input.notes, { field: `${field}.notes`, max: LIMITS.notes, label: 'Notes' });
 
   const rawPeople = input.people ?? [];
@@ -166,7 +194,7 @@ export function validateActivity(input, { field = 'activity', seenIds } = {}) {
   // together) leaves this one where it is. It has no effect on anything else.
   const locked = Boolean(input.locked);
 
-  return { id, title, duration, stage, location, people, notes, start, locked };
+  return { id, title, duration, stage, location, mapUrl, people, notes, start, locked };
 }
 
 export const DEFAULT_TIMEZONE = 'America/Toronto';

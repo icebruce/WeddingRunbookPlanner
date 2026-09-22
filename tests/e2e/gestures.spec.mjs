@@ -133,7 +133,7 @@ test('D2, F6: the toolbar replaces the + and says what the card hid', async ({ p
 
   // The card could not show its people; the toolbar does.
   await expect(page.locator('.toolbar-hidden')).toContainText('Bride');
-  await expect(page.locator('.toolbar-buttons button')).toHaveCount(5);
+  await expect(page.locator('.toolbar-buttons button')).toHaveCount(4);
 });
 
 test.describe('long press', () => {

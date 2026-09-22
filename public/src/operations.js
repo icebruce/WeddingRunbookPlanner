@@ -96,15 +96,6 @@ export function insertAfter(plan, afterId, activity) {
   return { plan: next };
 }
 
-export function duplicate(plan, id, newId) {
-  const source = find(plan, id);
-  if (!source) return null;
-  // The copy sits right after the original, flexed 15 minutes later so it is
-  // not stacked exactly on top of it.
-  const copy = { ...structuredClone(source), id: newId, start: source.start + source.duration, locked: false };
-  return insertAfter(plan, id, copy);
-}
-
 export function remove(plan, id) {
   if (!find(plan, id)) return null;
   const next = clone(plan);

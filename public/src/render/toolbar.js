@@ -2,7 +2,7 @@
  * The phone's selection toolbar (D2).
  *
  * Selecting a card replaces the floating + with a toolbar that says what is
- * selected, lists anything the card had to hide, and offers the five things you
+ * selected, lists anything the card had to hide, and offers the four things you
  * can do to it. This is why a card can be quiet: the controls are not on every
  * card, and the details a short card dropped are not lost — they are here.
  */
@@ -15,7 +15,6 @@ const BUTTONS = [
   { action: 'edit', label: 'Edit', glyph: 'settings' },
   { action: 'lock', label: null, glyph: null },
   { action: 'menu', label: 'Stage', glyph: 'swatch' },
-  { action: 'duplicate', label: 'Duplicate', glyph: 'copy' },
   { action: 'delete', label: 'Delete', glyph: 'trash', danger: true }
 ];
 

@@ -120,7 +120,9 @@ test('F19: a start set through the picker lands exactly, with no browser message
 
   await openActivityEditor(page, firstCard(page));
   const dialog = page.locator('#activity-dialog');
-  await setPicker(page, dialog.locator('input[name="start"]'), '2026-11-21 09:03');
+  // The wheel only offers the 5-minute grid, so there is no off-grid minute
+  // left for the browser to complain about.
+  await setPicker(page, 'start', 9 * 60 + 5);
 
   const valid = await dialog.locator('#activity-form').evaluate(form => form.checkValidity());
   expect(valid).toBe(true);
@@ -129,7 +131,6 @@ test('F19: a start set through the picker lands exactly, with no browser message
   await expect(dialog).toHaveCount(0);
   await expect(page.locator('.save-indicator')).toHaveText('Saved');
 
-  // 9:02 rounds up to the 5-minute grid, with no browser validation message.
   expect((await server.read()).plan.activities[0].start).toBe(9 * 60 + 5);
   // The card shows a range, and a range drops the first AM/PM when both
   // halves share it: "9:05 – 9:50 AM".

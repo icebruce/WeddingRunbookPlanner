@@ -46,6 +46,32 @@ export function renderCardMenu(item) {
   </div>`;
 }
 
+/**
+ * The location row.
+ *
+ * A link only where there is a link. Most locations in a wedding plan are
+ * notes to the couple — a room, a floor, "TBD" — and turning those into a map
+ * search would offer something that opens a map of nothing, which reads as
+ * broken rather than as helpful. So the row is plain text until somebody has
+ * pasted a real link, and only then does it become something to press. It
+ * stays a link on the day, when the rest of the card has gone read-only: a map
+ * link is exactly what somebody in a car needs and it changes nothing.
+ *
+ * `rel` is not optional here: `noopener` keeps the opened tab from reaching
+ * back into this one through `window.opener`, and the link comes from whatever
+ * was pasted into the editor.
+ */
+function locationRow(item) {
+  if (!item.location && !item.mapUrl) return '';
+  const text = escapeHtml(item.location || 'Open in Maps');
+  if (!item.mapUrl) {
+    return `<div class="card-row card-location" data-drop="2">${icon('pin')}<span>${text}</span></div>`;
+  }
+  return `<div class="card-row card-location" data-drop="2"><a class="card-location-link"
+    href="${escapeHtml(item.mapUrl)}" target="_blank" rel="noopener noreferrer"
+    data-role="map-link">${icon('pin')}<span>${text}</span></a></div>`;
+}
+
 /** The warning line. It is never dropped: it is the reason to look at the card. */
 function warning(item) {
   if (!item.overlaps?.length) return '';
@@ -70,6 +96,7 @@ function accessibleName(item, stage) {
   if (item.locked) parts.push('locked');
   if (item.overlaps?.length) parts.push(`overlaps ${item.overlapMinutes} minutes`);
   if (item.location) parts.push(item.location);
+  if (item.mapUrl) parts.push('has a map link');
   if (item.people?.length) parts.push(item.people.join(', '));
   return parts.join(', ');
 }
@@ -131,7 +158,7 @@ export function renderCard(card, { ui, filter = null, nowMinutes = null }) {
        ${live ? `<div class="card-row card-progress" data-drop="3" aria-hidden="true"><i style="width:${Math.round(progress * 100)}%"></i></div>` : ''}
        ${narrow ? '' : `<div class="card-row card-stage" data-drop="1">${stagePill(stage, { interactive: !viewOnly, expanded: stageOpen, id: item.id })}</div>`}
        <div class="card-meta">
-         ${item.location ? `<div class="card-row card-location" data-drop="2">${icon('pin')}<span>${escapeHtml(item.location)}</span></div>` : ''}
+         ${locationRow(item)}
          ${people ? `<div class="card-row card-people" data-drop="0">${people}</div>` : ''}
        </div>`;
 

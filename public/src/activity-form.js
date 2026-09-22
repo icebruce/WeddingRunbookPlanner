@@ -6,13 +6,13 @@
  * baseline itself, so the rest of the app only ever asks
  * `hasUnsavedChanges(form)` rather than reaching in for a signature.
  */
-import { uid } from './dom.js';
+
 import { checkPlan, normalizeDuration, roundTimeUp, validateActivity } from './validate.js';
 import { formatDuration, formatTime } from './schedule.js';
 import { peopleChips } from './render/sheets.js';
 import { initPickers } from './render/pickers.js';
 
-export function createActivityForm({ store, commit, closeSheet, clock }) {
+export function createActivityForm({ store, commit, closeSheet, clock, pickerOptions = {} }) {
   /** The form's contents when it opened, so Cancel knows whether to ask. */
   let baseline = null;
 
@@ -42,10 +42,13 @@ export function createActivityForm({ store, commit, closeSheet, clock }) {
       form.querySelector('.sheet-body')?.prepend(note);
       return;
     }
-    control.setAttribute('aria-invalid', 'true');
-    control.setAttribute('aria-describedby', note.id);
-    (control.closest('.field') || control.parentElement).append(note);
-    control.focus();
+    const focusable = control.type === 'hidden'
+      ? form.querySelector(`[data-target="${name}"]`)
+      : control;
+    (focusable || control).setAttribute('aria-invalid', 'true');
+    (focusable || control).setAttribute('aria-describedby', note.id);
+    (control.closest('.field, .group-row') || control.parentElement).append(note);
+    focusable?.focus();
   }
 
   // ------------------------------------------------------------- people chips
@@ -125,20 +128,6 @@ export function createActivityForm({ store, commit, closeSheet, clock }) {
 
   // ------------------------------------------------------------- date/time
 
-  /** flatpickr's own "Y-m-d H:i" back into a Date, read from the hidden input it keeps in sync. */
-  function parseDateTimeLocal(value) {
-    const match = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/.exec(value || '');
-    if (!match) return null;
-    const [, year, month, day, hour, minute] = match.map(Number);
-    return new Date(year, month - 1, day, hour, minute);
-  }
-
-  /** An activity's start, in minutes from midnight on the plan's date. */
-  function minutesFromPlanDate(date) {
-    const planMidnight = new Date(`${store.plan.date}T00:00:00`);
-    return Math.round((date - planMidnight) / 60_000);
-  }
-
   /** "Ends" is worked out from the start and the duration, and shown live. */
   function updateEnds(dialog) {
     const endNode = dialog.querySelector('[data-ends]');
@@ -147,9 +136,9 @@ export function createActivityForm({ store, commit, closeSheet, clock }) {
     if (humanNode) humanNode.textContent = formatDuration(duration);
 
     if (!endNode) return;
-    const startDate = parseDateTimeLocal(dialog.querySelector('input[name="start"]').value);
-    if (!startDate) { endNode.textContent = '—'; return; }
-    endNode.textContent = formatTime(minutesFromPlanDate(startDate) + duration);
+    const start = Number(dialog.querySelector('input[name="start"]').value);
+    if (!Number.isFinite(start)) { endNode.textContent = '—'; return; }
+    endNode.textContent = formatTime(start + duration);
   }
 
   /** A stable description of the form, for telling "changed" from "untouched". */
@@ -168,16 +157,16 @@ export function createActivityForm({ store, commit, closeSheet, clock }) {
     clearFieldErrors(form);
 
     const data = new FormData(form);
-    const startDate = parseDateTimeLocal(String(data.get('start') || ''));
     const candidate = {
       id: String(data.get('id')),
       title: String(data.get('title')).trim(),
       duration: normalizeDuration(Number(data.get('duration'))),
       stage: String(data.get('stage')),
       location: String(data.get('location')).trim(),
+      mapUrl: String(data.get('mapUrl') || '').trim(),
       people: peopleValues(form),
       notes: String(data.get('notes')).trim(),
-      start: startDate ? minutesFromPlanDate(startDate) : 0,
+      start: Number(data.get('start')) || 0,
       locked: data.get('locked') === 'on'
     };
 
@@ -255,6 +244,40 @@ export function createActivityForm({ store, commit, closeSheet, clock }) {
 
   // ------------------------------------------------------------------ dialogs
 
+  /**
+   * The Google Maps link.
+   *
+   * It is behind a button rather than a field of its own on the face of the
+   * editor, because most locations never get one — a room, a floor, "TBD".
+   * The button says which state it is in before it is pressed: filled once a
+   * link is there, outlined while there is not.
+   */
+  function bindMapLink(dialog) {
+    const toggle = dialog.querySelector('#map-link-toggle');
+    const row = dialog.querySelector('#map-link-row');
+    const field = dialog.querySelector('#map-url-field');
+    if (!toggle || !row || !field) return;
+
+    toggle.addEventListener('click', () => {
+      row.hidden = !row.hidden;
+      toggle.setAttribute('aria-expanded', String(!row.hidden));
+      if (!row.hidden) field.focus();
+    });
+
+    const paint = () => {
+      const linked = Boolean(field.value.trim());
+      toggle.setAttribute('aria-pressed', String(linked));
+      toggle.setAttribute('aria-label', linked ? 'Edit the Google Maps link' : 'Add a Google Maps link');
+    };
+    field.addEventListener('input', paint);
+    // A link already on the activity opens the row, so it is never hidden
+    // behind a button that looks the same as an empty one.
+    if (field.value.trim()) {
+      row.hidden = false;
+      toggle.setAttribute('aria-expanded', 'true');
+    }
+  }
+
   function bindActivityDialog(dialog) {
     const form = dialog.querySelector('#activity-form');
     form.addEventListener('submit', submitActivity);
@@ -267,14 +290,6 @@ export function createActivityForm({ store, commit, closeSheet, clock }) {
       closeSheet();
       commit('activity.remove', { id });
       store.setUi({ selectedId: null }, { regions: ['timeline', 'toolbar'] });
-    });
-
-    dialog.querySelector('#duplicate-activity')?.addEventListener('click', () => {
-      const id = store.ui.dialog.activity.id;
-      baseline = null;
-      closeSheet();
-      const result = commit('activity.duplicate', { id, newId: uid() });
-      if (result) store.setUi({ selectedId: null }, { regions: ['timeline', 'toolbar'] });
     });
 
     for (const button of dialog.querySelectorAll('[data-duration-step]')) {
@@ -292,8 +307,9 @@ export function createActivityForm({ store, commit, closeSheet, clock }) {
     });
     duration?.addEventListener('input', () => updateEnds(dialog));
 
-    void initPickers(dialog, { onChange: () => updateEnds(dialog) });
+    initPickers(dialog, { ...pickerOptions, onChange: () => updateEnds(dialog) });
 
+    bindMapLink(dialog);
     bindPeopleEditor(dialog);
     // What the form looked like on open, so Cancel knows whether to ask.
     baseline = formSignature(form);
@@ -301,7 +317,7 @@ export function createActivityForm({ store, commit, closeSheet, clock }) {
 
   function bindSettingsDialog(dialog) {
     dialog.querySelector('#settings-form').addEventListener('submit', submitSettings);
-    void initPickers(dialog);
+    initPickers(dialog, pickerOptions);
   }
 
   function hasUnsavedChanges(form) {

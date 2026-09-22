@@ -24,6 +24,7 @@ export function activity(id, start, duration, extra = {}) {
     duration,
     stage: 'preparation',
     location: '',
+    mapUrl: '',
     people: [],
     notes: '',
     locked: false,

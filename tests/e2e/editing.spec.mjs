@@ -29,8 +29,8 @@ async function act(page, id, action) {
     await page.locator(`.toolbar [data-action="${action}"]`).click();
     return;
   }
-  // The wide layout keeps lock on the card itself; edit, delete and
-  // duplicate live inside the editor now, not a popover on the card.
+  // The wide layout keeps lock on the card itself; edit and delete live
+  // inside the editor now, not a popover on the card.
   if (action === 'lock') {
     await card(page, id).hover();
     await card(page, id).locator('.lock-button').click();
@@ -38,7 +38,6 @@ async function act(page, id, action) {
   }
   await openActivityEditor(page, card(page, id));
   if (action === 'delete') return page.locator('#delete-activity').click();
-  if (action === 'duplicate') return page.locator('#duplicate-activity').click();
 }
 
 test('the editor asks for things in the order the spec gives', async ({ page, server }) => {
@@ -46,27 +45,13 @@ test('the editor asks for things in the order the spec gives', async ({ page, se
   await signInAndWaitForPlan(page);
   await openActivityEditor(page, card(page, 'portraits'));
 
-  const labels = await editor(page).locator('.field-label').allTextContents();
+  // The Google Maps link's own label is inside a row that stays closed until
+  // there is a link, so it is not one of the sheet's sections.
+  const labels = await editor(page).locator('.sheet-body > .field-label, .sheet-body > .field > .field-label').allTextContents();
   expect(labels).toEqual(['Name', 'Timing', 'Location', 'Stage', 'People', 'Notes']);
   await expect(editor(page).locator('#delete-activity')).toBeVisible();
-  await expect(editor(page).locator('#duplicate-activity')).toBeVisible();
-});
-
-test('a blocked flatpickr script leaves the timing field editable, not stuck', async ({ page, server }) => {
-  await server.seed({ plan: base() });
-  await page.route('**/vendor/flatpickr/flatpickr.min.js', route => route.abort());
-  await signInAndWaitForPlan(page);
-  await openActivityEditor(page, card(page, 'portraits'));
-
-  // With no flatpickr to take the field over, it has to stay a plain,
-  // editable text input rather than the permanently `readonly` one the
-  // markup starts with — or nothing, not even a screen reader, can reach it.
-  const start = editor(page).locator('input[name="start"]');
-  await expect(start).not.toHaveAttribute('readonly', '');
-  await start.fill('2026-11-21 13:05');
-  await editor(page).locator('.button--done').click();
-
-  await expect(card(page, 'portraits')).toContainText('1:05');
+  // Duplicate is gone from the editor and from everywhere else (§5.2).
+  await expect(editor(page).locator('#duplicate-activity')).toHaveCount(0);
 });
 
 test('the timing block works out the end as you change the duration', async ({ page, server }) => {
@@ -99,13 +84,101 @@ test('the editor opens on the start an activity already has, and a new one can b
   await signInAndWaitForPlan(page);
   await openActivityEditor(page, card(page, 'portraits'));
 
-  await expect(editor(page).locator('input[name="start"]')).toHaveValue('2026-11-21 12:15');
+  await expect(editor(page).locator('input[name="start"]')).toHaveValue(String(T(12, 15)));
+  await expect(editor(page).locator('[data-target="start"] .picker-text')).toHaveText('Sat, Nov 21 · 12:15 PM');
 
-  await setPicker(page, editor(page).locator('input[name="start"]'), '2026-11-21 09:00');
+  await setPicker(page, 'start', T(9));
   await editor(page).locator('button[type="submit"]').click();
   await saved(page);
 
   expect((await server.read()).plan.activities.find(a => a.id === 'portraits').start).toBe(T(9));
+});
+
+test.describe('the map link', () => {
+  const linked = () => seedPlan({
+    activities: [
+      activity('venue', T(16), 60, {
+        title: 'Cocktail Hour',
+        location: 'Le Richmond',
+        mapUrl: 'https://maps.app.goo.gl/venue123'
+      }),
+      activity('suite', T(17), 30, { title: 'Room change', location: 'Bridal suite, 3rd floor' })
+    ]
+  });
+
+  test('a card links its location only where there is a link to open', async ({ page, server }) => {
+    await server.seed({ plan: linked() });
+    await signInAndWaitForPlan(page);
+
+    const link = card(page, 'venue').locator('.card-location-link');
+    await expect(link).toHaveText('Le Richmond');
+    await expect(link).toHaveAttribute('href', 'https://maps.app.goo.gl/venue123');
+    // A new tab, and one that cannot reach back into this one.
+    await expect(link).toHaveAttribute('target', '_blank');
+    await expect(link).toHaveAttribute('rel', /noopener/);
+
+    // "Bridal suite, 3rd floor" is a note to the couple, not a place a map can
+    // find, so it stays exactly that (D38).
+    await expect(card(page, 'suite').locator('.card-location')).toContainText('Bridal suite');
+    await expect(card(page, 'suite').locator('.card-location-link')).toHaveCount(0);
+  });
+
+  test('the link row opens on the button, and the button says whether there is one', async ({ page, server }) => {
+    await server.seed({ plan: linked() });
+    await signInAndWaitForPlan(page);
+
+    // Nothing attached: the row is closed and the button is not pressed.
+    await openActivityEditor(page, card(page, 'suite'));
+    await expect(editor(page).locator('#map-link-row')).toBeHidden();
+    await expect(editor(page).locator('#map-link-toggle')).toHaveAttribute('aria-pressed', 'false');
+
+    await editor(page).locator('#map-link-toggle').click();
+    await expect(editor(page).locator('#map-link-row')).toBeVisible();
+    await editor(page).locator('#map-url-field').fill('https://www.google.com/maps/place/Le+Richmond');
+    await expect(editor(page).locator('#map-link-toggle')).toHaveAttribute('aria-pressed', 'true');
+
+    await editor(page).locator('button[type="submit"]').click();
+    await saved(page);
+    expect((await server.read()).plan.activities.find(a => a.id === 'suite').mapUrl)
+      .toBe('https://www.google.com/maps/place/Le+Richmond');
+    await expect(card(page, 'suite').locator('.card-location-link')).toHaveCount(1);
+
+    // A link already on the activity is not hidden behind a button that looks
+    // the same as an empty one.
+    await openActivityEditor(page, card(page, 'venue'));
+    await expect(editor(page).locator('#map-link-row')).toBeVisible();
+    await expect(editor(page).locator('#map-link-toggle')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('a link can be taken off again, and the card goes back to plain text', async ({ page, server }) => {
+    await server.seed({ plan: linked() });
+    await signInAndWaitForPlan(page);
+
+    await openActivityEditor(page, card(page, 'venue'));
+    await editor(page).locator('#map-url-field').fill('');
+    await editor(page).locator('button[type="submit"]').click();
+    await saved(page);
+
+    expect((await server.read()).plan.activities.find(a => a.id === 'venue').mapUrl).toBe('');
+    await expect(card(page, 'venue').locator('.card-location-link')).toHaveCount(0);
+    await expect(card(page, 'venue').locator('.card-location')).toContainText('Le Richmond');
+  });
+
+  test('a link that is not a web address is refused with the sheet still open', async ({ page, server }) => {
+    await server.seed({ plan: linked() });
+    await signInAndWaitForPlan(page);
+
+    await openActivityEditor(page, card(page, 'suite'));
+    await editor(page).locator('#map-link-toggle').click();
+    // The value lands in an href, so a scheme that only runs code is refused
+    // rather than escaped.
+    await editor(page).locator('#map-url-field').fill('javascript:alert(1)');
+    await editor(page).locator('button[type="submit"]').click();
+
+    await expect(editor(page)).toBeVisible();
+    await expect(editor(page).locator('.field-error')).toContainText('https://');
+    expect((await server.read()).plan.activities.find(a => a.id === 'suite').mapUrl).toBe('');
+  });
 });
 
 test('Cancel asks before throwing away typing, and only then', async ({ page, server }) => {
@@ -150,21 +223,6 @@ test('D7: deleting does not ask, and offers Undo instead', async ({ page, server
   await expect(card(page, 'travel')).toHaveCount(1);
   expect((await server.read()).plan.activities.map(a => a.id)).toEqual(
     ['ready', 'portraits', 'travel', 'ceremony', 'cocktail']);
-});
-
-test('D15: duplicating puts the copy right after the original, unlocked', async ({ page, server }) => {
-  await server.seed({ plan: base() });
-  await signInAndWaitForPlan(page);
-
-  await act(page, 'ceremony', 'duplicate');
-  await saved(page);
-
-  const stored = (await server.read()).plan.activities;
-  expect(stored[3].id).toBe('ceremony');
-  expect(stored[4].title).toBe('Ceremony');
-  expect(stored[4].id).not.toBe('ceremony');
-  expect(stored[4].start, 'right after the original ends').toBe(T(15, 45));
-  expect(stored[4].locked, 'a copy is never locked').toBe(false);
 });
 
 test('locking and unlocking toggles in place, with nothing else moving', async ({ page, server }) => {
@@ -430,8 +488,7 @@ test.describe('undo', () => {
       await editor(page).locator('input[name="title"]').fill('Drive to the church');
       await editor(page).locator('button[type="submit"]').click();
     }],
-    ['a delete', async page => act(page, 'travel', 'delete')],
-    ['a duplicate', async page => act(page, 'travel', 'duplicate')]
+    ['a delete', async page => act(page, 'travel', 'delete')]
   ];
 
   for (const [name, run] of actions) {

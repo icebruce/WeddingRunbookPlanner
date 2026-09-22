@@ -140,7 +140,9 @@ export function createGestures({ root, store, commit, repaint, onDoubleClick, on
      * fires. A pointer keeps the plain exclusion — a mouse on a button that
      * drifts three pixels meant to press the button.
      */
-    const onButton = Boolean(event.target.closest('button'));
+    // A map link is a control like any other here: a tap opens the map, a hold
+    // still lifts the card.
+    const onButton = Boolean(event.target.closest('button, a[href]'));
     if (onButton && !draggable) return;
 
     const id = card.dataset.activityId;
