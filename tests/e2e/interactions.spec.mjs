@@ -430,11 +430,13 @@ test('a keyboard that shrinks the layout viewport is not counted twice', async (
   await sheetAtRest(page);
 
   await page.locator('#activity-form textarea[name="notes"]').focus();
+  // Shrinking the window is what that behaviour is: the layout viewport, the
+  // visual viewport and `dvh` all move together, and `window.resize` fires.
+  // Done this way rather than through CDP's device metrics, which only
+  // Chromium has — on WebKit that threw, and the projects that fall back to
+  // Chromium hid it.
   const size = page.viewportSize();
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send('Emulation.setDeviceMetricsOverride', {
-    width: size.width, height: size.height - 320, deviceScaleFactor: 0, mobile: true
-  });
+  await page.setViewportSize({ width: size.width, height: size.height - 320 });
   await page.waitForTimeout(200);
 
   const after = await page.evaluate(() => ({
@@ -443,10 +445,12 @@ test('a keyboard that shrinks the layout viewport is not counted twice', async (
     viewport: document.documentElement.clientHeight
   }));
   expect(after.inset).toBe(0);
-  // The sheet still reaches the bottom of what is left of the screen.
-  expect(after.bottom).toBe(after.viewport);
+  // The sheet still reaches the bottom of what is left of the screen. Within
+  // a pixel of it: the dialog's box is a fraction on a non-integer device
+  // ratio, and the contract is that nothing is lifted, not the rounding.
+  expect(Math.abs(after.bottom - after.viewport)).toBeLessThanOrEqual(1);
 
-  await cdp.send('Emulation.clearDeviceMetricsOverride');
+  await page.setViewportSize(size);
 });
 
 test('a fast load shows nothing at all, and a slow one shows a skeleton', async ({ page, server }) => {
