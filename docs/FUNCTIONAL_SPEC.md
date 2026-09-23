@@ -169,7 +169,7 @@ The summary line shows `20 min conflict ›`.
 
 - Context line: `Getting-ready Portraits · 12:45 – 1:15 PM`
 - Second line (only if the card hides anything): the hidden details, e.g. the full people list.
-- Buttons: **Edit · Lock/Unlock · Stage · Duplicate · Delete** (Delete in red).
+- Buttons: **Delete · Stage · Lock/Unlock · Edit** (Delete in red). Four buttons, four columns; there is no Duplicate (D37).
 
 ### 4.2 Desktop
 
@@ -256,7 +256,7 @@ Available on the selected card (phone) or hovered/selected card (desktop). Locke
 Copies all fields except fixed time (copy is flexible), inserted directly after the original, selected.
 
 ### 5.8 Delete
-No confirmation dialog. The activity is removed, the schedule updates, and a toast offers **Undo** for 6 seconds. Selection clears.
+Delete asks first, wherever it is pressed: an alert — `Delete this activity?` / **Delete** / **Keep it** — over whatever is already open, so Keep it comes back to an editor still filled in. On Delete the activity is removed, the schedule updates, and a toast offers **Undo** for 6 seconds. Selection clears.
 
 ### 5.9 Open-time actions
 Opened by a tall block's + button, or by a long press (touch) / double-click (mouse) on the block itself — a thin block has neither, and offers no way into this sheet at all (§3.4). Header: `35 min open before Ceremony · 2:10 – 2:45 PM`. Open time is computed fresh each time from the current gaps between activities — it is never something stored on an activity that these actions "clear".
@@ -459,7 +459,7 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 | D4 | Stage colours by phase (6), icon identifies the stage | 11 near-duplicate pastels |
 | D5 | Top-edge resize for any unlocked activity; open time is always derived, never stored on an activity (superseded by the post-release timeline rewrite, commit `2939550`) | Bottom-only resize; earlier “no top resize” |
 | D6 | “Keep as buffer” inserts a Buffer activity | Undefined “keep” with no persistent effect |
-| D7 | Undo toast instead of delete confirmation; toasts only for undo, shifts, errors | Browser confirm; toast after every change |
+| D7 | Delete asks once, then the undo toast still runs (Delete moved to the toolbar's first slot, so a slip must not be final); toasts only for undo, shifts, errors | Browser `confirm()`; confirmation *instead of* undo; earlier “no confirmation at all” |
 | D8 | Time-true layout, 20 px per 5 min; rows drop by priority with dots indicator | 68 px minimum card height that pushed cards off their times; 2.6 px/min |
 | D9 | Card row order: title, time, location, stage, people; drop order people → stage → location → time | Stage and people shared a row (rejected) |
 | D10 | Labels at 15/30/60 only; lines every 5 minutes | Ticks every 15 minutes |
@@ -491,3 +491,4 @@ When the app comes back to the foreground (or every 60 s while visible and idle)
 | D36 | The start picker has no calendar: a time before 4:00 AM is the day after the plan's date, 4:00 AM and later is the plan's own date | A day chooser on every edit, for a case that arises once in a plan |
 | D37 | No Duplicate — not in the editor, not in the selection toolbar, not as an operation | Duplicate in both places |
 | D38 | A location links only where someone pasted a link. Plain text is never turned into a map search | Auto-linking every location, which would send "Bridal suite, 3rd floor" to a map of nothing |
+| D39 | Alert buttons: filled `--ink` for the action, quiet for the way back, filled `--bad` where the action throws something away. No icon well, no footnote. The alert is the one place a primary is not `--sel` — it is a decision being forced, not something offered to tap | The mockups' blue alert buttons (`.ab` / `.ab.strong`), which no alert in the app ever shipped; and a *tinted* destructive button, which read quieter than an ordinary primary |

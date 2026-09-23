@@ -29,6 +29,18 @@ async function scan(page) {
   return page.evaluate(SCAN);
 }
 
+/** Delete is in the phone toolbar and inside the editor on a wide screen. */
+async function openDeleteAlert(page) {
+  if (isPhoneLayout(page)) {
+    await card(page, 'ready').click({ position: { x: 40, y: 10 } });
+    await page.locator('.toolbar [data-action="delete"]').click();
+  } else {
+    await openActivityEditor(page, card(page, 'ready'));
+    await page.locator('#delete-activity').click();
+  }
+  await expect(page.locator('#delete-dialog')).toBeVisible();
+}
+
 function report(problems) {
   return problems.map(problem => JSON.stringify(problem)).join('\n');
 }
@@ -81,6 +93,39 @@ for (const theme of THEMES) {
       await setTheme(page, theme);
 
       await openActivityEditor(page, card(page, 'ready'));
+      await page.waitForTimeout(250);
+
+      const problems = await scan(page);
+      expect(problems, report(problems)).toEqual([]);
+    });
+
+    /*
+     * The alerts were the one surface this scan had never been pointed at.
+     * Both are checked, in both themes, because the destructive answer is the
+     * one whose colour carries a meaning — red on red is the easy mistake, and
+     * the only thing standing between it and the screen is this.
+     */
+    test('the delete question is readable', async ({ page, server }) => {
+      await server.seed({ plan: plan() });
+      await signInAndWaitForPlan(page);
+      await setTheme(page, theme);
+
+      await openDeleteAlert(page);
+      await page.waitForTimeout(250);
+
+      const problems = await scan(page);
+      expect(problems, report(problems)).toEqual([]);
+    });
+
+    test('the discard question is readable', async ({ page, server }) => {
+      await server.seed({ plan: plan() });
+      await signInAndWaitForPlan(page);
+      await setTheme(page, theme);
+
+      await openActivityEditor(page, card(page, 'ready'));
+      await page.locator('#activity-form input[name="title"]').fill('Changed my mind');
+      await page.locator('#activity-dialog .sheet-close').first().click();
+      await expect(page.locator('#discard-dialog')).toBeVisible();
       await page.waitForTimeout(250);
 
       const problems = await scan(page);

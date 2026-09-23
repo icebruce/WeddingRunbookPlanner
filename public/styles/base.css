@@ -126,6 +126,13 @@ svg.icon { width: 1.05em; height: 1.05em; fill: none; stroke: currentColor; stro
 
 .button--quiet { background: var(--surface-2); border-color: transparent; }
 
+/* The answer that throws something away: the primary button in the one other
+   colour that carries a meaning (D39). Filled, like every button that commits
+   something — what changes is the hue, not the weight. */
+.button--danger { border-color: var(--bad); background: var(--bad); color: var(--bg); }
+
+.button--danger:hover { background: color-mix(in srgb, var(--bad) 88%, var(--bg)); }
+
 .button--text { border: 0; background: transparent; color: var(--sel-text); padding: 0 8px; box-shadow: none; }
 
 .button--wide { width: 100%; }
@@ -312,7 +319,7 @@ body.is-reordering { user-select: none; cursor: grabbing; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.toolbar-buttons { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; }
+.toolbar-buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; }
 /* One button, one column. */
 .toolbar--view-only .toolbar-buttons { grid-template-columns: 1fr; }
 .toolbar-button {

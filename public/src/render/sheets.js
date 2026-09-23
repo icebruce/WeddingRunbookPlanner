@@ -322,16 +322,50 @@ export function shareSheet(share, { origin = '' } = {}) {
   </dialog>`;
 }
 
-/** "Discard changes?" — the one question the editor asks. */
-export function discardSheet() {
-  return `<dialog id="discard-dialog" class="alert-dialog">
+/**
+ * The two questions the app asks before something is thrown away. Both are the
+ * same alert: what is about to happen, what it costs, the answer that does it,
+ * and the way back underneath.
+ */
+function confirmAlert({ id, title, body, action, confirmLabel, cancelLabel, danger = false }) {
+  return `<dialog id="${id}" class="alert-dialog">
     <div class="alert">
-      <h2>Discard changes?</h2>
-      <p>What you typed here will not be kept.</p>
-      <button type="button" class="button button--primary" data-action="discard-confirm">Discard</button>
-      <button type="button" class="button button--quiet sheet-close">Keep editing</button>
+      <h2>${title}</h2>
+      <p>${body}</p>
+      <button type="button" class="button ${danger ? 'button--danger' : 'button--primary'} alert-confirm"
+        data-action="${action}">${confirmLabel}</button>
+      <button type="button" class="button button--quiet sheet-close">${cancelLabel}</button>
     </div>
   </dialog>`;
+}
+
+/** "Discard changes?" — the one question the editor asks about typing. */
+export function discardSheet() {
+  return confirmAlert({
+    id: 'discard-dialog',
+    title: 'Discard changes?',
+    body: 'What you typed here will not be kept.',
+    action: 'discard-confirm',
+    confirmLabel: 'Discard',
+    cancelLabel: 'Keep editing'
+  });
+}
+
+/**
+ * "Delete this activity?" — asked wherever Delete is pressed. The undo toast
+ * still follows the delete; the question is in front of it, not instead of it,
+ * because Delete now sits in the toolbar slot a thumb reaches for first.
+ */
+export function deleteSheet(title) {
+  return confirmAlert({
+    id: 'delete-dialog',
+    title: 'Delete this activity?',
+    body: `${escapeHtml(title)} comes off the day. Undo is offered for six seconds.`,
+    action: 'delete-confirm',
+    confirmLabel: 'Delete',
+    cancelLabel: 'Keep it',
+    danger: true
+  });
 }
 
 /**
