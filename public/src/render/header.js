@@ -1,3 +1,4 @@
+import { isViewOnly } from '../dayof.js';
 import { escapeHtml } from '../dom.js';
 import { icon } from '../icons.js';
 import { SAVE_STATES } from '../save.js';
@@ -41,6 +42,14 @@ function menuRow(item, ui) {
     ${icon(item.glyph)}<span>${escapeHtml(item.label)}</span>${trailing}</button>`;
 }
 
+/**
+ * Plan settings is left out in view only: commit refuses there, so its Done
+ * closed the sheet and dropped the change without a word.
+ */
+function menuItems(ui) {
+  return isViewOnly(ui) ? MENU_ITEMS.filter(item => item.action !== 'settings') : MENU_ITEMS;
+}
+
 function appMenu(open, ui) {
   // A <details> element cannot be closed from the outside, which is why Escape
   // and a click elsewhere used to leave the menu open (F26). A plain button
@@ -48,7 +57,7 @@ function appMenu(open, ui) {
   return `<div class="app-menu ${open ? 'is-open' : ''}">
     <button type="button" class="icon-button icon-button--outlined" data-action="menu" data-menu="app" data-focus-key="menu-app" aria-label="Open menu" aria-haspopup="menu" aria-expanded="${open}">${icon('menu')}</button>
     ${open ? `<div class="menu-popover" role="menu">
-      ${MENU_ITEMS.map(item => menuRow(item, ui)).join('')}
+      ${menuItems(ui).map(item => menuRow(item, ui)).join('')}
     </div>` : ''}
   </div>`;
 }

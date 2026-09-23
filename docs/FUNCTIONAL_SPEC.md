@@ -329,6 +329,7 @@ The live strip (§6) appears on the shared page **by date only**, read on the ve
 
 ### 5.21 Menu (phone and desktop)
 Day-of view (switch) · Dark appearance (switch) · Share read-only link · Print or save PDF · Export backup · Version history · Plan settings · Sign out.
+While day-of view is view only (§6.2), Plan settings is hidden until **Edit**.
 
 ### 5.22 Dark appearance
 Manual switch in the menu and in Plan settings. Light is the default; the app does **not** follow the system setting. The choice is remembered on the device.
@@ -374,6 +375,7 @@ The strip updates every 30 seconds. Screen readers announce only when the curren
 ### 6.4 Editing on the day
 - **Edit** switches to editing: header shows an amber `Editing` label and **Done**. All planning interactions work; the live strip stays.
 - **Done** returns to view only. Leaving the app for more than 5 minutes also returns to view only.
+- If view only returns while a sheet is open, its **Done** switches back to editing and applies the change.
 
 ---
 

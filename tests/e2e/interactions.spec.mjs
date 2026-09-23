@@ -1514,17 +1514,18 @@ test('a row that comes back during a resize is faded in, not popped', async ({ p
 
   // And back. A row that returns appeared out of nothing, so it fades in —
   // the half of the change the card's own moving edge does not cover.
+  //
+  // Waited for before the release, not after it. Each move cancels the frame
+  // queued by the one before, so a fast run of moves can end with no fit pass
+  // having run on the way back; the release then lands on the starting edge,
+  // which is no change, and repaints fresh cards with nothing hidden and so
+  // nothing to fade. CI's WebKit iPad run hit this. The timeout is raised
+  // past the suite default for the same loaded runner the first poll allows for.
   await page.mouse.move(x, y, { steps: 12 });
-  await page.mouse.up();
-
-  // The drop commits and repaints, and the fit pass that follows runs in a
-  // frame of its own — so this is polled rather than read once. The timeout is
-  // raised past the suite default: this is the same fit pass as above, run a
-  // second time, and a runner slow enough to need the first poll's full window
-  // needs at least as long for the second.
   await expect.poll(hidden, { message: 'and they are back', timeout: 15_000 }).toBe(0);
   await expect.poll(() => page.evaluate(() => window.__rowFades), { message: 'the rows that came back were faded in' })
     .toBeGreaterThan(0);
+  await page.mouse.up();
 });
 
 test('the now line eases between ticks rather than stepping', async ({ page, server }) => {

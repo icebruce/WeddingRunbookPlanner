@@ -1,5 +1,5 @@
 import { test, expect, activity, seedPlan } from './fixtures.mjs';
-import { isPhoneLayout, signInAndWaitForPlan } from './helpers.mjs';
+import { isPhoneLayout, openActivityEditor, setPicker, signInAndWaitForPlan } from './helpers.mjs';
 
 /**
  * The clock is frozen before the page loads, so every one of these is a fixed
@@ -349,6 +349,67 @@ test('it can be switched off on the day, and stays off', async ({ page, server }
   await page.reload();
   await expect(strip(page)).toHaveCount(0);
   await expect(page.locator('.save-indicator'), 'and the planning controls are back').toBeVisible();
+});
+
+test('plan settings is not offered in view only, and a date changed after Edit is saved', async ({ page, server }) => {
+  // Its Done used to close the sheet and drop the change in view only: commit
+  // refuses there, and nothing said so.
+  await openAt(page, server, at(13, 0, 15));
+  await page.locator('[data-action="menu"][data-menu="app"]').click();
+  await page.locator('[data-menu-action="day-of"]').click();
+  await expect(page.locator('.mode-pill--view')).toBeVisible();
+
+  await page.locator('[data-action="menu"][data-menu="app"]').click();
+  await expect(page.locator('[data-menu-action="day-of"]')).toBeVisible();
+  await expect(page.locator('[data-menu-action="settings"]')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  await page.locator('[data-action="day-of-edit"]').first().click();
+  await page.locator('[data-action="menu"][data-menu="app"]').click();
+  await page.locator('[data-menu-action="settings"]').click();
+  await setPicker(page, 'date', '2026-11-28');
+  await page.locator('#settings-form button[type="submit"]').click();
+
+  await expect(page.locator('.save-indicator')).toHaveText('Saved');
+  expect((await server.read()).plan.date).toBe('2026-11-28');
+});
+
+/** Hidden, then visible again once the page clock reads `when`. */
+async function awayUntil(page, when) {
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.clock.setFixedTime(when);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+}
+
+test('Done on a sheet left open while editing lapsed still saves, and goes back to editing', async ({ page, server }) => {
+  await openAt(page, server, at(11, 45));
+  await page.locator('[data-action="day-of-edit"]').first().click();
+
+  await page.locator('[data-action="menu"][data-menu="app"]').click();
+  await page.locator('[data-menu-action="settings"]').click();
+  await page.locator('input[name="title"]').fill('Renamed Day');
+  await awayUntil(page, at(12, 0));
+  await page.locator('#settings-form button[type="submit"]').click();
+
+  await expect(page.locator('.mode-pill--editing')).toBeVisible();
+  // The day-of header has no save indicator, so the store is asked directly.
+  await expect.poll(async () => (await server.read()).plan.title).toBe('Renamed Day');
+
+  await openActivityEditor(page, card(page, 'portraits'));
+  await page.locator('#activity-dialog input[name="title"]').fill('Family Portraits');
+  await awayUntil(page, at(12, 20));
+  await page.locator('#activity-dialog button[type="submit"]').click();
+
+  await expect(page.locator('.mode-pill--editing')).toBeVisible();
+  await expect(card(page, 'portraits')).toContainText('Family Portraits');
+  await expect.poll(async () => (await server.read()).plan.activities.find(item => item.id === 'portraits').title)
+    .toBe('Family Portraits');
 });
 
 test('reduced motion stops the pulse', async ({ page, server }) => {
